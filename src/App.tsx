@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
+import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Home from './components/Home';
 import Impegni from './components/Impegni';
@@ -27,6 +28,7 @@ import {
   saveSessions,
   saveArchive,
   saveSettings,
+  supabase,
 } from './lib/supabase';
 
 function App() {
@@ -38,11 +40,26 @@ function App() {
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  // Check for password reset token in URL
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery') && hash.includes('access_token')) {
+      setIsResettingPassword(true);
+    }
+  }, []);
 
   // Initialize auth
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Se stiamo resettando la password, non inizializzare l'auth normale
+        if (isResettingPassword) {
+          setInitialized(true);
+          return;
+        }
+
         const authUser = getAuthUser();
         
         if (authUser) {
@@ -82,7 +99,7 @@ function App() {
     };
     
     initAuth();
-  }, []);
+  }, [isResettingPassword]);
 
   // Save data whenever it changes
   const updateData = useCallback(async (newData: UserData) => {
@@ -242,6 +259,15 @@ function App() {
         <div className="animate-pulse text-white/60">Caricamento...</div>
       </div>
     );
+  }
+
+  // Password reset screen
+  if (isResettingPassword) {
+    return <ResetPassword onSuccess={() => {
+      setIsResettingPassword(false);
+      window.location.hash = '';
+      window.location.href = '/';
+    }} />;
   }
 
   // Auth screen
