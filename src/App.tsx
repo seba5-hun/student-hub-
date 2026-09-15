@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
-import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Home from './components/Home';
 import Impegni from './components/Impegni';
@@ -19,17 +18,6 @@ import {
   loadUserData as loadLocalData,
   saveUserData as saveLocalData,
 } from './lib/store';
-import {
-  isSupabaseConfigured,
-  signOut as supabaseSignOut,
-  loadUserData as loadSupabaseData,
-  saveTasks,
-  saveGrades,
-  saveSessions,
-  saveArchive,
-  saveSettings,
-  supabase,
-} from './lib/supabase';
 
 function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -40,136 +28,39 @@ function App() {
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-
-  // Check for password reset token in URL
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery') && hash.includes('access_token')) {
-      setIsResettingPassword(true);
-    }
-  }, []);
 
   // Initialize auth
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        // Se stiamo resettando la password, non inizializzare l'auth normale
-        if (isResettingPassword) {
-          setInitialized(true);
-          return;
-        }
-
-        const authUser = getAuthUser();
-        
-        if (authUser) {
-          setUser(authUser);
-          
-          // Se Supabase è configurato, prova a caricare dal cloud
-          if (isSupabaseConfigured()) {
-            try {
-              const cloudData = await loadSupabaseData(authUser.id);
-              if (cloudData) {
-                setData(cloudData);
-                setDarkMode(cloudData.settings.darkMode);
-                saveLocalData(authUser.id, cloudData);
-              } else {
-                const localData = loadLocalData(authUser.id);
-                setData(localData);
-                setDarkMode(localData.settings.darkMode);
-              }
-            } catch (err) {
-              console.error('Errore caricamento Supabase:', err);
-              const localData = loadLocalData(authUser.id);
-              setData(localData);
-              setDarkMode(localData.settings.darkMode);
-            }
-          } else {
-            // Solo locale
-            const localData = loadLocalData(authUser.id);
-            setData(localData);
-            setDarkMode(localData.settings.darkMode);
-          }
-        }
-      } catch (err) {
-        console.error('Errore inizializzazione:', err);
-      }
-      
-      setInitialized(true);
-    };
-    
-    initAuth();
-  }, [isResettingPassword]);
+    const authUser = getAuthUser();
+    if (authUser) {
+      setUser(authUser);
+      const localData = loadLocalData(authUser.id);
+      setData(localData);
+      setDarkMode(localData.settings.darkMode);
+    }
+    setInitialized(true);
+  }, []);
 
   // Save data whenever it changes
-  const updateData = useCallback(async (newData: UserData) => {
+  const updateData = useCallback((newData: UserData) => {
     setData(newData);
     if (user) {
       setSyncing(true);
-      
-      // Salva sempre in locale
       saveLocalData(user.id, newData);
-      
-      // Se Supabase è configurato, salva anche nel cloud
-      if (isSupabaseConfigured()) {
-        try {
-          await Promise.all([
-            saveTasks(user.id, newData.tasks),
-            saveGrades(user.id, newData.grades),
-            saveSessions(user.id, newData.sessions),
-            saveArchive(user.id, newData.archive),
-            saveSettings(user.id, newData.settings),
-          ]);
-        } catch (err) {
-          console.error('Errore salvataggio Supabase:', err);
-        }
-      }
-      
       setTimeout(() => setSyncing(false), 500);
     }
   }, [user]);
 
   // Handle login
-  const handleLogin = async (authUser: AuthUser) => {
+  const handleLogin = (authUser: AuthUser) => {
     setUser(authUser);
-    
-    // Se Supabase è configurato, prova a caricare dal cloud
-    if (isSupabaseConfigured()) {
-      try {
-        const cloudData = await loadSupabaseData(authUser.id);
-        if (cloudData) {
-          setData(cloudData);
-          setDarkMode(cloudData.settings.darkMode);
-          saveLocalData(authUser.id, cloudData);
-        } else {
-          const localData = loadLocalData(authUser.id);
-          setData(localData);
-          setDarkMode(localData.settings.darkMode);
-        }
-      } catch (err) {
-        console.error('Errore caricamento Supabase:', err);
-        const localData = loadLocalData(authUser.id);
-        setData(localData);
-        setDarkMode(localData.settings.darkMode);
-      }
-    } else {
-      const localData = loadLocalData(authUser.id);
-      setData(localData);
-      setDarkMode(localData.settings.darkMode);
-    }
+    const localData = loadLocalData(authUser.id);
+    setData(localData);
+    setDarkMode(localData.settings.darkMode);
   };
 
   // Handle logout
-  const handleLogout = async () => {
-    // Se Supabase è configurato, fai logout anche dal cloud
-    if (isSupabaseConfigured()) {
-      try {
-        await supabaseSignOut();
-      } catch (err) {
-        console.error('Errore logout Supabase:', err);
-      }
-    }
-    
+  const handleLogout = () => {
     setAuthUser(null);
     setUser(null);
     setData(null);
@@ -261,15 +152,6 @@ function App() {
     );
   }
 
-  // Password reset screen
-  if (isResettingPassword) {
-    return <ResetPassword onSuccess={() => {
-      setIsResettingPassword(false);
-      window.location.hash = '';
-      window.location.href = '/';
-    }} />;
-  }
-
   // Auth screen
   if (!user || !data) {
     return <Auth onLogin={handleLogin} />;
@@ -279,8 +161,8 @@ function App() {
   const SyncIndicator = () => syncing ? (
     <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
       <div className="glass-card px-4 py-2 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-        <span className="text-xs text-white/70">Sincronizzazione...</span>
+        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-xs text-white/70">Salvataggio...</span>
       </div>
     </div>
   ) : null;

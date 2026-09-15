@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { loginUser, registerUser, setAuthUser, AuthUser } from '../lib/store';
-import { isSupabaseConfigured, signIn, signUp, resetPassword } from '../lib/supabase';
 import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface AuthProps {
@@ -8,37 +7,25 @@ interface AuthProps {
 }
 
 export default function Auth({ onLogin }: AuthProps) {
-  const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const useSupabase = isSupabaseConfigured();
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      if (useSupabase) {
-        const { user } = await signIn(email, password);
-        if (user) {
-          const authUser: AuthUser = { id: user.id, email: user.email! };
-          setAuthUser(authUser);
-          onLogin(authUser);
-        }
+      const user = loginUser(email, password);
+      if (user) {
+        setAuthUser(user);
+        onLogin(user);
       } else {
-        const user = loginUser(email, password);
-        if (user) {
-          setAuthUser(user);
-          onLogin(user);
-        } else {
-          setError('Credenziali non valide.');
-        }
+        setError('Credenziali non valide. Controlla email e password.');
       }
     } catch (err: any) {
       setError(err.message || 'Errore di accesso.');
@@ -47,7 +34,7 @@ export default function Auth({ onLogin }: AuthProps) {
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -63,44 +50,15 @@ export default function Auth({ onLogin }: AuthProps) {
     setLoading(true);
 
     try {
-      if (useSupabase) {
-        const { user } = await signUp(email, password);
-        if (user) {
-          const authUser: AuthUser = { id: user.id, email: user.email! };
-          setAuthUser(authUser);
-          onLogin(authUser);
-        }
+      const user = registerUser(email, password);
+      if (user) {
+        setAuthUser(user);
+        onLogin(user);
       } else {
-        const user = registerUser(email, password);
-        if (user) {
-          setAuthUser(user);
-          onLogin(user);
-        } else {
-          setError('Account già esistente.');
-        }
+        setError('Un account con questa email esiste già.');
       }
     } catch (err: any) {
       setError(err.message || 'Errore nella registrazione.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      if (useSupabase) {
-        await resetPassword(email);
-        setSuccess('Email di recupero inviata!');
-      } else {
-        setSuccess('Supabase non configurato.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Errore.');
     } finally {
       setLoading(false);
     }
@@ -156,15 +114,9 @@ export default function Auth({ onLogin }: AuthProps) {
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Accedi'}
               </button>
-              {useSupabase && (
-                <p className="text-xs text-emerald-400 text-center">✓ Sincronizzazione cloud attiva</p>
-              )}
-              <div className="flex justify-between text-sm">
-                <button type="button" onClick={() => { setMode('reset'); setError(''); setSuccess(''); }} className="text-indigo-400 hover:text-indigo-300">
-                  Recupero password
-                </button>
+              <div className="text-center text-sm">
                 <button type="button" onClick={() => { setMode('register'); setError(''); }} className="text-indigo-400 hover:text-indigo-300">
-                  Registrati
+                  Non hai un account? Registrati
                 </button>
               </div>
             </form>
@@ -193,25 +145,6 @@ export default function Auth({ onLogin }: AuthProps) {
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Crea Account'}
               </button>
               <button type="button" onClick={() => { setMode('login'); setError(''); }} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-                <ArrowLeft className="w-4 h-4" /> Torna al login
-              </button>
-            </form>
-          )}
-
-          {mode === 'reset' && (
-            <form onSubmit={handleReset} className="space-y-4">
-              <h2 className="text-xl font-semibold text-white mb-6">Recupero Password</h2>
-              <p className="text-white/60 text-sm mb-4">Inserisci la tua email per recuperare la password.</p>
-              <div>
-                <label className="block text-sm text-white/70 mb-1">Email</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="input-glass w-full" placeholder="la-tua@email.it" required />
-              </div>
-              {error && <p className="text-red-400 text-sm">{error}</p>}
-              {success && <p className="text-emerald-400 text-sm">{success}</p>}
-              <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Invia istruzioni'}
-              </button>
-              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Torna al login
               </button>
             </form>
