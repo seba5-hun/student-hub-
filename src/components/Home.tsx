@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, A
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG } from '../lib/store';
 
 interface HomeProps {
-   UserData;
+  data: UserData;
   darkMode: boolean;
   onNavigate: (section: string) => void;
   onUpdateSettings?: (settings: UserData['settings']) => void;

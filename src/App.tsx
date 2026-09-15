@@ -315,7 +315,7 @@ function App() {
           />
         )}
         {currentSection === 'guida-ai' && (
-          <GuidaStudioAI userData={data} darkMode={darkMode} />
+          <GuidaStudioAI data={data} darkMode={darkMode} />
         )}
       </Layout>
       <SyncIndicator />
