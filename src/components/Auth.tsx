@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { loginUser, registerUser, setAuthUser, AuthUser } from '../lib/store';
-import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2 } from 'lucide-react';
+import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: AuthUser) => void;
@@ -14,6 +14,8 @@ export default function Auth({ onLogin }: AuthProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,13 +116,20 @@ export default function Auth({ onLogin }: AuthProps) {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className="input-light w-full pl-10"
+                    className="input-light w-full pl-10 pr-10"
                     placeholder="••••••••"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
@@ -150,11 +159,43 @@ export default function Auth({ onLogin }: AuthProps) {
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Password</label>
-                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="input-light w-full" placeholder="Minimo 6 caratteri" required />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="input-light w-full pr-10"
+                    placeholder="Minimo 6 caratteri"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Conferma Password</label>
-                <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="input-light w-full" placeholder="Ripeti la password" required />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className="input-light w-full pr-10"
+                    placeholder="Ripeti la password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
@@ -193,6 +234,9 @@ export default function Auth({ onLogin }: AuthProps) {
               {success && <p className="text-emerald-600 text-sm">{success}</p>}
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Invia Link'}
+              </button>
+              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                <ArrowLeft className="w-4 h-4" /> Torna al login
               </button>
               <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Torna al login
