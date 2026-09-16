@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
+import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Home from './components/Home';
 import Impegni from './components/Impegni';
@@ -28,9 +29,20 @@ function App() {
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(false);
 
   // Initialize auth
   useEffect(() => {
+    // Controlla se c'è un token di reset password nell'URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasResetToken = urlParams.has('token');
+    
+    if (hasResetToken) {
+      setIsResetPassword(true);
+      setInitialized(true);
+      return;
+    }
+
     const authUser = getAuthUser();
     if (authUser) {
       setUser(authUser);
@@ -150,6 +162,14 @@ function App() {
         <div className="animate-pulse text-white/60">Caricamento...</div>
       </div>
     );
+  }
+
+  // Reset password screen
+  if (isResetPassword) {
+    return <ResetPassword onBackToLogin={() => {
+      setIsResetPassword(false);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }} />;
   }
 
   // Auth screen
