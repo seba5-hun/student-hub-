@@ -233,11 +233,16 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           <div className="max-w-md mx-auto space-y-4">
             <input type="password" value={tempApiKey} onChange={e => setTempApiKey(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="AIza..." />
             <button onClick={handleSaveApiKey} disabled={!tempApiKey.trim()} className="btn-primary w-full disabled:opacity-50">Salva e inizia</button>
+            {tempApiKey.trim() && !tempApiKey.trim().startsWith('AIza') && (
+              <p className="text-xs text-amber-400">Attenzione: di solito la chiave inizia con "AIza". Controlla di averla copiata tutta.</p>
+            )}
             {apiKey && (
               <button onClick={() => setShowApiKeyInput(false)} className={`text-sm ${subTextColor}`}>Annulla</button>
             )}
           </div>
         </div>
+
+        <ApiKeyGuide darkMode={darkMode} />
       </div>
     );
   }
@@ -339,6 +344,80 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
             <Send className="w-4 h-4" />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const GUIDE_STEPS: { title: string; text: React.ReactNode }[] = [
+  {
+    title: 'Apri Google AI Studio',
+    text: <>Clicca su <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">aistudio.google.com/app/apikey</a>. Si apre in una nuova scheda: lascia aperta anche questa.</>,
+  },
+  {
+    title: 'Accedi con il tuo account Google',
+    text: <>Usa lo stesso account di Gmail o YouTube. Se è la prima volta, Google ti chiede di accettare i termini di servizio: spunta le caselle e clicca <b>Continua</b>.</>,
+  },
+  {
+    title: 'Crea la chiave',
+    text: <>Clicca il pulsante <b>Create API key</b> (o <b>Crea chiave API</b>). Se ti chiede un progetto, scegli <b>Create API key in new project</b> (crea in un nuovo progetto). Non serve la carta di credito.</>,
+  },
+  {
+    title: 'Copia la chiave',
+    text: <>Compare una lunga sequenza di lettere e numeri che inizia con <b>AIza</b>. Clicca l'icona <b>Copia</b> accanto (o selezionala tutta e premi <b>Cmd + C</b> su Mac, <b>Ctrl + C</b> su Windows).</>,
+  },
+  {
+    title: 'Incollala qui e salva',
+    text: <>Torna su questa pagina, clicca nel campo qui sopra, incolla (<b>Cmd + V</b> o <b>Ctrl + V</b>) e premi <b>Salva e inizia</b>. Fatto: puoi scrivere al tutor!</>,
+  },
+];
+
+// Step-by-step instructions for users who have never created an API key.
+function ApiKeyGuide({ darkMode }: { darkMode: boolean }) {
+  const textColor = darkMode ? 'text-white' : 'text-gray-800';
+  const subTextColor = darkMode ? 'text-white/70' : 'text-gray-600';
+  const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
+  const boxClass = darkMode ? 'bg-white/5' : 'bg-black/5';
+
+  return (
+    <div className={`${cardClass} p-6 space-y-6`}>
+      <div>
+        <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la API key (5 minuti)</h3>
+        <p className={`text-sm ${subTextColor} mt-1`}>
+          La API key è come una "tessera" personale che permette a Student Hub di usare l'intelligenza artificiale di Google (Gemini). È gratuita.
+        </p>
+      </div>
+
+      <ol className="space-y-4">
+        {GUIDE_STEPS.map((step, i) => (
+          <li key={step.title} className="flex gap-4">
+            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 text-white text-sm font-bold flex items-center justify-center">{i + 1}</span>
+            <div>
+              <p className={`font-medium ${textColor}`}>{step.title}</p>
+              <p className={`text-sm ${subTextColor} mt-0.5`}>{step.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className={`${boxClass} rounded-xl p-4 space-y-2`}>
+        <p className={`font-medium ${textColor}`}>⚠️ Da sapere</p>
+        <ul className={`text-sm ${subTextColor} list-disc pl-5 space-y-1`}>
+          <li><b>Età:</b> Google permette di creare API key solo a chi ha almeno 18 anni. Se sei minorenne, chiedi a un genitore di crearla con il suo account.</li>
+          <li><b>Tienila segreta:</b> chi ha la tua chiave può usarla al posto tuo. Non mandarla in chat e non pubblicarla.</li>
+          <li><b>Resta su questo dispositivo:</b> la chiave è salvata solo in questo browser. Su un altro computer o sul telefono dovrai incollarla di nuovo (puoi creare più chiavi o riusare la stessa).</li>
+          <li><b>Cosa viene inviato a Google:</b> quando usi il tutor, le tue domande, le foto che carichi e un riepilogo di voti, impegni e archivio vengono inviati a Google per generare la risposta. Con la versione gratuita Google può usarli per migliorare i suoi servizi: evita di scrivere dati personali sensibili.</li>
+        </ul>
+      </div>
+
+      <div className={`${boxClass} rounded-xl p-4 space-y-2`}>
+        <p className={`font-medium ${textColor}`}>🛠️ Se qualcosa non va</p>
+        <ul className={`text-sm ${subTextColor} list-disc pl-5 space-y-1`}>
+          <li><b>"API key non valida":</b> probabilmente non è stata copiata tutta. Torna su AI Studio, copiala di nuovo e usa il pulsante 🔑 <b>Cambia API key</b> in alto nella chat.</li>
+          <li><b>"Modelli occupati" o limite raggiunto:</b> la versione gratuita ha un numero massimo di domande al minuto e al giorno. Aspetta qualche minuto e riprova.</li>
+          <li><b>Hai perso la chiave o pensi che qualcuno l'abbia vista:</b> su AI Studio eliminala (icona del cestino) e creane una nuova.</li>
+          <li><b>Non vedi il pulsante "Create API key":</b> controlla di aver accettato i termini e di usare un account Google personale (quelli della scuola a volte hanno AI Studio bloccato).</li>
+        </ul>
       </div>
     </div>
   );
