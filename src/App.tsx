@@ -52,8 +52,15 @@ function App() {
     try {
       let userData = await fetchRemoteData(authUser.id);
       if (!userData) {
-        userData = loadCachedData(authUser.id) || findLegacyLocalData(authUser.email) || generateDemoData();
-        await saveRemoteData(authUser.id, userData);
+        const legacy = loadCachedData(authUser.id) || findLegacyLocalData(authUser.email);
+        if (legacy) {
+          userData = legacy;
+          await saveRemoteData(authUser.id, legacy);
+        } else {
+          // Not saved until the first change: if the account is opened from another browser
+          // (e.g. the confirmation link), the old data can still be uploaded from the right one.
+          userData = generateDemoData();
+        }
       }
       setData(userData);
       setDarkMode(userData.settings.darkMode);

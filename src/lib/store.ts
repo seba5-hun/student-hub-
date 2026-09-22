@@ -138,7 +138,31 @@ export function findLegacyLocalData(email: string): UserData | null {
     const data = loadCachedData(id);
     if (data) return data;
   }
-  return null;
+
+  // The old version didn't save the account id at registration, so the data may be stored
+  // under an id that no email points to. Use it only if there is exactly one such case.
+  const claimed = new Set<string>();
+  const orphans: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i) || '';
+    if (key.startsWith('studenthub_userid_')) claimed.add(localStorage.getItem(key) || '');
+  }
+  for (let i = 0; i < localStorage.length; i++) {
+    const match = /^studenthub_(.+)_data$/.exec(localStorage.key(i) || '');
+    if (match && !claimed.has(match[1])) orphans.push(match[1]);
+  }
+  return orphans.length === 1 ? loadCachedData(orphans[0]) : null;
+}
+
+// True when email and password match an account of the old local-only version in this browser.
+export function matchesLegacyAccount(email: string, password: string): boolean {
+  try {
+    const users = JSON.parse(localStorage.getItem('studenthub_users') || '{}');
+    const stored = users[email.trim()] || users[email.trim().toLowerCase()];
+    return !!stored && !stored.hashed && stored.password === password;
+  } catch {
+    return false;
+  }
 }
 
 export function parseImportedData(json: string): UserData | null {

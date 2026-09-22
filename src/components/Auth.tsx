@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AuthUser } from '../lib/store';
+import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage } from '../lib/supabase';
 import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 
@@ -31,12 +31,38 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) throw error;
+      if (error) {
+        if (/invalid login credentials/i.test(error.message) && matchesLegacyAccount(email, password)) {
+          await migrateLegacyAccount();
+          return;
+        }
+        throw error;
+      }
       onLogin({ id: data.user.id, email: data.user.email || email.trim() });
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Accounts of the old version existed only in this browser: create them on Supabase with the
+  // same email and password. The local data is uploaded on the first login (see App.loadUser).
+  const migrateLegacyAccount = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { emailRedirectTo: redirectTo() },
+    });
+    if (error) throw error;
+    if (data.session && data.user) {
+      onLogin({ id: data.user.id, email: data.user.email || email.trim() });
+    } else if (data.user && data.user.identities?.length === 0) {
+      setError('Esiste già un account online con questa email, ma con un\'altra password. Usa "Recupero password".');
+    } else {
+      setPassword('');
+      setSuccess('Abbiamo trasferito il tuo account online! Ti abbiamo inviato un\'email: clicca sul link per confermare, poi accedi con la stessa password. I tuoi dati verranno caricati al primo accesso.');
     }
   };
 
