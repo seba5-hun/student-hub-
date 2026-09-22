@@ -82,10 +82,12 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
     localStorage.setItem('gemini_api_key', tempApiKey.trim());
     setApiKey(tempApiKey.trim());
     setShowApiKeyInput(false);
+    setError('');
+    if (messages.length > 0) return;
     setMessages([{
       id: 'welcome',
       role: 'assistant',
-      content: '👋 Ciao! Sono il tuo tutor AI powered by Gemini 3.6 Flash. Conosco i tuoi documenti, voti e impegni. Come posso aiutarti?',
+      content: '👋 Ciao! Sono il tuo tutor AI powered by Google Gemini. Conosco i tuoi documenti, voti e impegni. Come posso aiutarti?',
       timestamp: new Date(),
     }]);
   };
@@ -150,45 +152,58 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
       }
       if (currentParts.length > 0) contents.push({ role: 'user', parts: currentParts });
 
-      const MODELS = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
+      // Try the models in order: move to the next one when a model doesn't exist (404)
+      // or is overloaded (429/5xx); stop on errors that another model can't fix (e.g. bad key).
+      const MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+      const RETRYABLE = [404, 429, 500, 502, 503, 504];
       let lastError = '';
       let success = false;
 
       for (const model of MODELS) {
+        let response: Response;
         try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
             body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }),
           });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            const errorMsg = errorData.error?.message || `Errore ${response.status}`;
-            if (errorMsg.includes('high demand') || errorMsg.includes('not available') || errorMsg.includes('overloaded') || errorMsg.includes('503') || errorMsg.includes('429')) {
-              lastError = errorMsg;
-              continue;
-            }
-            throw new Error(errorMsg);
-          }
-
-          const responseData = await response.json();
-          const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: responseData.candidates?.[0]?.content?.parts?.[0]?.text || 'Mi dispiace, non ho potuto generare una risposta.',
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, assistantMessage]);
-          success = true;
+        } catch {
+          lastError = 'Errore di connessione. Controlla la rete e riprova.';
           break;
-        } catch (err: any) {
-          lastError = err.message || 'Errore di connessione';
-          if (!lastError.includes('high demand') && !lastError.includes('not available') && !lastError.includes('overloaded')) break;
         }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
+          if (RETRYABLE.includes(response.status)) {
+            lastError = errorMsg;
+            continue;
+          }
+          if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
+            lastError = 'API key non valida o senza permessi. Usa "Cambia API key" per inserirne una nuova.';
+          } else {
+            lastError = errorMsg;
+          }
+          break;
+        }
+
+        const responseData = await response.json();
+        const text = responseData.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p.text || '')
+          .join('')
+          .trim();
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: text || 'Mi dispiace, non ho potuto generare una risposta.',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        success = true;
+        break;
       }
 
-      if (!success) setError(`⚠️ ${lastError}\n\n💡 Tutti i modelli sono occupati. Riprova tra poco.`);
+      if (!success) setError(lastError || 'Tutti i modelli sono occupati. Riprova tra poco.');
     } catch (err: any) {
       setError(err.message || 'Errore di connessione.');
     } finally {
@@ -205,7 +220,7 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           </div>
           <div>
             <h2 className={`text-2xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-sm ${subTextColor}`}>Powered by Gemini 3.6 Flash</p>
+            <p className={`text-sm ${subTextColor}`}>Powered by Google Gemini</p>
           </div>
         </div>
 
@@ -218,6 +233,9 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           <div className="max-w-md mx-auto space-y-4">
             <input type="password" value={tempApiKey} onChange={e => setTempApiKey(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="AIza..." />
             <button onClick={handleSaveApiKey} disabled={!tempApiKey.trim()} className="btn-primary w-full disabled:opacity-50">Salva e inizia</button>
+            {apiKey && (
+              <button onClick={() => setShowApiKeyInput(false)} className={`text-sm ${subTextColor}`}>Annulla</button>
+            )}
           </div>
         </div>
       </div>
@@ -233,12 +251,17 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           </div>
           <div>
             <h2 className={`text-xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-xs ${subTextColor}`}>Gemini 3.6 Flash • Con visione</p>
+            <p className={`text-xs ${subTextColor}`}>Google Gemini • Con visione</p>
           </div>
         </div>
-        <button onClick={() => setMessages([])} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-          <Trash2 className={`w-4 h-4 ${textColor}`} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => { setTempApiKey(''); setShowApiKeyInput(true); }} title="Cambia API key" aria-label="Cambia API key" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+            <Key className={`w-4 h-4 ${textColor}`} />
+          </button>
+          <button onClick={() => { setMessages([]); setError(''); }} title="Cancella chat" aria-label="Cancella chat" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+            <Trash2 className={`w-4 h-4 ${textColor}`} />
+          </button>
+        </div>
       </div>
 
       <div className={`flex-1 overflow-y-auto ${cardClass} p-4 space-y-4 mb-4`}>

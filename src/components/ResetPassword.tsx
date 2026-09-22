@@ -46,24 +46,10 @@ export default function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      // Qui dovresti chiamare la tua API per resettare la password
-      // Per ora simuliamo una chiamata API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simula successo
-      setSuccess('Password reimpostata con successo! Reindirizzamento al login...');
-      
-      setTimeout(() => {
-        onBackToLogin();
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Errore durante il reset della password.');
-    } finally {
-      setLoading(false);
-    }
+    // The app has no auth server yet (accounts are stored locally), so a reset link
+    // cannot be verified. Say so instead of pretending the password was changed.
+    setError('Il recupero password non è ancora attivo. Torna al login e crea un nuovo account, poi usa "Importa dati" per ripristinare un backup.');
+    setLoading(false);
   };
 
   return (

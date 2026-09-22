@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG } from '../lib/store';
+import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, parseDate, formatDate } from '../lib/store';
 
 interface HomeProps {
   data: UserData;
@@ -14,12 +14,12 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
   const { tasks, grades, sessions, settings } = data;
   const quote = useMemo(() => getRandomQuote(), []);
 
-  const activeTasks = tasks.filter(t => !t.done);
+  const activeTasks = tasks.filter(t => !t.done).sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
   const avgGrade = grades.length > 0 ? (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1) : '—';
   const totalHours = (sessions.reduce((s, ss) => s + ss.duration, 0) / 60).toFixed(1);
   const streak = getStudyStreak(sessions);
   const weeklyHours = getWeeklyStudyHours(sessions);
-  const goalProgress = Math.min((weeklyHours / settings.weeklyGoal) * 100, 100);
+  const goalProgress = settings.weeklyGoal > 0 ? Math.min((weeklyHours / settings.weeklyGoal) * 100, 100) : 0;
 
   const subjectAvgs = getSubjectAverages(grades);
   const bestSubject = Object.entries(subjectAvgs).sort((a, b) => b[1] - a[1])[0];
@@ -102,7 +102,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
                 <div key={task.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'} border-l-3`} style={{ borderLeftColor: imp.color }}>
                   <div>
                     <p className={`text-sm font-medium ${textColor}`}>{task.title}</p>
-                    <p className={`text-xs ${subTextColor}`}>{new Date(task.date).toLocaleDateString('it-IT')}</p>
+                    <p className={`text-xs ${subTextColor}`}>{formatDate(task.date)}</p>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full ${imp.bg} ${imp.text}`}>{imp.label}</span>
                 </div>

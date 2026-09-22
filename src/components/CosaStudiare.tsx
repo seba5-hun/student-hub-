@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Brain, Calendar, TrendingDown, Clock, AlertTriangle, Zap } from 'lucide-react';
-import { UserData, getSubjectAverages, getSubjectStudyTime } from '../lib/store';
+import { UserData, getSubjectAverages, getSubjectStudyTime, parseDate, todayKey } from '../lib/store';
 
 interface CosaStudiareProps {
   data: UserData;
@@ -26,7 +26,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
 
       const subjectTasks = tasks.filter(t => t.subject === subject && !t.done);
       subjectTasks.forEach(task => {
-        const daysUntil = Math.ceil((new Date(task.date).getTime() - Date.now()) / 86400000);
+        const daysUntil = Math.round((parseDate(task.date).getTime() - parseDate(todayKey()).getTime()) / 86400000);
         if (daysUntil >= 0 && daysUntil <= 7) {
           score += Math.max(0, 7 - daysUntil) * 2;
           if (daysUntil <= 2) reasons.push(`Verifica tra ${daysUntil === 0 ? 'oggi' : daysUntil === 1 ? '1 giorno' : `${daysUntil} giorni`}`);
@@ -51,8 +51,8 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
 
       const subjectSessions = sessions.filter(s => s.subject === subject);
       if (subjectSessions.length > 0) {
-        const lastSession = subjectSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        const daysSince = Math.floor((Date.now() - new Date(lastSession.date).getTime()) / 86400000);
+        const lastSession = subjectSessions.sort((a, b) => parseDate(b.date).getTime() - parseDate(a.date).getTime())[0];
+        const daysSince = Math.floor((Date.now() - parseDate(lastSession.date).getTime()) / 86400000);
         if (daysSince > 3) {
           score += Math.min(daysSince, 10);
           reasons.push(`Non studi da ${daysSince} giorni`);

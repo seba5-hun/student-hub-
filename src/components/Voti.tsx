@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
-import { Grade, createId, getSubjectAverages } from '../lib/store';
+import { Grade, createId, getSubjectAverages, todayKey, parseDate, formatDate } from '../lib/store';
 
 interface VotiProps {
   grades: Grade[];
@@ -13,7 +13,7 @@ export default function Voti({ grades, darkMode, onUpdate }: VotiProps) {
   const [subject, setSubject] = useState('');
   const [value, setValue] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(todayKey());
   const [showForm, setShowForm] = useState(false);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
@@ -26,7 +26,7 @@ export default function Voti({ grades, darkMode, onUpdate }: VotiProps) {
     if (!subject.trim() || isNaN(val) || val < 1 || val > 10) return;
     const newGrade: Grade = { id: createId(), subject: subject.trim(), value: val, description: description.trim(), date };
     onUpdate([...grades, newGrade]);
-    setSubject(''); setValue(''); setDescription(''); setShowForm(false);
+    setSubject(''); setValue(''); setDescription(''); setDate(todayKey()); setShowForm(false);
   };
 
   const subjectAvgs = getSubjectAverages(grades);
@@ -88,13 +88,13 @@ export default function Voti({ grades, darkMode, onUpdate }: VotiProps) {
         <h3 className={`font-semibold mb-4 ${textColor}`}>Storico voti</h3>
         {grades.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessun voto</p> : (
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {[...grades].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(grade => (
+            {[...grades].sort((a, b) => parseDate(b.date).getTime() - parseDate(a.date).getTime()).map(grade => (
               <div key={grade.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
                 <div className="flex items-center gap-3">
                   <span className={`text-lg font-bold px-3 py-1 rounded-lg ${grade.value >= 8 ? 'bg-emerald-500/20 text-emerald-400' : grade.value >= 6 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>{grade.value}</span>
                   <div>
                     <p className={`font-medium text-sm ${textColor}`}>{grade.subject}</p>
-                    <p className={`text-xs ${subTextColor}`}>{grade.description} • {new Date(grade.date).toLocaleDateString('it-IT')}</p>
+                    <p className={`text-xs ${subTextColor}`}>{grade.description ? `${grade.description} • ` : ''}{formatDate(grade.date)}</p>
                   </div>
                 </div>
                 <button onClick={() => onUpdate(grades.filter(g => g.id !== grade.id))} className="p-2 text-red-400">

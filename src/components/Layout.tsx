@@ -38,8 +38,11 @@ export default function Layout({ children, currentSection, onSectionChange, user
     const a = document.createElement('a');
     a.href = url;
     a.download = 'student-hub-backup.json';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setShowMenu(false);
   };
 
   const handleImport = () => {
@@ -52,15 +55,19 @@ export default function Layout({ children, currentSection, onSectionChange, user
         const reader = new FileReader();
         reader.onload = (ev) => {
           const result = ev.target?.result as string;
+          if (!confirm('Importando il backup sostituirai tutti i dati attuali. Continuare?')) return;
           if (importData(userId, result)) {
             onDataImport();
             alert('Dati importati!');
+          } else {
+            alert('File non valido: seleziona un backup esportato da Student Hub.');
           }
         };
         reader.readAsText(file);
       }
     };
     input.click();
+    setShowMenu(false);
   };
 
   return (

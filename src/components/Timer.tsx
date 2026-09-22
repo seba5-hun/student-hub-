@@ -1,45 +1,87 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Pause, Save, Trash2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { StudySession, Grade, getSubjectStudyTime, createId } from '../lib/store';
+import { StudySession, Grade, getSubjectStudyTime, createId, formatDate } from '../lib/store';
 
 interface TimerProps {
   sessions: StudySession[];
+  extraSubjects?: string[];
   grades: Grade[];
   darkMode: boolean;
   onUpdate: (sessions: StudySession[]) => void;
   preselectedSubject?: string;
 }
 
-export default function Timer({ sessions, grades, darkMode, onUpdate, preselectedSubject }: TimerProps) {
-  const [subject, setSubject] = useState(preselectedSubject || '');
-  const [seconds, setSeconds] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const intervalRef = useRef<any>(null);
+const TIMER_KEY = 'studenthub_timer';
+
+interface TimerState {
+  subject: string;
+  accumulatedMs: number;
+  startedAt: number | null;
+}
+
+function loadTimerState(): TimerState | null {
+  try {
+    const raw = localStorage.getItem(TIMER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTimerState(state: TimerState | null): void {
+  try {
+    if (state) localStorage.setItem(TIMER_KEY, JSON.stringify(state));
+    else localStorage.removeItem(TIMER_KEY);
+  } catch { /* ignore */ }
+}
+
+export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject }: TimerProps) {
+  // Time is computed from timestamps (not by counting ticks), so it stays correct when the
+  // tab is in background, and the state is saved so the timer survives changing section.
+  const [saved] = useState(loadTimerState);
+  const [subject, setSubject] = useState(preselectedSubject || saved?.subject || '');
+  const [accumulatedMs, setAccumulatedMs] = useState(saved?.accumulatedMs || 0);
+  const [startedAt, setStartedAt] = useState<number | null>(saved?.startedAt ?? null);
+  const [now, setNow] = useState(Date.now());
+  const isRunning = startedAt !== null;
+  const seconds = Math.floor((accumulatedMs + (startedAt !== null ? now - startedAt : 0)) / 1000);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
 
-  const subjects = [...new Set([...grades.map(g => g.subject), ...sessions.map(s => s.subject)])].sort();
+  const subjects = [...new Set([...grades.map(g => g.subject), ...sessions.map(s => s.subject), ...extraSubjects, ...(subject ? [subject] : [])])].sort();
 
   useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
-    } else if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    if (!isRunning) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, [isRunning]);
 
+  useEffect(() => {
+    saveTimerState(accumulatedMs > 0 || startedAt !== null ? { subject, accumulatedMs, startedAt } : null);
+  }, [subject, accumulatedMs, startedAt]);
+
   useEffect(() => { if (preselectedSubject) setSubject(preselectedSubject); }, [preselectedSubject]);
+
+  const start = () => setStartedAt(Date.now());
+  const pause = () => {
+    if (startedAt === null) return;
+    setAccumulatedMs(ms => ms + (Date.now() - startedAt));
+    setStartedAt(null);
+  };
+  const reset = () => {
+    setAccumulatedMs(0);
+    setStartedAt(null);
+  };
 
   const handleSave = () => {
     if (seconds < 60 || !subject) return;
     const newSession: StudySession = { id: createId(), subject, duration: Math.round(seconds / 60), date: new Date().toISOString() };
     onUpdate([...sessions, newSession]);
-    setSeconds(0);
-    setIsRunning(false);
+    reset();
   };
 
   const formatTime = (s: number) => {
@@ -72,18 +114,18 @@ export default function Timer({ sessions, grades, darkMode, onUpdate, preselecte
 
         <div className="flex items-center justify-center gap-4 mt-6">
           {!isRunning ? (
-            <button onClick={() => setIsRunning(true)} disabled={!subject} className="btn-primary flex items-center gap-2 px-6 py-3 disabled:opacity-50">
+            <button onClick={start} disabled={!subject} className="btn-primary flex items-center gap-2 px-6 py-3 disabled:opacity-50">
               <Play className="w-5 h-5" /> Avvia
             </button>
           ) : (
-            <button onClick={() => setIsRunning(false)} className="px-6 py-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold flex items-center gap-2">
+            <button onClick={pause} className="px-6 py-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold flex items-center gap-2">
               <Pause className="w-5 h-5" /> Pausa
             </button>
           )}
           <button onClick={handleSave} disabled={seconds < 60 || !subject} className="px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center gap-2 disabled:opacity-50">
             <Save className="w-5 h-5" /> Salva
           </button>
-          <button onClick={() => { setSeconds(0); setIsRunning(false); }} className={`px-4 py-3 rounded-xl ${darkMode ? 'bg-white/5 text-white/60' : 'bg-black/5 text-gray-500'}`}>
+          <button onClick={reset} className={`px-4 py-3 rounded-xl ${darkMode ? 'bg-white/5 text-white/60' : 'bg-black/5 text-gray-500'}`}>
             Reset
           </button>
         </div>
@@ -115,7 +157,7 @@ export default function Timer({ sessions, grades, darkMode, onUpdate, preselecte
                   </div>
                   <div>
                     <p className={`text-sm font-medium ${textColor}`}>{session.subject}</p>
-                    <p className={`text-xs ${subTextColor}`}>{new Date(session.date).toLocaleDateString('it-IT')} • {session.duration}min</p>
+                    <p className={`text-xs ${subTextColor}`}>{formatDate(session.date)} • {session.duration}min</p>
                   </div>
                 </div>
                 <button onClick={() => onUpdate(sessions.filter(s => s.id !== session.id))} className="p-2 text-red-400">

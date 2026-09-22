@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Check, Clock } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId } from '../lib/store';
+import { Task, IMPORTANCE_CONFIG, createId, parseDate, formatDate } from '../lib/store';
 
 interface ImpegniProps {
   tasks: Task[];
+  knownSubjects?: string[];
   darkMode: boolean;
   onUpdate: (tasks: Task[]) => void;
   prefillDate?: string;
 }
 
-export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: ImpegniProps) {
+export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate, prefillDate }: ImpegniProps) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(prefillDate || '');
   const [endDate, setEndDate] = useState('');
@@ -17,6 +18,8 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
   const [type, setType] = useState<'scolastico' | 'personale'>('scolastico');
   const [importance, setImportance] = useState<1 | 2 | 3 | 4 | 5>(2);
   const [estimatedTime, setEstimatedTime] = useState(60);
+  const [subject, setSubject] = useState('');
+  const [formError, setFormError] = useState('');
   const [showForm, setShowForm] = useState(!!prefillDate);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
@@ -26,6 +29,11 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) return;
+    if (isMultiDay && endDate && endDate < date) {
+      setFormError('La data di fine non può essere prima della data di inizio.');
+      return;
+    }
+    setFormError('');
     const newTask: Task = {
       id: createId(),
       title: title.trim(),
@@ -33,14 +41,17 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
       endDate: isMultiDay && endDate ? endDate : undefined,
       type,
       importance,
-      estimatedTime,
+      estimatedTime: Math.max(0, estimatedTime || 0),
       done: false,
+      subject: type === 'scolastico' && subject.trim() ? subject.trim() : undefined,
     };
     onUpdate([...tasks, newTask]);
     setTitle('');
     setDate('');
     setEndDate('');
     setIsMultiDay(false);
+    setSubject('');
+    setEstimatedTime(60);
     setShowForm(false);
   };
 
@@ -52,7 +63,8 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
     onUpdate(tasks.filter(t => t.id !== id));
   };
 
-  const pendingTasks = tasks.filter(t => !t.done).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const pendingTasks = tasks.filter(t => !t.done).sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+  const subjectOptions = [...new Set([...knownSubjects, ...tasks.map(t => t.subject).filter((s): s is string => !!s)])].sort();
   const doneTasks = tasks.filter(t => t.done);
 
   return (
@@ -83,6 +95,19 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
                 <option value="personale">Personale</option>
               </select>
             </div>
+            {type === 'scolastico' && (
+              <div>
+                <label className={`block text-sm mb-1 ${subTextColor}`}>Materia (opzionale)</label>
+                <input value={subject} onChange={e => setSubject(e.target.value)} list="impegni-subjects" className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="Es. Matematica" />
+                <datalist id="impegni-subjects">
+                  {subjectOptions.map(s => <option key={s} value={s} />)}
+                </datalist>
+              </div>
+            )}
+            <div>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>Tempo stimato (minuti)</label>
+              <input type="number" min={0} step={15} value={estimatedTime} onChange={e => setEstimatedTime(parseInt(e.target.value, 10) || 0)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} />
+            </div>
             <div>
               <label className="inline-flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={isMultiDay} onChange={e => setIsMultiDay(e.target.checked)} className="w-4 h-4" />
@@ -106,6 +131,7 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
             </div>
           </div>
 
+          {formError && <p className="text-red-400 text-sm">{formError}</p>}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary text-sm">Aggiungi</button>
             <button type="button" onClick={() => setShowForm(false)} className={`px-4 py-2 rounded-lg text-sm ${darkMode ? 'text-white/60' : 'text-gray-500'}`}>Annulla</button>
@@ -118,11 +144,12 @@ export default function Impegni({ tasks, darkMode, onUpdate, prefillDate }: Impe
           const imp = IMPORTANCE_CONFIG[task.importance - 1];
           return (
             <div key={task.id} className={`${cardClass} p-4 border-l-4 flex items-center gap-4`} style={{ borderLeftColor: imp.color }}>
-              <button onClick={() => toggleDone(task.id)} className={`w-6 h-6 rounded-full border-2 ${darkMode ? 'border-white/30' : 'border-gray-300'}`}></button>
+              <button onClick={() => toggleDone(task.id)} aria-label="Segna come completato" className={`w-6 h-6 rounded-full flex-shrink-0 border-2 ${darkMode ? 'border-white/30' : 'border-gray-300'}`}></button>
               <div className="flex-1">
                 <p className={`font-medium ${textColor}`}>{task.title}</p>
                 <div className="flex items-center gap-3 mt-1">
-                  <span className={`text-xs ${subTextColor}`}>{new Date(task.date).toLocaleDateString('it-IT')}</span>
+                  <span className={`text-xs ${subTextColor}`}>{formatDate(task.date)}{task.endDate ? ` → ${formatDate(task.endDate)}` : ''}</span>
+                  {task.subject && <span className={`text-xs ${subTextColor}`}>{task.subject}</span>}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${imp.bg} ${imp.text}`}>{imp.label}</span>
                 </div>
               </div>

@@ -8,6 +8,18 @@ interface ArchivioProps {
   onUpdate: (archive: ArchiveItem[]) => void;
 }
 
+// Only http(s) links are opened; "www.sito.it" becomes "https://www.sito.it".
+function safeLink(link?: string): string | null {
+  if (!link) return null;
+  const value = /^[a-z][a-z0-9+.-]*:/i.test(link) ? link : `https://${link}`;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Archivio({ archive, darkMode, onUpdate }: ArchivioProps) {
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
@@ -96,8 +108,8 @@ export default function Archivio({ archive, darkMode, onUpdate }: ArchivioProps)
                             <div key={item.id} className={`flex items-center gap-3 p-2 rounded-lg ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
                               <FileText className="w-4 h-4 text-emerald-400" />
                               <span className={`text-sm ${textColor} flex-1`}>{item.name}</span>
-                              {item.link && <a href={item.link} target="_blank" className="text-indigo-400"><ExternalLink className="w-3.5 h-3.5" /></a>}
-                              <button onClick={() => onUpdate(archive.filter(a => a.id !== item.id))} className="text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                              {safeLink(item.link) && <a href={safeLink(item.link)!} target="_blank" rel="noopener noreferrer" className="text-indigo-400" aria-label="Apri link"><ExternalLink className="w-3.5 h-3.5" /></a>}
+                              <button onClick={() => onUpdate(archive.filter(a => a.id !== item.id))} className="text-red-400" aria-label="Elimina"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
                           ))}
                         </div>

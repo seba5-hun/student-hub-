@@ -17,13 +17,13 @@ export default function Auth({ onLogin }: AuthProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const user = loginUser(email, password);
+      const user = await loginUser(email, password);
       if (user) {
         setAuthUser(user);
         onLogin(user);
@@ -37,7 +37,7 @@ export default function Auth({ onLogin }: AuthProps) {
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -53,7 +53,7 @@ export default function Auth({ onLogin }: AuthProps) {
     setLoading(true);
 
     try {
-      const user = registerUser(email, password);
+      const user = await registerUser(email, password);
       if (user) {
         setAuthUser(user);
         onLogin(user);
@@ -67,16 +67,11 @@ export default function Auth({ onLogin }: AuthProps) {
     }
   };
 
+  // Accounts live only in this browser: there is no server that can send a reset email.
   const handleReset = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setSuccess('');
-    setLoading(true);
-
-    setTimeout(() => {
-      setSuccess('Se esiste un account con questa email, riceverai un link per reimpostare la password.');
-      setLoading(false);
-    }, 1000);
+    setError('Il recupero password via email non è ancora attivo: gli account sono salvati solo in questo browser. Se non ricordi la password, crea un nuovo account e ripristina i dati con "Importa dati" da un backup.');
   };
 
   return (
@@ -214,7 +209,7 @@ export default function Auth({ onLogin }: AuthProps) {
                 Recupero Password
               </h2>
               <p className="text-gray-600 text-sm mb-4">
-                Inserisci la tua email e ti invieremo un link per reimpostare la password.
+                Gli account di Student Hub sono salvati solo in questo browser.
               </p>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Email</label>
@@ -232,11 +227,8 @@ export default function Auth({ onLogin }: AuthProps) {
               </div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
               {success && <p className="text-emerald-600 text-sm">{success}</p>}
-              <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
-                {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Invia Link'}
-              </button>
-              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                <ArrowLeft className="w-4 h-4" /> Torna al login
+              <button type="submit" className="btn-primary w-full">
+                Recupera password
               </button>
               <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Torna al login

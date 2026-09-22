@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download, Bell, BellOff, Plus, X } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId } from '../lib/store';
+import { ChevronLeft, ChevronRight, Download, Plus, X } from 'lucide-react';
+import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey } from '../lib/store';
 import { downloadICS } from '../lib/calendar';
 
 interface CalendarioProps {
@@ -13,7 +13,6 @@ interface CalendarioProps {
 export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: CalendarioProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState('');
   const [quickAddTitle, setQuickAddTitle] = useState('');
@@ -40,7 +39,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
       const endDate = task.endDate ? new Date(task.endDate + 'T00:00:00') : startDate;
       const current = new Date(startDate);
       while (current <= endDate) {
-        const dateStr = current.toISOString().split('T')[0];
+        const dateStr = toDateKey(current);
         if (!map[dateStr]) map[dateStr] = [];
         if (!map[dateStr].find(t => t.id === task.id)) map[dateStr].push(task);
         current.setDate(current.getDate() + 1);
@@ -50,7 +49,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   }, [tasks]);
 
   const selectedTasks = selectedDay ? (tasksByDate[selectedDay] || []) : [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayKey();
 
   const calendarDays = [];
   for (let i = 0; i < adjustedFirstDay; i++) calendarDays.push(null);
@@ -70,7 +69,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   };
 
   const openQuickAdd = (date?: string) => {
-    setQuickAddDate(date || new Date().toISOString().split('T')[0]);
+    setQuickAddDate(date || todayKey());
     setShowQuickAdd(true);
   };
 

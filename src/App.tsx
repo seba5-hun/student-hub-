@@ -16,6 +16,8 @@ import {
   UserData,
   getAuthUser,
   setAuthUser,
+  ensureUserIdMapping,
+  todayKey,
   loadUserData as loadLocalData,
   saveUserData as saveLocalData,
 } from './lib/store';
@@ -45,6 +47,9 @@ function App() {
 
     const authUser = getAuthUser();
     if (authUser) {
+      // Accounts registered before the fix never saved their id: save it now,
+      // otherwise the next login would open an empty account.
+      ensureUserIdMapping(authUser);
       setUser(authUser);
       const localData = loadLocalData(authUser.id);
       setData(localData);
@@ -112,34 +117,30 @@ function App() {
     }
   };
 
-  // Register service worker for PWA
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => {
-        console.log('SW registration failed:', err);
-      });
-    }
-  }, []);
-
   // Browser notifications for tasks due today
   useEffect(() => {
     if (!data || !user) return;
-    const today = new Date().toISOString().split('T')[0];
-    const todayTasks = data.tasks.filter(t => t.date === today && !t.done);
+    const today = todayKey();
+    const todayTasks = data.tasks.filter(t => !t.done && t.date <= today && (t.endDate || t.date) >= today);
     
     if (todayTasks.length > 0 && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-      if (Notification.permission === 'granted') {
-        const alreadyNotified = sessionStorage.getItem(`notified_${today}`);
-        if (!alreadyNotified) {
+      const notify = () => {
+        if (Notification.permission !== 'granted') return;
+        if (sessionStorage.getItem(`notified_${today}`)) return;
+        try {
           new Notification('Student Hub 📚', {
             body: `Hai ${todayTasks.length} impegn${todayTasks.length === 1 ? 'o' : 'i'} per oggi!`,
-            icon: '/icon-192.png',
+            icon: '/icon.svg',
           });
           sessionStorage.setItem(`notified_${today}`, 'true');
+        } catch {
+          // Some mobile browsers only allow notifications from a service worker.
         }
+      };
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(notify).catch(() => {});
+      } else {
+        notify();
       }
     }
   }, [data, user]);
@@ -214,7 +215,7 @@ function App() {
           />
         )}
         {currentSection === 'impegni' && (
-          <Impegni tasks={data.tasks} darkMode={darkMode} onUpdate={handleTasksUpdate} prefillDate={prefillImpegniDate} />
+          <Impegni tasks={data.tasks} knownSubjects={[...data.grades.map(g => g.subject), ...data.sessions.map(s => s.subject)]} darkMode={darkMode} onUpdate={handleTasksUpdate} prefillDate={prefillImpegniDate} />
         )}
         {currentSection === 'voti' && (
           <Voti grades={data.grades} darkMode={darkMode} onUpdate={(grades) => updateData({ ...data, grades })} />
@@ -222,6 +223,7 @@ function App() {
         {currentSection === 'timer' && (
           <Timer
             sessions={data.sessions}
+            extraSubjects={data.tasks.map(t => t.subject).filter((s): s is string => !!s)}
             grades={data.grades}
             darkMode={darkMode}
             onUpdate={(sessions) => updateData({ ...data, sessions })}
