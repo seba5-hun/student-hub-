@@ -1,30 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { BookOpen, Lock, CheckCircle, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import React, { useState } from 'react';
+import { supabase, authErrorMessage } from '../lib/supabase';
+import { BookOpen, Lock, CheckCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface ResetPasswordProps {
-  onBackToLogin: () => void;
+  // Called when the password has been changed, or to go back to the login.
+  onDone: () => void;
 }
 
-export default function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
+// Shown after the user opens the link in the reset email: Supabase has already
+// signed them in with a temporary session, so here we only set the new password.
+export default function ResetPassword({ onDone }: ResetPasswordProps) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  useEffect(() => {
-    // Estrai il token dai parametri URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenParam = urlParams.get('token');
-    if (tokenParam) {
-      setToken(tokenParam);
-    } else {
-      setError('Link di reset non valido o scaduto.');
-    }
-  }, []);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,15 +33,18 @@ export default function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
       return;
     }
 
-    if (!token) {
-      setError('Token non valido.');
-      return;
+    if (!supabase) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setSuccess('Password reimpostata con successo! Ti sto portando alla tua dashboard...');
+      setTimeout(onDone, 1500);
+    } catch (err) {
+      setError(authErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-
-    // The app has no auth server yet (accounts are stored locally), so a reset link
-    // cannot be verified. Say so instead of pretending the password was changed.
-    setError('Il recupero password non è ancora attivo. Torna al login e crea un nuovo account, poi usa "Importa dati" per ripristinare un backup.');
-    setLoading(false);
   };
 
   return (
@@ -64,18 +59,7 @@ export default function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
         </div>
 
         <div className="glass-card-light p-8 animate-scale-in">
-          {error && !token ? (
-            <div className="text-center">
-              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={onBackToLogin}
-                className="btn-primary w-full"
-              >
-                Torna al Login
-              </button>
-            </div>
-          ) : success ? (
+          {success ? (
             <div className="text-center">
               <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
               <p className="text-emerald-600">{success}</p>
@@ -131,6 +115,9 @@ export default function ResetPassword({ onBackToLogin }: ResetPasswordProps) {
               {error && <p className="text-red-600 text-sm">{error}</p>}
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Reimposta Password'}
+              </button>
+              <button type="button" onClick={onDone} className="text-sm text-indigo-600 hover:text-indigo-700 w-full">
+                Annulla
               </button>
             </form>
           )}

@@ -1,17 +1,22 @@
 import React, { useState } from 'react';
-import { loginUser, registerUser, setAuthUser, AuthUser } from '../lib/store';
+import { AuthUser } from '../lib/store';
+import { supabase, authErrorMessage } from '../lib/supabase';
 import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: AuthUser) => void;
+  initialError?: string;
 }
 
-export default function Auth({ onLogin }: AuthProps) {
+// The app returns here after the links in confirmation and reset emails.
+const redirectTo = () => `${window.location.origin}${window.location.pathname}`;
+
+export default function Auth({ onLogin, initialError = '' }: AuthProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'reset'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initialError);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -19,19 +24,17 @@ export default function Auth({ onLogin }: AuthProps) {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     setError('');
+    setSuccess('');
     setLoading(true);
 
     try {
-      const user = await loginUser(email, password);
-      if (user) {
-        setAuthUser(user);
-        onLogin(user);
-      } else {
-        setError('Credenziali non valide. Controlla email e password.');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Errore di accesso.');
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
+      onLogin({ id: data.user.id, email: data.user.email || email.trim() });
+    } catch (err) {
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -39,8 +42,10 @@ export default function Auth({ onLogin }: AuthProps) {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
     setError('');
-    
+    setSuccess('');
+
     if (password !== confirmPassword) {
       setError('Le password non corrispondono.');
       return;
@@ -53,25 +58,46 @@ export default function Auth({ onLogin }: AuthProps) {
     setLoading(true);
 
     try {
-      const user = await registerUser(email, password);
-      if (user) {
-        setAuthUser(user);
-        onLogin(user);
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: redirectTo() },
+      });
+      if (error) throw error;
+      if (data.session && data.user) {
+        onLogin({ id: data.user.id, email: data.user.email || email.trim() });
+      } else if (data.user && data.user.identities?.length === 0) {
+        // Supabase answers this way when the email is already registered.
+        setError('Esiste già un account con questa email. Accedi o recupera la password.');
       } else {
-        setError('Un account con questa email esiste già.');
+        setMode('login');
+        setPassword('');
+        setConfirmPassword('');
+        setSuccess('Account creato! Ti abbiamo inviato un\'email: clicca sul link per confermare, poi accedi.');
       }
-    } catch (err: any) {
-      setError(err.message || 'Errore nella registrazione.');
+    } catch (err) {
+      setError(authErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
-  // Accounts live only in this browser: there is no server that can send a reset email.
-  const handleReset = (e: React.FormEvent) => {
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) return;
+    setError('');
     setSuccess('');
-    setError('Il recupero password via email non è ancora attivo: gli account sono salvati solo in questo browser. Se non ricordi la password, crea un nuovo account e ripristina i dati con "Importa dati" da un backup.');
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: redirectTo() });
+      if (error) throw error;
+      setSuccess('Se esiste un account con questa email, riceverai un link per reimpostare la password. Controlla anche lo spam.');
+    } catch (err) {
+      setError(authErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,6 +154,7 @@ export default function Auth({ onLogin }: AuthProps) {
                 </div>
               </div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
+              {success && <p className="text-emerald-600 text-sm">{success}</p>}
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Accedi'}
               </button>
@@ -135,7 +162,7 @@ export default function Auth({ onLogin }: AuthProps) {
                 <button type="button" onClick={() => { setMode('reset'); setError(''); setSuccess(''); }} className="text-indigo-600 hover:text-indigo-700">
                   Recupero password
                 </button>
-                <button type="button" onClick={() => { setMode('register'); setError(''); }} className="text-indigo-600 hover:text-indigo-700">
+                <button type="button" onClick={() => { setMode('register'); setError(''); setSuccess(''); }} className="text-indigo-600 hover:text-indigo-700">
                   Registrati
                 </button>
               </div>
@@ -196,7 +223,7 @@ export default function Auth({ onLogin }: AuthProps) {
               <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Crea Account'}
               </button>
-              <button type="button" onClick={() => { setMode('login'); setError(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Torna al login
               </button>
             </form>
@@ -209,7 +236,7 @@ export default function Auth({ onLogin }: AuthProps) {
                 Recupero Password
               </h2>
               <p className="text-gray-600 text-sm mb-4">
-                Gli account di Student Hub sono salvati solo in questo browser.
+                Inserisci la tua email e ti invieremo un link per reimpostare la password.
               </p>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Email</label>
@@ -227,8 +254,8 @@ export default function Auth({ onLogin }: AuthProps) {
               </div>
               {error && <p className="text-red-600 text-sm">{error}</p>}
               {success && <p className="text-emerald-600 text-sm">{success}</p>}
-              <button type="submit" className="btn-primary w-full">
-                Recupera password
+              <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Invia link'}
               </button>
               <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Torna al login

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
 import ResetPassword from './components/ResetPassword';
@@ -14,73 +14,156 @@ import GuidaStudioAI from './components/GuidaStudioAI';
 import {
   AuthUser,
   UserData,
-  getAuthUser,
-  setAuthUser,
-  ensureUserIdMapping,
   todayKey,
-  loadUserData as loadLocalData,
-  saveUserData as saveLocalData,
+  loadCachedData,
+  findLegacyLocalData,
+  generateDemoData,
 } from './lib/store';
+import {
+  supabase,
+  fetchRemoteData,
+  saveRemoteData,
+  authErrorMessage,
+  openedFromRecoveryLink,
+  linkErrorMessage,
+} from './lib/supabase';
+
+type SaveStatus = 'idle' | 'saving' | 'error';
 
 function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [data, setData] = useState<UserData | null>(null);
   const [currentSection, setCurrentSection] = useState('home');
   const [darkMode, setDarkMode] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [loadError, setLoadError] = useState('');
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
-  const [isResetPassword, setIsResetPassword] = useState(false);
+  const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
+  const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+
+  // Load the user's data from Supabase. The first time, upload what this browser already has.
+  const loadUser = useCallback(async (authUser: AuthUser) => {
+    setUser(authUser);
+    setLoadError('');
+    try {
+      let userData = await fetchRemoteData(authUser.id);
+      if (!userData) {
+        userData = loadCachedData(authUser.id) || findLegacyLocalData(authUser.email) || generateDemoData();
+        await saveRemoteData(authUser.id, userData);
+      }
+      setData(userData);
+      setDarkMode(userData.settings.darkMode);
+    } catch (err) {
+      console.error('Error loading data:', err);
+      setData(null);
+      setLoadError(authErrorMessage(err));
+    }
+  }, []);
 
   // Initialize auth
   useEffect(() => {
-    // Controlla se c'è un token di reset password nell'URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasResetToken = urlParams.has('token');
-    
-    if (hasResetToken) {
-      setIsResetPassword(true);
+    if (!supabase) {
       setInitialized(true);
       return;
     }
+    const client = supabase;
+    let cancelled = false;
 
-    const authUser = getAuthUser();
-    if (authUser) {
-      // Accounts registered before the fix never saved their id: save it now,
-      // otherwise the next login would open an empty account.
-      ensureUserIdMapping(authUser);
-      setUser(authUser);
-      const localData = loadLocalData(authUser.id);
-      setData(localData);
-      setDarkMode(localData.settings.darkMode);
-    }
-    setInitialized(true);
+    const init = async () => {
+      // Reset links in the format ?token_hash=...&type=recovery
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get('token_hash');
+      if (tokenHash && params.get('type') === 'recovery') {
+        await client.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      const { data: { session } } = await client.auth.getSession();
+      if (cancelled) return;
+      if (session?.user && !openedFromRecoveryLink) {
+        await loadUser({ id: session.user.id, email: session.user.email || '' });
+      }
+      if (!cancelled) setInitialized(true);
+    };
+
+    const { data: listener } = client.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setIsResetPassword(true);
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setData(null);
+      }
+    });
+
+    init();
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
+  }, [loadUser]);
+
+  // Changes are saved to Supabase shortly after the last edit, so typing in the notes
+  // doesn't send a request for every key.
+  // Saves run one at a time, so an older version can never overwrite a newer one.
+  const flushSave = useCallback((): Promise<void> => {
+    window.clearTimeout(saveTimer.current);
+    const run = async () => {
+      const pending = pendingSave.current;
+      if (!pending) return;
+      pendingSave.current = null;
+      try {
+        await saveRemoteData(pending.userId, pending.data);
+        if (!pendingSave.current) setSaveStatus('idle');
+      } catch (err) {
+        console.error('Error saving data:', err);
+        if (!pendingSave.current) pendingSave.current = pending;
+        setSaveStatus('error');
+        saveTimer.current = window.setTimeout(() => { flushSave(); }, 10000);
+      }
+    };
+    saveChain.current = saveChain.current.then(run);
+    return saveChain.current;
   }, []);
 
-  // Save data whenever it changes
   const updateData = useCallback((newData: UserData) => {
     setData(newData);
-    if (user) {
-      setSyncing(true);
-      saveLocalData(user.id, newData);
-      setTimeout(() => setSyncing(false), 500);
-    }
-  }, [user]);
+    if (!user) return;
+    pendingSave.current = { userId: user.id, data: newData };
+    setSaveStatus('saving');
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => { flushSave(); }, 800);
+  }, [user, flushSave]);
+
+  // Don't lose the last change when the page is closed.
+  useEffect(() => {
+    const onPageHide = () => { flushSave(); };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!pendingSave.current) return;
+      flushSave();
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [flushSave]);
 
   // Handle login
-  const handleLogin = (authUser: AuthUser) => {
-    setUser(authUser);
-    const localData = loadLocalData(authUser.id);
-    setData(localData);
-    setDarkMode(localData.settings.darkMode);
-  };
+  const handleLogin = (authUser: AuthUser) => loadUser(authUser);
 
   // Handle logout
-  const handleLogout = () => {
-    setAuthUser(null);
+  const handleLogout = async () => {
+    await flushSave();
+    await supabase?.auth.signOut();
     setUser(null);
     setData(null);
+    setLoadError('');
     setCurrentSection('home');
   };
 
@@ -106,15 +189,6 @@ function App() {
     if (section !== 'impegni') setPrefillImpegniDate(undefined);
     else if (prefillDate) setPrefillImpegniDate(prefillDate);
     setCurrentSection(section);
-  };
-
-  // Handle data import refresh
-  const handleDataImport = () => {
-    if (user) {
-      const userData = loadLocalData(user.id);
-      setData(userData);
-      setDarkMode(userData.settings.darkMode);
-    }
   };
 
   // Browser notifications for tasks due today
@@ -165,28 +239,65 @@ function App() {
     );
   }
 
+  if (!supabase) {
+    return (
+      <div className="min-h-screen gradient-bg mesh-gradient flex items-center justify-center p-4">
+        <div className="glass-card p-8 max-w-md text-center text-white">
+          <h1 className="text-xl font-bold mb-3">Supabase non configurato</h1>
+          <p className="text-sm text-white/70">
+            Crea il file <code>.env</code> partendo da <code>.env.example</code> con <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code>, poi riavvia l'app.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Reset password screen
   if (isResetPassword) {
-    return <ResetPassword onBackToLogin={() => {
+    return <ResetPassword onDone={async () => {
       setIsResetPassword(false);
       window.history.replaceState({}, document.title, window.location.pathname);
+      const { data: { session } } = await supabase!.auth.getSession();
+      if (session?.user) await loadUser({ id: session.user.id, email: session.user.email || '' });
     }} />;
+  }
+
+  // Data could not be loaded
+  if (user && !data) {
+    return (
+      <div className="min-h-screen gradient-bg mesh-gradient flex items-center justify-center p-4">
+        <div className="glass-card p-8 max-w-md text-center text-white">
+          {loadError ? (
+            <>
+              <h1 className="text-xl font-bold mb-3">Impossibile caricare i dati</h1>
+              <p className="text-sm text-white/70 mb-6">{loadError}</p>
+              <div className="flex gap-2 justify-center">
+                <button onClick={() => loadUser(user)} className="btn-primary text-sm">Riprova</button>
+                <button onClick={handleLogout} className="px-4 py-2 rounded-lg text-sm text-white/70 bg-white/10">Esci</button>
+              </div>
+            </>
+          ) : (
+            <div className="animate-pulse text-white/60">Caricamento dati...</div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // Auth screen
   if (!user || !data) {
-    return <Auth onLogin={handleLogin} />;
+    return <Auth onLogin={handleLogin} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }
 
-  // Sync indicator
-  const SyncIndicator = () => syncing ? (
+  // Save indicator
+  const SaveIndicator = () => saveStatus === 'idle' ? null : (
     <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
       <div className="glass-card px-4 py-2 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-xs text-white/70">Salvataggio...</span>
+        <div className={`w-2 h-2 rounded-full animate-pulse ${saveStatus === 'error' ? 'bg-red-400' : 'bg-emerald-400'}`} />
+        <span className="text-xs text-white/70">{saveStatus === 'error' ? 'Non salvato, riprovo tra poco…' : 'Salvataggio...'}</span>
       </div>
     </div>
-  ) : null;
+  );
 
   return (
     <>
@@ -197,8 +308,11 @@ function App() {
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
         onLogout={handleLogout}
-        userId={user.id}
-        onDataImport={handleDataImport}
+        data={data}
+        onDataImport={(imported) => {
+          updateData(imported);
+          setDarkMode(imported.settings.darkMode);
+        }}
         colorTheme={data?.settings.colorTheme}
         onThemeChange={(theme) => {
           if (data) {
@@ -248,7 +362,7 @@ function App() {
           <GuidaStudioAI data={data} darkMode={darkMode} />
         )}
       </Layout>
-      <SyncIndicator />
+      <SaveIndicator />
     </>
   );
 }

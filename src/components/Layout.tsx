@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles } from 'lucide-react';
-import { AuthUser, exportData, importData } from '../lib/store';
+import { AuthUser, UserData, parseImportedData } from '../lib/store';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,8 +10,8 @@ interface LayoutProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onLogout: () => void;
-  userId: string;
-  onDataImport: () => void;
+  data: UserData;
+  onDataImport: (data: UserData) => void;
   colorTheme?: string;
   onThemeChange?: (theme: string) => void;
 }
@@ -27,13 +27,12 @@ const SECTIONS = [
   { id: 'guida-ai', label: 'Guida Studio AI', icon: Sparkles },
 ];
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, userId, onDataImport, colorTheme = 'default', onThemeChange }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   const handleExport = () => {
-    const data = exportData(userId);
-    const blob = new Blob([data], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -55,9 +54,10 @@ export default function Layout({ children, currentSection, onSectionChange, user
         const reader = new FileReader();
         reader.onload = (ev) => {
           const result = ev.target?.result as string;
-          if (!confirm('Importando il backup sostituirai tutti i dati attuali. Continuare?')) return;
-          if (importData(userId, result)) {
-            onDataImport();
+          const imported = parseImportedData(result);
+          if (imported) {
+            if (!confirm('Importando il backup sostituirai tutti i dati attuali. Continuare?')) return;
+            onDataImport(imported);
             alert('Dati importati!');
           } else {
             alert('File non valido: seleziona un backup esportato da Student Hub.');

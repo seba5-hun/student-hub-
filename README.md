@@ -4,9 +4,8 @@ Dashboard studentesco completo e **completamente autonomo** - funziona senza dip
 
 ## ✨ Caratteristiche
 
-- ✅ **Autenticazione locale** - Login e registrazione funzionano subito
-- ✅ **Dati salvati nel browser** - Tutto in localStorage
-- ✅ **Nessun server richiesto** - Funziona offline
+- ✅ **Account con Supabase** - Registrazione, login e recupero password via email
+- ✅ **Dati online** - Li ritrovi su ogni dispositivo (vedi [GUIDA_SUPABASE.md](GUIDA_SUPABASE.md))
 - ✅ **Assistente AI** - Integrato con Gemini (API key gratuita)
 - ✅ **Pubblicabile online** - Sito web statico pronto per Netlify/Vercel
 
@@ -112,13 +111,13 @@ Per usare l'assistente AI con Gemini:
 
 ## 🔒 Privacy
 
-- ✅ Tutti i dati sono salvati **solo nel tuo browser**
-- ✅ Nessuna comunicazione con server esterni (tranne Gemini AI)
+- ✅ I dati sono salvati nel tuo progetto Supabase: ogni utente vede solo i propri (Row Level Security)
+- ✅ Oltre a Supabase, l'unico servizio esterno è Gemini AI (solo se lo usi)
 - ✅ Nessun tracciamento
-- ✅ Nessun account richiesto
-- ✅ Funziona offline
 
 ## 🛠️ Sviluppo Locale
+
+Prima volta: copia `.env.example` in `.env` e inserisci URL e chiave del tuo progetto Supabase (vedi [GUIDA_SUPABASE.md](GUIDA_SUPABASE.md)).
 
 ```bash
 # Installa le dipendenze

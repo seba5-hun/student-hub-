@@ -2,17 +2,10 @@
 
 ## ✅ Cosa è Stato Fatto
 
-L'app è stata trasformata in un **sito web completamente autonomo**:
+L'app usa **Supabase** per account e dati (configurazione in [GUIDA_SUPABASE.md](GUIDA_SUPABASE.md)):
 
-### Rimosso:
-- ❌ Supabase (database cloud)
-- ❌ Recupero password via email
-- ❌ Sincronizzazione cloud
-- ❌ Dipendenze da server esterni
-
-### Mantenuto:
-- ✅ Autenticazione locale (localStorage)
-- ✅ Tutti i dati salvati nel browser
+- ✅ Registrazione, login e recupero password via email
+- ✅ Dati salvati online: li ritrovi su ogni dispositivo
 - ✅ Tutte le funzionalità originali
 - ✅ Assistente AI con Gemini
 - ✅ Design premium con glassmorphism
@@ -91,11 +84,9 @@ L'app è stata trasformata in un **sito web completamente autonomo**:
 
 ## 🔒 Privacy
 
-- ✅ Nessun dato inviato a server (tranne Gemini AI)
-- ✅ Tutto salvato nel tuo browser
+- ✅ I dati sono salvati nel tuo progetto Supabase: ogni utente vede solo i propri (Row Level Security)
+- ✅ Oltre a Supabase, l'unico servizio esterno è Gemini AI (solo se lo usi)
 - ✅ Nessun tracciamento
-- ✅ Nessun account cloud richiesto
-- ✅ Funziona offline
 
 ## 📊 Struttura del Progetto
 
@@ -110,7 +101,7 @@ student-hub/
 ├── public/              # Asset statici
 ├── index.html           # HTML principale
 ├── package.json         # Dipendenze
-└── vite.config.ts       # Configurazione Vite
+└── vite.config.js       # Configurazione Vite
 ```
 
 ## 🛠️ Sviluppo Locale
@@ -124,7 +115,7 @@ npm install
 # Avvia il server di sviluppo
 npm run dev
 
-# Apri http://localhost:5173 nel browser
+# Apri http://localhost:3000 nel browser
 ```
 
 ## 🎨 Personalizzazione
@@ -159,9 +150,9 @@ npm run dev
 ## 🆘 Risoluzione Problemi
 
 ### "I dati sono spariti"
-- Hai cancellato la cache del browser?
-- I dati sono salvati nel browser, se cancelli la cache li perdi
-- Fai backup regolari con "Esporta dati"
+- Sei entrato con la stessa email di prima?
+- I dati sono su Supabase: cancellare la cache del browser non li cancella
+- Per sicurezza fai comunque backup con "Esporta dati"
 
 ### "L'AI non funziona"
 - Hai configurato la API key di Gemini?
@@ -169,9 +160,9 @@ npm run dev
 - Controlla di averla inserita correttamente
 
 ### "Non riesco ad accedere"
-- Hai dimenticato la password?
-- Purtroppo non c'è recupero password (è tutto locale)
-- Devi creare un nuovo account
+- Hai dimenticato la password? Usa "Recupero password" nella schermata di login
+- Appena registrato? Prima devi cliccare il link nell'email di conferma (controlla lo spam)
+- Vedi "Supabase non configurato"? Manca il file `.env` (vedi GUIDA_SUPABASE.md)
 
 ### "Il sito non si carica"
 - Controlla la connessione internet
