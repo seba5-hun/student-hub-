@@ -255,7 +255,7 @@ function App() {
           <p className="text-sm text-white/90 mb-3">{configError || 'Impossibile avviare Supabase.'}</p>
           <p className="text-sm text-white/70">
             In locale: file <code>.env</code> (vedi <code>.env.example</code>), poi riavvia l'app.
-            Online (Netlify): Site configuration → Environment variables, poi rifai il deploy.
+            Online: impostazioni del progetto (Vercel/Netlify) → Environment Variables, poi rifai il deploy.
           </p>
         </div>
       </div>

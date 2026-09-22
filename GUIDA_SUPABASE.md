@@ -45,9 +45,11 @@ In **Authentication** → **Sign In / Providers** → **Email**:
 
 L'app funziona in entrambi i casi.
 
-## 5. File `.env`
+## 5. File `.env` (facoltativo)
 
-Nella cartella del progetto serve il file `.env` (non va su GitHub, è escluso dal `.gitignore`):
+URL e chiave publishable del progetto sono già scritti in `src/lib/supabase.ts`, quindi l'app
+funziona anche senza `.env` e senza variabili su Vercel/Netlify. Servono solo per usare un altro
+progetto Supabase. In quel caso nella cartella del progetto serve il file `.env` (non va su GitHub, è escluso dal `.gitignore`):
 
 ```
 VITE_SUPABASE_URL=https://<il-tuo-progetto>.supabase.co

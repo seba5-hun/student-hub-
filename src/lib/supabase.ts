@@ -13,8 +13,14 @@ function cleanEnv(value: string | undefined, name: string): string {
   return (value || '').trim().replace(new RegExp(`^${name}\\s*=\\s*`), '').replace(/^['"]|['"]$/g, '').trim();
 }
 
-const url = cleanEnv(import.meta.env.VITE_SUPABASE_URL, 'VITE_SUPABASE_URL');
-const anonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY, 'VITE_SUPABASE_ANON_KEY');
+// Project defaults, used when the environment variables are not set (e.g. on the hosting).
+// The publishable key is meant to be public: it ends up in the browser anyway, and the data
+// is protected by Row Level Security (supabase/schema.sql). Never put the service_role key here.
+const DEFAULT_URL = 'https://czzlvcmnfvyrcjvyfyxi.supabase.co';
+const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_jT6_ggiUROhkzmEgaUBouw_cBcygmKP';
+
+const url = cleanEnv(import.meta.env.VITE_SUPABASE_URL, 'VITE_SUPABASE_URL') || DEFAULT_URL;
+const anonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY, 'VITE_SUPABASE_ANON_KEY') || DEFAULT_PUBLISHABLE_KEY;
 
 function checkConfig(): string {
   if (!url && !anonKey) return 'Mancano VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.';
