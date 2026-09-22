@@ -1,5 +1,22 @@
+# Dipendenze e build
 node_modules/
 .next/
 dist/
 build/
 *.log
+
+# Pesi dei modelli
+*.gguf
+*.safetensors
+*.bin
+*.pt
+models/
+
+# Segreti
+.env
+.env.*
+!.env.example
+
+# Sistema / Python
+.DS_Store
+__pycache__/
