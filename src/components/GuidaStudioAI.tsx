@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Trash2, Key, BookOpen, Sparkles, Settings, Loader2, Image as ImageIcon, X } from 'lucide-react';
+import { Send, Bot, User, Trash2, Key, BookOpen, Sparkles, Settings, Loader2, Image as ImageIcon, X, Instagram } from 'lucide-react';
 import { ArchiveItem, Grade, Task, UserData } from '../lib/store';
 
 interface GuidaStudioAIProps {
@@ -418,6 +418,23 @@ function ApiKeyGuide({ darkMode }: { darkMode: boolean }) {
           <li><b>Hai perso la chiave o pensi che qualcuno l'abbia vista:</b> su AI Studio eliminala (icona del cestino) e creane una nuova.</li>
           <li><b>Non vedi il pulsante "Create API key":</b> controlla di aver accettato i termini e di usare un account Google personale (quelli della scuola a volte hanno AI Studio bloccato).</li>
         </ul>
+      </div>
+
+      <div className={`flex flex-wrap items-center justify-between gap-3 pt-4 border-t ${darkMode ? 'border-white/10' : 'border-black/10'}`}>
+        <p className={`text-sm ${subTextColor}`}>
+          Guida a cura di <span className={`font-semibold ${textColor}`}>Sebastiano Zorzi</span>
+        </p>
+        <a
+          href="https://www.instagram.com/sebastiano_zorzi_/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`inline-flex items-center gap-2 text-sm font-medium ${textColor} hover:opacity-80`}
+        >
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white" style={{ background: 'linear-gradient(45deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5)' }}>
+            <Instagram className="w-4 h-4" />
+          </span>
+          @sebastiano_zorzi_
+        </a>
       </div>
     </div>
   );
