@@ -8,11 +8,39 @@ export const openedFromRecoveryLink = initialHash.get('type') === 'recovery' || 
 // E.g. an expired confirmation or reset link.
 export const linkErrorMessage = initialHash.get('error_description') || initialQuery.get('error_description');
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Values pasted in hosting dashboards often keep quotes, spaces or the "NAME=" prefix: clean them.
+function cleanEnv(value: string | undefined, name: string): string {
+  return (value || '').trim().replace(new RegExp(`^${name}\\s*=\\s*`), '').replace(/^['"]|['"]$/g, '').trim();
+}
 
-// null when the .env file is missing: the app shows a configuration message instead of crashing.
-export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey) : null;
+const url = cleanEnv(import.meta.env.VITE_SUPABASE_URL, 'VITE_SUPABASE_URL');
+const anonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY, 'VITE_SUPABASE_ANON_KEY');
+
+function checkConfig(): string {
+  if (!url && !anonKey) return 'Mancano VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.';
+  if (!url) return 'Manca VITE_SUPABASE_URL.';
+  if (!anonKey) return 'Manca VITE_SUPABASE_ANON_KEY.';
+  if (!/^https:\/\/[^\s/]+\.supabase\.co\/?$/.test(url)) {
+    return 'VITE_SUPABASE_URL non è valido: deve essere tipo https://xxxx.supabase.co (senza virgolette né spazi).';
+  }
+  return '';
+}
+
+// Why Supabase can't be used, or '' when the configuration is fine. The app shows this
+// message instead of crashing into a white page.
+export const configError = checkConfig();
+
+function makeClient(): SupabaseClient | null {
+  if (configError) return null;
+  try {
+    return createClient(url, anonKey);
+  } catch (err) {
+    console.error('Supabase init error:', err);
+    return null;
+  }
+}
+
+export const supabase: SupabaseClient | null = makeClient();
 
 const TABLE = 'user_data';
 

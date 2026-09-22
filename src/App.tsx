@@ -26,6 +26,7 @@ import {
   authErrorMessage,
   openedFromRecoveryLink,
   linkErrorMessage,
+  configError,
 } from './lib/supabase';
 
 type SaveStatus = 'idle' | 'saving' | 'error';
@@ -251,8 +252,10 @@ function App() {
       <div className="min-h-screen gradient-bg mesh-gradient flex items-center justify-center p-4">
         <div className="glass-card p-8 max-w-md text-center text-white">
           <h1 className="text-xl font-bold mb-3">Supabase non configurato</h1>
+          <p className="text-sm text-white/90 mb-3">{configError || 'Impossibile avviare Supabase.'}</p>
           <p className="text-sm text-white/70">
-            Crea il file <code>.env</code> partendo da <code>.env.example</code> con <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code>, poi riavvia l'app.
+            In locale: file <code>.env</code> (vedi <code>.env.example</code>), poi riavvia l'app.
+            Online (Netlify): Site configuration → Environment variables, poi rifai il deploy.
           </p>
         </div>
       </div>
