@@ -41,7 +41,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
 
   return (
     <div className="space-y-6">
-      <div className={`${cardClass} p-5 border-l-4 border-indigo-500`}>
+      <div className={`${cardClass} p-5 border-l-4 border-l-indigo-500`}>
         <p className={`italic ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>"{quote}"</p>
       </div>
 
@@ -136,7 +136,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         </div>
       </div>
 
-      <div className={`${cardClass} p-6 border-l-4 border-amber-500`}>
+      <div className={`${cardClass} p-6 border-l-4 border-l-amber-500`}>
         <h3 className={`font-semibold mb-2 ${textColor}`}>📝 Note rapide</h3>
         <textarea
           value={settings.notes}

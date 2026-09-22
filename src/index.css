@@ -21,65 +21,20 @@ body {
   min-height: 100vh;
 }
 
-/* Glassmorphism Cards */
-.glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 1rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.glass-card-light {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 1rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-}
-
 /* Gradient Backgrounds */
-.gradient-bg {
-  background: linear-gradient(135deg, #0f0c29 0%, #1a1145 25%, #302b63 50%, #24243e 75%, #0f0c29 100%);
-}
-
-.gradient-bg-light {
-  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 25%, #f5f0ff 50%, #fef0f5 75%, #f0f4ff 100%);
-}
-
-.mesh-gradient {
-  background: 
+:root {
+  --bg-dark: linear-gradient(135deg, #0f0c29 0%, #1a1145 25%, #302b63 50%, #24243e 75%, #0f0c29 100%);
+  --bg-light: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 25%, #f5f0ff 50%, #fef0f5 75%, #f0f4ff 100%);
+  --mesh-dark:
     radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.3) 0%, transparent 50%),
     radial-gradient(at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%),
     radial-gradient(at 40% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%),
     radial-gradient(at 80% 80%, rgba(59, 130, 246, 0.2) 0%, transparent 50%);
-}
-
-.mesh-gradient-light {
-  background: 
+  --mesh-light:
     radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
     radial-gradient(at 80% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
     radial-gradient(at 40% 80%, rgba(236, 72, 153, 0.06) 0%, transparent 50%),
     radial-gradient(at 80% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
-}
-
-/* Animations */
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-slide-in {
-  animation: slideIn 0.3s ease-out;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.2s ease-out;
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 2s ease-in-out infinite;
 }
 
 @keyframes fadeIn {
@@ -102,70 +57,6 @@ body {
   50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.6); }
 }
 
-/* Buttons */
-.btn-primary {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: white;
-  border: none;
-  border-radius: 0.75rem;
-  padding: 0.625rem 1.25rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-}
-
-.btn-primary:active {
-  transform: translateY(0);
-}
-
-/* Inputs */
-.input-glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0.75rem;
-  padding: 0.625rem 1rem;
-  color: white;
-  outline: none;
-  transition: all 0.2s;
-}
-
-.input-glass:focus {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.input-light {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 0.75rem;
-  padding: 0.625rem 1rem;
-  color: #1f2937;
-  outline: none;
-  transition: all 0.2s;
-}
-
-.input-light:focus {
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-/* Sidebar Overlay */
-.sidebar-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-/* Progress Ring */
-.progress-ring {
-  transition: stroke-dashoffset 0.5s ease;
-}
-
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -184,12 +75,145 @@ body {
   background: rgba(139, 92, 246, 0.5);
 }
 
-/* Heatmap */
-.heatmap-cell {
-  border-radius: 3px;
-  transition: all 0.2s;
+/* Project components. They live in the `components` layer so that Tailwind utilities
+   (pl-10, px-6, border-l-4, rounded-xl…) can override them, as Tailwind intends: outside a
+   layer they would win over every utility (e.g. input icons ended up on top of the text). */
+@layer components {
+  /* Glassmorphism Cards */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  }
+
+  .glass-card-light {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  }
+
+  .gradient-bg {
+    background: var(--bg-dark);
+  }
+
+  .gradient-bg-light {
+    background: var(--bg-light);
+  }
+
+  .mesh-gradient {
+    background: var(--mesh-dark);
+  }
+
+  .mesh-gradient-light {
+    background: var(--mesh-light);
+  }
+
+  /* Both classes set `background`, so used together the later one would replace the other
+     and the page would show through (white text on an almost white page in dark mode).
+     The combined rules draw the mesh on top of the base gradient. */
+  .gradient-bg.mesh-gradient {
+    background: var(--mesh-dark), var(--bg-dark);
+  }
+
+  .gradient-bg-light.mesh-gradient-light {
+    background: var(--mesh-light), var(--bg-light);
+  }
+
+  /* Animations */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+
+  /* Inputs */
+  .input-glass {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.75rem;
+    padding: 0.625rem 1rem;
+    color: white;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .input-glass:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  }
+
+  .input-light {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 0.75rem;
+    padding: 0.625rem 1rem;
+    color: #1f2937;
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .input-light:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  }
+
+  /* Sidebar Overlay */
+  .sidebar-overlay {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  /* Progress Ring */
+  .progress-ring {
+    transition: stroke-dashoffset 0.5s ease;
+  }
+
+  /* Heatmap */
+  .heatmap-cell {
+    border-radius: 3px;
+    transition: all 0.2s;
+  }
+
+  .heatmap-cell:hover {
+    transform: scale(1.3);
+  }
 }
 
-.heatmap-cell:hover {
-  transform: scale(1.3);
-}

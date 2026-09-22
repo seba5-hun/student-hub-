@@ -147,7 +147,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
         </div>
       )}
 
-      <div className={`${cardClass} p-6 border-l-4 border-purple-500`}>
+      <div className={`${cardClass} p-6 border-l-4 border-l-purple-500`}>
         <div className="flex items-center gap-3 mb-3">
           <Download className="w-5 h-5 text-purple-400" />
           <h3 className={`font-semibold ${textColor}`}>Esporta Calendario</h3>
