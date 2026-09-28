@@ -9,6 +9,7 @@ import {
 } from '../lib/supabase';
 import { readKind } from '../lib/archiveText';
 import { getGeminiKey } from '../lib/gemini';
+import { useDialog } from './Dialog';
 
 interface ArchivioProps {
   userId: string;
@@ -48,6 +49,7 @@ function baseName(fileName: string): string {
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
 export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide }: ArchivioProps) {
+  const dialog = useDialog();
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [name, setName] = useState('');
@@ -157,12 +159,17 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       else window.location.href = url;
     } catch (err) {
       tab?.close();
-      alert(storageErrorMessage(err));
+      dialog.alert({ title: 'Impossibile aprire il file', message: storageErrorMessage(err) });
     }
   };
 
   const deleteItem = async (item: ArchiveItem) => {
-    if (item.file && !confirm(`Eliminare "${item.name}"? Il file verrà cancellato definitivamente.`)) return;
+    if (item.file && !(await dialog.confirm({
+      title: `Eliminare "${item.name}"?`,
+      message: 'Il file verrà cancellato definitivamente da tutti i tuoi dispositivi.',
+      confirmLabel: 'Elimina',
+      danger: true,
+    }))) return;
     if (item.file) {
       try {
         await removeArchiveFiles([item.file.path, ...(item.file.textPath ? [item.file.textPath] : [])]);

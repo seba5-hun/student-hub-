@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
+import { useDialog } from './Dialog';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -28,6 +29,7 @@ const SECTIONS = [
 ];
 
 export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange }: LayoutProps) {
+  const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -52,16 +54,22 @@ export default function Layout({ children, currentSection, onSectionChange, user
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           const result = ev.target?.result as string;
           const imported = parseImportedData(result);
-          if (imported) {
-            if (!confirm('Importando il backup sostituirai tutti i dati attuali. Continuare?')) return;
-            onDataImport(imported);
-            alert('Dati importati!');
-          } else {
-            alert('File non valido: seleziona un backup esportato da Student Hub.');
+          if (!imported) {
+            dialog.alert({ title: 'File non valido', message: 'Seleziona un backup esportato da Student Hub.' });
+            return;
           }
+          const ok = await dialog.confirm({
+            title: 'Importare il backup?',
+            message: 'Sostituirai tutti i dati attuali (impegni, voti, sessioni, archivio e impostazioni).',
+            confirmLabel: 'Importa',
+            danger: true,
+          });
+          if (!ok) return;
+          onDataImport(imported);
+          dialog.alert({ title: 'Dati importati!' });
         };
         reader.readAsText(file);
       }

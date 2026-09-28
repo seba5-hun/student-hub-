@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, Save, Trash2, Palette, Plus, X } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { useDialog } from './Dialog';
 import { StudySession, Grade, SubjectDef, SUBJECT_COLORS, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
 
 interface TimerProps {
@@ -53,6 +54,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
 
+  const dialog = useDialog();
   const [showSubjects, setShowSubjects] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(SUBJECT_COLORS[subjectDefs.length % SUBJECT_COLORS.length]);
@@ -84,8 +86,14 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
     onUpdateSubjects(subjectDefs.map(d => (d.name === name ? { ...d, color } : d)));
   };
 
-  const removeSubject = (name: string) => {
-    if (!confirm(`Togliere "${name}" dalle tue materie? Le sessioni già salvate restano.`)) return;
+  const removeSubject = async (name: string) => {
+    const ok = await dialog.confirm({
+      title: `Togliere "${name}"?`,
+      message: 'La materia viene tolta dal tuo elenco su tutti i dispositivi. Le sessioni di studio già salvate restano.',
+      confirmLabel: 'Togli',
+      danger: true,
+    });
+    if (!ok) return;
     onUpdateSubjects(subjectDefs.filter(d => d.name !== name));
   };
 

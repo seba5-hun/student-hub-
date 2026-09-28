@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Download, Plus, X } from 'lucide-react';
 import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey } from '../lib/store';
 import { downloadICS } from '../lib/calendar';
+import { useDialog } from './Dialog';
 
 interface CalendarioProps {
   tasks: Task[];
@@ -11,6 +12,7 @@ interface CalendarioProps {
 }
 
 export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: CalendarioProps) {
+  const dialog = useDialog();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -57,7 +59,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
 
   const handleDownloadCalendar = () => {
     const activeTasks = tasks.filter(t => !t.done);
-    if (activeTasks.length === 0) { alert('Nessun impegno attivo'); return; }
+    if (activeTasks.length === 0) { dialog.alert({ title: 'Nessun impegno attivo', message: 'Non ci sono impegni da esportare nel calendario.' }); return; }
     downloadICS(activeTasks, 'student-hub-impegni.ics');
   };
 

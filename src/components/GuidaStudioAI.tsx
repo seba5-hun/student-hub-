@@ -3,6 +3,7 @@ import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X,
 import { Grade, Task, UserData, createId } from '../lib/store';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
 import { loadTranscript } from '../lib/archiveText';
+import { useDialog } from './Dialog';
 import { ChatSummary, StoredMessage, listChats, loadChat, saveChat, renameChat, deleteChat, syncLocalChats, chatErrorMessage, titleFrom } from '../lib/chats';
 
 interface GuidaStudioAIProps {
@@ -97,6 +98,7 @@ function FormattedText({ text, large = false }: { text: string; large?: boolean 
 }
 
 export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAnalyze, onOpenArchive }: GuidaStudioAIProps) {
+  const dialog = useDialog();
   const [apiKey, setApiKey] = useState(getGeminiKey);
   const [showApiKeyInput, setShowApiKeyInput] = useState(!apiKey);
   const [tempApiKey, setTempApiKey] = useState('');
@@ -274,7 +276,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   };
 
   const handleRenameChat = async (chat: ChatSummary) => {
-    const title = window.prompt('Nuovo nome della chat:', chat.title)?.trim();
+    const title = (await dialog.prompt({ title: 'Rinomina chat', defaultValue: chat.title, confirmLabel: 'Salva' }))?.trim();
     if (!title || title === chat.title) return;
     setChats(prev => prev.map(c => (c.id === chat.id ? { ...c, title } : c)));
     if (currentChat?.id === chat.id) setCurrentChat({ ...currentChat, title });
@@ -286,7 +288,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   };
 
   const handleDeleteChat = async (chat: ChatSummary) => {
-    if (!window.confirm(`Eliminare la chat "${chat.title}"?`)) return;
+    if (!(await dialog.confirm({ title: `Eliminare la chat "${chat.title}"?`, message: 'Verrà cancellata da tutti i tuoi dispositivi.', confirmLabel: 'Elimina', danger: true }))) return;
     setChats(prev => prev.filter(c => c.id !== chat.id));
     if (currentChat?.id === chat.id) newChat();
     try {

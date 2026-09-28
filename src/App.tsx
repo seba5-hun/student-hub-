@@ -48,6 +48,8 @@ function App() {
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const savingNow = useRef(false);
+  const lastLocalChange = useRef(0);
 
   // Load the user's data from Supabase. The first time, upload what this browser already has.
   const loadUser = useCallback(async (authUser: AuthUser) => {
@@ -125,6 +127,7 @@ function App() {
       const pending = pendingSave.current;
       if (!pending) return;
       pendingSave.current = null;
+      savingNow.current = true;
       try {
         await saveRemoteData(pending.userId, pending.data);
         if (!pendingSave.current) setSaveStatus('idle');
@@ -133,6 +136,8 @@ function App() {
         if (!pendingSave.current) pendingSave.current = pending;
         setSaveStatus('error');
         saveTimer.current = window.setTimeout(() => { flushSave(); }, 10000);
+      } finally {
+        savingNow.current = false;
       }
     };
     saveChain.current = saveChain.current.then(run);
@@ -144,6 +149,7 @@ function App() {
   const updateData = useCallback((update: UserData | ((prev: UserData) => UserData)) => {
     if (!user) return;
     const userId = user.id;
+    lastLocalChange.current = Date.now();
     setData(prev => {
       if (!prev) return prev;
       const next = typeof update === 'function' ? update(prev) : update;
@@ -194,6 +200,33 @@ function App() {
     }
     analyzeRunning.current = false;
   }, [setArchiveFile]);
+
+  // Sync between devices: when the user comes back to the app (tab shown again, phone
+  // unlocked) and every 30 seconds while it is open, load the changes made elsewhere.
+  // Never while there are local changes not yet saved, so they can't be overwritten.
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+    const busy = () => !!pendingSave.current || savingNow.current || Date.now() - lastLocalChange.current < 3000;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible' || busy()) return;
+      try {
+        const remote = await fetchRemoteData(userId);
+        if (!remote || busy()) return;
+        setData(prev => (prev && JSON.stringify(prev) !== JSON.stringify(remote) ? remote : prev));
+      } catch {
+        // Offline or temporary error: try again at the next occasion.
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    const interval = window.setInterval(refresh, 30000);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+      window.clearInterval(interval);
+    };
+  }, [user]);
 
   // Don't lose the last change when the page is closed.
   useEffect(() => {
