@@ -54,7 +54,7 @@ async function availableModels(apiKey: string): Promise<string[]> {
         !/image|tts|audio|live|embedding|thinking|computer|robotics/.test(m.name || ''))
       .map((m: { name: string }) => m.name.replace(/^models\//, ''))
       .sort((a: string, b: string) => modelRank(b) - modelRank(a))
-      .slice(0, 6);
+      .slice(0, 8);
     const list = models.length > 0 ? models : FALLBACK_MODELS;
     modelCache = { key: apiKey, models: list };
     return list;
@@ -73,53 +73,75 @@ export async function generateContent(
     ? [lastWorkingModel, ...models.filter(m => m !== lastWorkingModel)]
     : models;
   let lastError = '';
-  let quotaHit = false;
-  for (const model of ordered) {
-    let response: Response;
-    try {
-      response = await fetch(`${API}/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          contents,
-          ...(options.systemInstruction ? { systemInstruction: { parts: [{ text: options.systemInstruction }] } } : {}),
-          generationConfig: { temperature: options.temperature ?? 0.7, maxOutputTokens: options.maxOutputTokens ?? 4096 },
-        }),
-      });
-    } catch {
-      throw new Error('Errore di connessione. Controlla la rete e riprova.');
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
-      if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
-        throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
+  const tried = new Set<string>();
+  const retired = new Set<string>();
+  // Google's "high demand" errors usually pass in a few seconds: go through the models up to
+  // three times, waiting a little longer each round.
+  for (let round = 0; round < 3; round++) {
+    if (round > 0) await new Promise(resolve => setTimeout(resolve, round * 3000));
+    let overloaded = false;
+    for (const model of ordered) {
+      if (retired.has(model)) continue;
+      tried.add(model);
+      let response: Response;
+      try {
+        response = await fetch(`${API}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            contents,
+            ...(options.systemInstruction ? { systemInstruction: { parts: [{ text: options.systemInstruction }] } } : {}),
+            generationConfig: { temperature: options.temperature ?? 0.7, maxOutputTokens: options.maxOutputTokens ?? 4096 },
+          }),
+        });
+      } catch {
+        throw new Error('Errore di connessione. Controlla la rete e riprova.');
       }
-      // "No longer available", "not found" and overloaded models: try the next one.
-      if (RETRYABLE.includes(response.status) || /no longer available|not found|not supported/i.test(errorMsg)) {
-        if (response.status === 429 || /quota|rate limit|resource.?exhausted/i.test(errorMsg)) quotaHit = true;
-        lastError = errorMsg;
-        continue;
-      }
-      throw new Error(errorMsg);
-    }
 
-    const data = await response.json();
-    const text: string = (data.candidates?.[0]?.content?.parts || [])
-      .map((p: { text?: string }) => p.text || '')
-      .join('')
-      .trim();
-    if (!text && data.promptFeedback?.blockReason) {
-      throw new Error('Google ha bloccato la richiesta per i suoi filtri di sicurezza. Prova a riformularla.');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
+        if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
+          throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
+        }
+        if (response.status === 429 || /quota|rate limit|resource.?exhausted/i.test(errorMsg)) {
+          lastError = 'Hai raggiunto il limite della versione gratuita di Gemini. Aspetta qualche minuto e riprova.';
+          continue;
+        }
+        // Overloaded: worth retrying later. Retired or unknown model: just skip it.
+        if (response.status >= 500 || /high demand|overloaded|unavailable/i.test(errorMsg)) {
+          overloaded = true;
+          lastError = errorMsg;
+          continue;
+        }
+        if (RETRYABLE.includes(response.status) || /no longer available|not found|not supported/i.test(errorMsg)) {
+          retired.add(model);
+          lastError = lastError || errorMsg;
+          continue;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      const text: string = (data.candidates?.[0]?.content?.parts || [])
+        .map((p: { text?: string }) => p.text || '')
+        .join('')
+        .trim();
+      if (!text && data.promptFeedback?.blockReason) {
+        throw new Error('Google ha bloccato la richiesta per i suoi filtri di sicurezza. Prova a riformularla.');
+      }
+      lastWorkingModel = model;
+      return text;
     }
-    lastWorkingModel = model;
-    return text;
+    if (!overloaded) break;
   }
   modelCache = null;
-  throw new Error(quotaHit
-    ? 'Hai raggiunto il limite della versione gratuita di Gemini. Aspetta qualche minuto e riprova.'
-    : `Nessun modello Gemini disponibile in questo momento. Riprova tra poco.${lastError ? ` (${lastError})` : ''}`);
+  if (/limite della versione gratuita/.test(lastError)) throw new Error(lastError);
+  throw new Error(
+    /high demand|overloaded|unavailable/i.test(lastError)
+      ? `I server di Google sono sovraccarichi in questo momento (non è un problema della tua chiave). Riprova tra qualche minuto. Modelli provati: ${[...tried].join(', ')}.`
+      : `Nessun modello Gemini disponibile in questo momento. Riprova tra poco.${lastError ? ` (${lastError})` : ''} Modelli provati: ${[...tried].join(', ')}.`,
+  );
 }
 
 export async function blobToBase64(blob: Blob): Promise<string> {
