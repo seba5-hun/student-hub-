@@ -272,11 +272,128 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
     );
   }
 
-  return (
-    <div className={fullscreen
-      ? `fixed inset-0 z-[60] flex flex-col p-3 sm:p-6 ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`
-      : 'flex flex-col h-[calc(100vh-8rem)]'}>
-      <div className={`flex flex-col flex-1 min-h-0 w-full ${fullscreen ? 'max-w-5xl mx-auto' : ''}`}>
+  const hoverBg = darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5';
+
+  const iconButton = (label: string, icon: React.ReactNode, onClick: () => void) => (
+    <button onClick={onClick} title={label} aria-label={label} className={`p-2 rounded-lg ${hoverBg}`}>{icon}</button>
+  );
+
+  const clearChat = () => { setMessages([]); setError(''); };
+
+  const onInputKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
+  const quickActions = (wrapClass: string, buttonClass: string) => (
+    <div className={`flex gap-2 ${wrapClass}`}>
+      {QUICK_ACTIONS.map(a => (
+        <button key={a.label} onClick={() => sendMessage(a.prompt)} disabled={isLoading}
+          className={`${buttonClass} rounded-full border whitespace-nowrap disabled:opacity-50 ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const messageImages = (msg: Message) => msg.images && msg.images.length > 0 && (
+    <div className="flex flex-wrap gap-2 mb-2">
+      {msg.images.map(img => <img key={img.id} src={img.imageData} alt={img.name} className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />)}
+    </div>
+  );
+
+  const pendingImages = (extraClass: string) => uploadedImages.length > 0 && (
+    <div className={`${cardClass} p-3 ${extraClass}`}>
+      <div className="flex flex-wrap gap-2">
+        {uploadedImages.map(img => (
+          <div key={img.id} className="relative">
+            <img src={img.imageData} alt={img.name} className="w-16 h-16 rounded-lg object-cover" />
+            <button onClick={() => setUploadedImages(prev => prev.filter(i => i.id !== img.id))} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center" aria-label="Rimuovi immagine">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const imagePicker = (buttonClass: string) => (
+    <>
+      <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" multiple className="hidden" />
+      <button onClick={() => fileInputRef.current?.click()} className={`${buttonClass} flex items-center justify-center flex-shrink-0`} title="Allega foto" aria-label="Allega foto">
+        <ImageIcon className={`w-5 h-5 ${textColor}`} />
+      </button>
+    </>
+  );
+
+  // Full screen, in the style of ChatGPT: no panels, one centered column, plain answers.
+  const renderFullscreen = () => {
+    const scopeLabel = scopeSubject ? `${scopeSubject}${scopeTopic ? ` › ${scopeTopic}` : ''}` : 'Tutto l\'archivio';
+    return (
+      <div className={`fixed inset-0 z-[60] flex flex-col ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`}>
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="w-5 h-5 text-blue-400 flex-shrink-0" />
+            <span className={`font-semibold ${textColor}`}>Guida Studio AI</span>
+            <span className={`text-sm truncate ${subTextColor}`}>· {scopeLabel}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            {iconButton('Nuova chat', <Trash2 className={`w-4 h-4 ${textColor}`} />, clearChat)}
+            {iconButton('Esci da schermo intero (Esc)', <Minimize2 className={`w-4 h-4 ${textColor}`} />, () => setFullscreen(false))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-4 py-6 space-y-8">
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center text-center pt-[18vh]">
+                <h2 className={`text-3xl font-semibold ${textColor}`}>Cosa studiamo oggi?</h2>
+                <p className={`mt-2 ${subTextColor}`}>Rispondo in base al tuo materiale: {scopeLabel}</p>
+                {quickActions('mt-6 flex-wrap justify-center', 'text-sm px-4 py-2')}
+              </div>
+            )}
+
+            {messages.map(msg => (
+              msg.role === 'user' ? (
+                <div key={msg.id} className="flex justify-end">
+                  <div className={`max-w-[75%] rounded-3xl px-5 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
+                    {messageImages(msg)}
+                    <p className="text-base whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ) : (
+                <div key={msg.id} className={textColor}>
+                  <FormattedText text={msg.content} large />
+                </div>
+              )
+            ))}
+
+            {isLoading && <Loader2 className="w-5 h-5 animate-spin text-blue-400" />}
+            {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        <div className="max-w-3xl w-full mx-auto px-4 pb-4">
+          {pendingImages('mb-2')}
+          <div className={`flex items-end gap-2 rounded-3xl p-2 border ${darkMode ? 'bg-white/10 border-white/15' : 'bg-white/90 border-black/10 shadow-lg'}`}>
+            {imagePicker(`w-10 h-10 rounded-full ${hoverBg}`)}
+            <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey} autoFocus
+              placeholder="Chiedi qualcosa sul tuo materiale..." rows={1}
+              className={`flex-1 resize-none bg-transparent outline-none py-2 text-base max-h-40 ${darkMode ? 'text-white placeholder-white/40' : 'text-gray-800 placeholder-gray-400'}`}
+              disabled={isLoading} />
+            <button onClick={() => sendMessage()} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
+              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30 ${darkMode ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`} aria-label="Invia">
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          <p className={`text-xs text-center mt-2 ${subTextColor}`}>L'AI può sbagliare: controlla le informazioni importanti sul libro.</p>
+        </div>
+      </div>
+    );
+  };
+
+  return fullscreen ? renderFullscreen() : (
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
@@ -288,15 +405,9 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Esci da schermo intero (Esc)' : 'Schermo intero'} aria-label={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-            {fullscreen ? <Minimize2 className={`w-4 h-4 ${textColor}`} /> : <Maximize2 className={`w-4 h-4 ${textColor}`} />}
-          </button>
-          <button onClick={() => { setTempApiKey(''); setShowApiKeyInput(true); }} title="Cambia API key" aria-label="Cambia API key" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-            <Key className={`w-4 h-4 ${textColor}`} />
-          </button>
-          <button onClick={() => { setMessages([]); setError(''); }} title="Cancella chat" aria-label="Cancella chat" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-            <Trash2 className={`w-4 h-4 ${textColor}`} />
-          </button>
+          {iconButton('Schermo intero', <Maximize2 className={`w-4 h-4 ${textColor}`} />, () => setFullscreen(true))}
+          {iconButton('Cambia API key', <Key className={`w-4 h-4 ${textColor}`} />, () => { setTempApiKey(''); setShowApiKeyInput(true); })}
+          {iconButton('Cancella chat', <Trash2 className={`w-4 h-4 ${textColor}`} />, clearChat)}
         </div>
       </div>
 
@@ -337,14 +448,7 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
             <p className={`text-sm ${subTextColor} mt-1 max-w-md`}>
               Scegli qui sopra cosa studiare, poi fammi una domanda o usa uno dei pulsanti. Rispondo in base ai file del tuo archivio.
             </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-lg">
-              {QUICK_ACTIONS.map(a => (
-                <button key={a.label} onClick={() => sendMessage(a.prompt)} disabled={isLoading}
-                  className={`text-sm px-3 py-1.5 rounded-full border ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
-                  {a.label}
-                </button>
-              ))}
-            </div>
+            {quickActions('mt-4 max-w-lg justify-center flex-wrap', 'text-sm px-3 py-1.5')}
           </div>
         )}
 
@@ -355,13 +459,9 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
                 <Bot className="w-4 h-4 text-white" />
               </div>
             )}
-            <div className={`${fullscreen ? 'max-w-[90%]' : 'max-w-[80%]'} rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white' : darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
-              {msg.images && msg.images.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {msg.images.map(img => <img key={img.id} src={img.imageData} alt={img.name} className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />)}
-                </div>
-              )}
-              {msg.role === 'assistant' ? <FormattedText text={msg.content} large={fullscreen} /> : <p className={`${fullscreen ? 'text-base' : 'text-sm'} whitespace-pre-wrap`}>{msg.content}</p>}
+            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white' : darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
+              {messageImages(msg)}
+              {msg.role === 'assistant' ? <FormattedText text={msg.content} /> : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
             </div>
             {msg.role === 'user' && (
               <div className={`w-8 h-8 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/10'} flex items-center justify-center flex-shrink-0`}>
@@ -386,46 +486,19 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
         <div ref={messagesEndRef} />
       </div>
 
-      {uploadedImages.length > 0 && (
-        <div className={`${cardClass} p-3 mb-2`}>
-          <div className="flex flex-wrap gap-2">
-            {uploadedImages.map(img => (
-              <div key={img.id} className="relative">
-                <img src={img.imageData} alt={img.name} className="w-16 h-16 rounded-lg object-cover" />
-                <button onClick={() => setUploadedImages(prev => prev.filter(i => i.id !== img.id))} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {messages.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-1">
-          {QUICK_ACTIONS.map(a => (
-            <button key={a.label} onClick={() => sendMessage(a.prompt)} disabled={isLoading}
-              className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap disabled:opacity-50 ${darkMode ? 'border-white/15 text-white/70 hover:bg-white/10' : 'border-black/10 text-gray-600 hover:bg-black/5'}`}>
-              {a.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {pendingImages('mb-2')}
+      {messages.length > 0 && quickActions('overflow-x-auto pb-2 mb-1', 'text-xs px-3 py-1')}
 
       <div className={`${cardClass} p-3`}>
         <div className="flex gap-2">
-          <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" multiple className="hidden" />
-          <button onClick={() => fileInputRef.current?.click()} className={`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'} flex items-center justify-center`}>
-            <ImageIcon className={`w-5 h-5 ${textColor}`} />
-          </button>
-          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          {imagePicker(`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'}`)}
+          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey}
             placeholder="Chiedi aiuto..." rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
           <button onClick={() => sendMessage()} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white disabled:opacity-50">
             <Send className="w-4 h-4" />
           </button>
         </div>
-      </div>
       </div>
     </div>
   );
