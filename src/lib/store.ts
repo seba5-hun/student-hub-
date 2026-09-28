@@ -50,11 +50,29 @@ export interface ArchiveItem {
   file?: ArchiveFile;
 }
 
+// A school subject chosen by the student, with the color used for it in the app.
+export interface SubjectDef {
+  name: string;
+  color: string;
+}
+
 export interface UserSettings {
   darkMode: boolean;
   weeklyGoal: number;
   colorTheme: string;
   notes: string;
+  subjects?: SubjectDef[];
+}
+
+export const SUBJECT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6', '#3b82f6', '#a855f7'];
+
+// Color of a subject: the one chosen by the student, otherwise a fixed one derived from the name.
+export function subjectColor(name: string, subjects: SubjectDef[] = []): string {
+  const found = subjects.find(s => s.name.toLowerCase() === name.toLowerCase());
+  if (found) return found.color;
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return SUBJECT_COLORS[hash % SUBJECT_COLORS.length];
 }
 
 export interface UserData {

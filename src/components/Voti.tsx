@@ -5,11 +5,12 @@ import { Grade, createId, getSubjectAverages, todayKey, parseDate, formatDate } 
 
 interface VotiProps {
   grades: Grade[];
+  subjectNames?: string[];
   darkMode: boolean;
   onUpdate: (grades: Grade[]) => void;
 }
 
-export default function Voti({ grades, darkMode, onUpdate }: VotiProps) {
+export default function Voti({ grades, subjectNames = [], darkMode, onUpdate }: VotiProps) {
   const [subject, setSubject] = useState('');
   const [value, setValue] = useState('');
   const [description, setDescription] = useState('');
@@ -46,7 +47,8 @@ export default function Voti({ grades, darkMode, onUpdate }: VotiProps) {
         <form onSubmit={handleAdd} className={`${cardClass} p-6 space-y-4`}>
           <h3 className={`font-semibold ${textColor}`}>Nuovo Voto</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input value={subject} onChange={e => setSubject(e.target.value)} className={darkMode ? 'input-glass' : 'input-light'} placeholder="Materia" required />
+            <input value={subject} onChange={e => setSubject(e.target.value)} list="voti-subjects" className={darkMode ? 'input-glass' : 'input-light'} placeholder="Materia" required />
+            <datalist id="voti-subjects">{[...new Set([...subjectNames, ...grades.map(g => g.subject)])].map(s => <option key={s} value={s} />)}</datalist>
             <input type="number" step="0.5" min="1" max="10" value={value} onChange={e => setValue(e.target.value)} className={darkMode ? 'input-glass' : 'input-light'} placeholder="Voto (1-10)" required />
             <input value={description} onChange={e => setDescription(e.target.value)} className={darkMode ? 'input-glass' : 'input-light'} placeholder="Descrizione" />
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className={darkMode ? 'input-glass' : 'input-light'} required />

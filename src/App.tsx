@@ -391,10 +391,10 @@ function App() {
           />
         )}
         {currentSection === 'impegni' && (
-          <Impegni tasks={data.tasks} knownSubjects={[...data.grades.map(g => g.subject), ...data.sessions.map(s => s.subject)]} darkMode={darkMode} onUpdate={handleTasksUpdate} prefillDate={prefillImpegniDate} />
+          <Impegni tasks={data.tasks} knownSubjects={[...(data.settings.subjects || []).map(d => d.name), ...data.grades.map(g => g.subject), ...data.sessions.map(s => s.subject)]} darkMode={darkMode} onUpdate={handleTasksUpdate} prefillDate={prefillImpegniDate} />
         )}
         {currentSection === 'voti' && (
-          <Voti grades={data.grades} darkMode={darkMode} onUpdate={(grades) => updateData({ ...data, grades })} />
+          <Voti grades={data.grades} subjectNames={(data.settings.subjects || []).map(d => d.name)} darkMode={darkMode} onUpdate={(grades) => updateData({ ...data, grades })} />
         )}
         {currentSection === 'timer' && (
           <Timer
@@ -404,11 +404,14 @@ function App() {
             darkMode={darkMode}
             onUpdate={(sessions) => updateData({ ...data, sessions })}
             preselectedSubject={preselectedSubject}
+            subjectDefs={data.settings.subjects || []}
+            onUpdateSubjects={(subjects) => updateData(prev => ({ ...prev, settings: { ...prev.settings, subjects } }))}
           />
         )}
         {currentSection === 'archivio' && (
           <Archivio
             userId={user.id}
+            subjectNames={(data.settings.subjects || []).map(d => d.name)}
             archive={data.archive}
             darkMode={darkMode}
             onUpdate={(update) => updateData(prev => ({ ...prev, archive: update(prev.archive) }))}

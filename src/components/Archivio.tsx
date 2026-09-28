@@ -12,6 +12,7 @@ import { getGeminiKey } from '../lib/gemini';
 
 interface ArchivioProps {
   userId: string;
+  subjectNames?: string[];
   archive: ArchiveItem[];
   darkMode: boolean;
   // Receives a function of the current archive, so uploads finishing later don't lose other edits.
@@ -46,7 +47,7 @@ function baseName(fileName: string): string {
 // Photos of book pages are usually named IMG_0001, IMG_0002…: keep them in page order.
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
-export default function Archivio({ userId, archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide }: ArchivioProps) {
+export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide }: ArchivioProps) {
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
   const [name, setName] = useState('');
@@ -68,7 +69,7 @@ export default function Archivio({ userId, archive, darkMode, onUpdate, analyzin
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
   const inputClass = darkMode ? 'input-glass' : 'input-light';
 
-  const subjects = useMemo(() => [...new Set(archive.map(a => a.subject))].sort(), [archive]);
+  const subjects = useMemo(() => [...new Set([...subjectNames, ...archive.map(a => a.subject)])], [archive, subjectNames]);
   const topics = useMemo(
     () => [...new Set(archive.filter(a => a.subject.toLowerCase() === subject.trim().toLowerCase()).map(a => a.topic))].sort(),
     [archive, subject],
