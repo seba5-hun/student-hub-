@@ -430,6 +430,7 @@ function App() {
         )}
         {currentSection === 'guida-ai' && (
           <GuidaStudioAI
+            userId={user.id}
             data={data}
             darkMode={darkMode}
             analyzing={analyzing}
