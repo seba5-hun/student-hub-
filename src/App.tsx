@@ -14,6 +14,7 @@ import GuidaStudioAI from './components/GuidaStudioAI';
 import {
   AuthUser,
   UserData,
+  ArchiveFile,
   todayKey,
   loadCachedData,
   findLegacyLocalData,
@@ -28,6 +29,8 @@ import {
   linkErrorMessage,
   configError,
 } from './lib/supabase';
+import { analyzeArchiveFile, MissingApiKeyError } from './lib/archiveText';
+import { getGeminiKey } from './lib/gemini';
 
 type SaveStatus = 'idle' | 'saving' | 'error';
 
@@ -136,14 +139,61 @@ function App() {
     return saveChain.current;
   }, []);
 
-  const updateData = useCallback((newData: UserData) => {
-    setData(newData);
+  // Accepts the new data or a function of the current data: the function form is needed by
+  // work that finishes later (file uploads, AI reading) so it doesn't overwrite newer edits.
+  const updateData = useCallback((update: UserData | ((prev: UserData) => UserData)) => {
     if (!user) return;
-    pendingSave.current = { userId: user.id, data: newData };
+    const userId = user.id;
+    setData(prev => {
+      if (!prev) return prev;
+      const next = typeof update === 'function' ? update(prev) : update;
+      pendingSave.current = { userId, data: next };
+      return next;
+    });
     setSaveStatus('saving');
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => { flushSave(); }, 800);
   }, [user, flushSave]);
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  // Archive files are read by the AI one at a time, in the background, so it keeps going
+  // while the user moves between sections.
+  const [analyzing, setAnalyzing] = useState<string[]>([]);
+  const analyzeQueue = useRef<string[]>([]);
+  const analyzeRunning = useRef(false);
+
+  const setArchiveFile = useCallback((id: string, file: ArchiveFile) => {
+    updateData(prev => ({ ...prev, archive: prev.archive.map(a => (a.id === id ? { ...a, file } : a)) }));
+  }, [updateData]);
+
+  const analyzeFiles = useCallback(async (ids: string[]) => {
+    for (const id of ids) if (!analyzeQueue.current.includes(id)) analyzeQueue.current.push(id);
+    setAnalyzing(prev => [...new Set([...prev, ...ids])]);
+    if (analyzeRunning.current) return;
+    analyzeRunning.current = true;
+    while (analyzeQueue.current.length > 0) {
+      const id = analyzeQueue.current.shift()!;
+      // A file uploaded a moment ago may not be in the rendered data yet: wait for it briefly.
+      let item = dataRef.current?.archive.find(a => a.id === id);
+      for (let i = 0; !item && i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        item = dataRef.current?.archive.find(a => a.id === id);
+      }
+      if (item?.file) {
+        try {
+          setArchiveFile(id, await analyzeArchiveFile(item, getGeminiKey()));
+        } catch (err) {
+          if (!(err instanceof MissingApiKeyError)) console.error('Error reading file:', err);
+          const message = err instanceof Error ? err.message : String(err);
+          setArchiveFile(id, { ...item.file, textStatus: err instanceof MissingApiKeyError ? 'pending' : 'error', textError: message });
+        }
+      }
+      setAnalyzing(prev => prev.filter(x => x !== id));
+    }
+    analyzeRunning.current = false;
+  }, [setArchiveFile]);
 
   // Don't lose the last change when the page is closed.
   useEffect(() => {
@@ -167,6 +217,8 @@ function App() {
 
   // Handle logout
   const handleLogout = async () => {
+    analyzeQueue.current = [];
+    setAnalyzing([]);
     await flushSave();
     await supabase?.auth.signOut();
     setUser(null);
@@ -355,7 +407,15 @@ function App() {
           />
         )}
         {currentSection === 'archivio' && (
-          <Archivio archive={data.archive} darkMode={darkMode} onUpdate={(archive) => updateData({ ...data, archive })} />
+          <Archivio
+            userId={user.id}
+            archive={data.archive}
+            darkMode={darkMode}
+            onUpdate={(update) => updateData(prev => ({ ...prev, archive: update(prev.archive) }))}
+            analyzing={analyzing}
+            onAnalyze={analyzeFiles}
+            onOpenGuide={() => handleSectionChange('guida-ai')}
+          />
         )}
         {currentSection === 'cosa-studiare' && (
           <CosaStudiare data={data} darkMode={darkMode} onNavigateToTimer={handleNavigateToTimer} />
@@ -369,7 +429,13 @@ function App() {
           />
         )}
         {currentSection === 'guida-ai' && (
-          <GuidaStudioAI data={data} darkMode={darkMode} />
+          <GuidaStudioAI
+            data={data}
+            darkMode={darkMode}
+            analyzing={analyzing}
+            onAnalyze={analyzeFiles}
+            onOpenArchive={() => handleSectionChange('archivio')}
+          />
         )}
       </Layout>
       <SaveIndicator />

@@ -9,8 +9,13 @@ Questi passaggi vanno fatti **una volta sola**.
 2. Vai su **SQL Editor** → **New query**
 3. Copia tutto il contenuto del file [`supabase/schema.sql`](supabase/schema.sql), incollalo e premi **Run**
 
-Lo script crea la tabella `user_data` e attiva la **Row Level Security**: ogni utente può leggere e modificare solo i propri dati.
-Puoi rilanciarlo senza problemi: non cancella i dati esistenti.
+Lo script crea la tabella `user_data`, lo spazio file `archive` (dove finiscono PDF, foto e appunti
+caricati nell'Archivio) e attiva la **Row Level Security**: ogni utente può leggere e modificare solo
+i propri dati e i propri file.
+Puoi rilanciarlo senza problemi: non cancella i dati esistenti. **Se l'avevi già eseguito prima
+dell'arrivo dei file nell'Archivio, eseguilo di nuovo** per creare lo spazio file.
+
+Il piano gratuito di Supabase include 1 GB di spazio file: basta per centinaia di PDF e foto.
 
 ## 2. Imposta gli indirizzi dell'app
 

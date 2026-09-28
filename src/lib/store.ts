@@ -29,12 +29,25 @@ export interface StudySession {
   date: string;
 }
 
+// A file uploaded to Supabase Storage. The AI reads it through `textPath`: a plain-text
+// transcription saved next to the file, so the chat doesn't have to re-read PDFs and photos.
+export interface ArchiveFile {
+  path: string;
+  mimeType: string;
+  size: number;
+  originalName: string;
+  textPath?: string;
+  textStatus?: 'pending' | 'done' | 'unsupported' | 'error';
+  textError?: string;
+}
+
 export interface ArchiveItem {
   id: string;
   subject: string;
   topic: string;
   name: string;
   link?: string;
+  file?: ArchiveFile;
 }
 
 export interface UserSettings {

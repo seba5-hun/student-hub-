@@ -1,10 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Trash2, Key, BookOpen, Sparkles, Settings, Loader2, Image as ImageIcon, X, Instagram } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen } from 'lucide-react';
 import { ArchiveItem, Grade, Task, UserData } from '../lib/store';
+import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
+import { loadTranscript } from '../lib/archiveText';
 
 interface GuidaStudioAIProps {
   data: UserData;
   darkMode: boolean;
+  analyzing: string[];
+  onAnalyze: (ids: string[]) => void;
+  onOpenArchive: () => void;
 }
 
 interface MessageImage {
@@ -22,74 +27,126 @@ interface Message {
   timestamp: Date;
 }
 
-export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+// Keeps each request well inside Gemini's limits (and the free tier's tokens per minute).
+const MAX_MATERIAL_CHARS = 350_000;
+
+const QUICK_ACTIONS = [
+  { label: '📝 Riassumi', prompt: 'Fammi un riassunto chiaro e ordinato del materiale selezionato, con titoli, elenchi e i concetti chiave in grassetto.' },
+  { label: '❓ Interrogami', prompt: 'Interrogami sul materiale selezionato come farebbe un professore: fammi una domanda alla volta, aspetta la mia risposta, poi correggimi, spiegami cosa manca e dammi un voto.' },
+  { label: '🧠 Schema', prompt: 'Crea uno schema (mappa concettuale in forma di elenco) del materiale selezionato, con i concetti principali e i collegamenti tra loro.' },
+  { label: '💡 Spiegamelo semplice', prompt: 'Spiegami il materiale selezionato in modo semplice, con parole facili ed esempi concreti.' },
+  { label: '🗂️ Flashcard', prompt: 'Crea 10 flashcard domanda/risposta sui punti più importanti del materiale selezionato.' },
+];
+
+function studentContext(data: UserData): string {
+  const { grades, tasks } = data;
+  let context = '';
+  if (grades.length > 0) {
+    const bySubject: Record<string, number[]> = {};
+    grades.forEach((g: Grade) => { (bySubject[g.subject] ||= []).push(g.value); });
+    context += 'VOTI DELLO STUDENTE:\n';
+    Object.entries(bySubject).forEach(([subject, values]) => {
+      context += `- ${subject}: media ${(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}\n`;
+    });
+  }
+  const activeTasks = tasks.filter((t: Task) => !t.done);
+  if (activeTasks.length > 0) {
+    context += '\nIMPEGNI IN PROGRAMMA:\n';
+    activeTasks.forEach((t: Task) => { context += `- ${t.title} (${t.date}${t.subject ? `, ${t.subject}` : ''})\n`; });
+  }
+  return context;
+}
+
+const SYSTEM_PROMPT = `Sei il tutor di studio di Student Hub. Rispondi sempre in italiano, in modo chiaro e adatto a uno studente.
+Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file.
+Quando rispondi:
+- basati prima di tutto su quel materiale e indica da quale file prendi le informazioni (es. «dal file "Capitolo 3 (2)"»);
+- se un'informazione non c'è nel materiale, dillo chiaramente; poi, se è utile, aggiungi quello che sai precisando che non viene dai suoi file;
+- per i riassunti usa titoli ed elenchi puntati; per le interrogazioni fai una domanda alla volta e aspetta la risposta prima di correggere;
+- non inventare pagine, date o citazioni che non sono nel materiale.`;
+
+// Minimal formatting for the AI's answers: headings, bullet points and **bold**.
+function FormattedText({ text }: { text: string }) {
+  const inline = (line: string) =>
+    line.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : <React.Fragment key={i}>{part}</React.Fragment>,
+    );
+  return (
+    <div className="text-sm space-y-1">
+      {text.split('\n').map((line, i) => {
+        const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+        if (heading) return <p key={i} className="font-bold mt-2">{inline(heading[2])}</p>;
+        const bullet = /^(\s*)[-*•]\s+(.*)$/.exec(line);
+        if (bullet) return <p key={i} className="pl-4 -indent-3" style={{ marginLeft: bullet[1].length * 6 }}>• {inline(bullet[2])}</p>;
+        if (!line.trim()) return <div key={i} className="h-2" />;
+        return <p key={i}>{inline(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, onOpenArchive }: GuidaStudioAIProps) {
+  const [apiKey, setApiKey] = useState(getGeminiKey);
   const [showApiKeyInput, setShowApiKeyInput] = useState(!apiKey);
   const [tempApiKey, setTempApiKey] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [uploadedImages, setUploadedImages] = useState<MessageImage[]>([]);
+  const [scopeSubject, setScopeSubject] = useState('');
+  const [scopeTopic, setScopeTopic] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
+  const selectClass = `${darkMode ? 'input-glass' : 'input-light'} py-1.5 text-sm`;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  const buildContext = (): string => {
-    const { archive, grades, tasks } = data;
-    let context = `Sei un tutor AI di nome "Gemini 3.6 Tutor" integrato in Student Hub. Rispondi SEMPRE in italiano.\n\n`;
+  const { archive } = data;
+  const subjects = useMemo(() => [...new Set(archive.map(a => a.subject))].sort(), [archive]);
+  const topics = useMemo(() => [...new Set(archive.filter(a => a.subject === scopeSubject).map(a => a.topic))].sort(), [archive, scopeSubject]);
+  const inScope = useMemo(
+    () => archive.filter(a => (!scopeSubject || a.subject === scopeSubject) && (!scopeTopic || a.topic === scopeTopic)),
+    [archive, scopeSubject, scopeTopic],
+  );
+  const readable = inScope.filter(a => a.file?.textStatus === 'done' && a.file.textPath);
+  const unread = inScope.filter(a => a.file && (a.file.textStatus === 'pending' || a.file.textStatus === 'error') && !analyzing.includes(a.id));
+  const reading = inScope.filter(a => analyzing.includes(a.id));
 
-    if (grades.length > 0) {
-      context += `📊 VOTI:\n`;
-      const subjectAvgs: Record<string, number[]> = {};
-      grades.forEach((g: Grade) => {
-        if (!subjectAvgs[g.subject]) subjectAvgs[g.subject] = [];
-        subjectAvgs[g.subject].push(g.value);
-      });
-      Object.entries(subjectAvgs).forEach(([subject, values]) => {
-        const avg = (values.reduce((a: number, b: number) => a + b, 0) / values.length).toFixed(1);
-        context += `- ${subject}: media ${avg}\n`;
-      });
+  // Transcriptions of the selected files, grouped by subject and topic.
+  const buildMaterial = async (): Promise<string> => {
+    let material = '';
+    let used = 0;
+    for (const item of readable) {
+      const text = await loadTranscript(item.file!.textPath!);
+      const block = `\n\n===== FILE: "${item.name}" (Materia: ${item.subject} > Argomento: ${item.topic}) =====\n${text}`;
+      if (material.length + block.length > MAX_MATERIAL_CHARS) {
+        setNotice(`Il materiale selezionato è molto lungo: ho usato ${used} file su ${readable.length}. Scegli una materia o un argomento qui sopra per concentrarti su una parte.`);
+        return material;
+      }
+      material += block;
+      used++;
     }
-
-    const activeTasks = tasks.filter((t: Task) => !t.done);
-    if (activeTasks.length > 0) {
-      context += `\n📋 IMPEGNI ATTIVI:\n`;
-      activeTasks.forEach((t: Task) => {
-        context += `- ${t.title} (${t.date})\n`;
-      });
-    }
-
-    if (archive.length > 0) {
-      context += `\n📁 ARCHIVIO:\n`;
-      archive.forEach((item: ArchiveItem) => {
-        context += `- ${item.subject} > ${item.topic}: ${item.name}\n`;
-      });
-    }
-
-    return context;
+    setNotice('');
+    return material;
   };
 
   const handleSaveApiKey = () => {
     if (!tempApiKey.trim()) return;
-    localStorage.setItem('gemini_api_key', tempApiKey.trim());
+    setGeminiKey(tempApiKey.trim());
     setApiKey(tempApiKey.trim());
     setShowApiKeyInput(false);
     setError('');
-    if (messages.length > 0) return;
-    setMessages([{
-      id: 'welcome',
-      role: 'assistant',
-      content: '👋 Ciao! Sono il tuo tutor AI powered by Google Gemini. Conosco i tuoi documenti, voti e impegni. Come posso aiutarti?',
-      timestamp: new Date(),
-    }]);
+    // Files that were waiting for the key can be read now.
+    const waiting = archive.filter(a => a.file?.textStatus === 'pending' || a.file?.textStatus === 'error').map(a => a.id);
+    if (waiting.length > 0) onAnalyze(waiting);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,13 +163,20 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const sendMessage = async () => {
-    if ((!input.trim() && uploadedImages.length === 0) || isLoading) return;
-    
+  const toParts = (m: Pick<Message, 'content' | 'images'>): GeminiPart[] => {
+    const parts: GeminiPart[] = [];
+    if (m.content) parts.push({ text: m.content });
+    m.images?.forEach(img => parts.push({ inline_data: { mime_type: img.mimeType, data: img.imageData.split(',')[1] } }));
+    return parts;
+  };
+
+  const sendMessage = async (text = input) => {
+    if ((!text.trim() && uploadedImages.length === 0) || isLoading) return;
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input.trim(),
+      content: text.trim(),
       images: uploadedImages.length > 0 ? [...uploadedImages] : undefined,
       timestamp: new Date(),
     };
@@ -124,88 +188,35 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
     setError('');
 
     try {
-      const context = buildContext();
-      const contents: any[] = [
-        { role: 'user', parts: [{ text: context }] },
-        { role: 'model', parts: [{ text: 'Ho capito il contesto. Sono pronto!' }] }
-      ];
+      const material = await buildMaterial();
+      const scope = scopeSubject ? `${scopeSubject}${scopeTopic ? ` > ${scopeTopic}` : ''}` : 'tutto l\'archivio';
+      const otherItems = inScope.filter(a => !(a.file?.textStatus === 'done'));
+      let context = `${studentContext(data)}\nMATERIALE SELEZIONATO DALLO STUDENTE: ${scope}.`;
+      context += material
+        ? `\n${material}`
+        : '\n(Nessun file letto dall\'AI in questa selezione: rispondi con le tue conoscenze e suggerisci di caricare il materiale nell\'Archivio.)';
+      if (otherItems.length > 0) {
+        context += `\n\nALTRI ELEMENTI DELL'ARCHIVIO (solo il nome, contenuto non disponibile): ${otherItems.map(a => `"${a.name}"`).join(', ')}`;
+      }
 
-      messages.forEach(m => {
-        const parts: any[] = [];
-        if (m.content) parts.push({ text: m.content });
-        if (m.images && m.images.length > 0) {
-          m.images.forEach(img => {
-            const base64Data = img.imageData.split(',')[1];
-            parts.push({ inline_data: { mime_type: img.mimeType, data: base64Data } });
-          });
-        }
+      const contents: GeminiContent[] = [
+        { role: 'user', parts: [{ text: context }] },
+        { role: 'model', parts: [{ text: 'Ho letto il materiale. Sono pronto ad aiutarti a studiare.' }] },
+      ];
+      [...messages, userMessage].forEach(m => {
+        const parts = toParts(m);
         if (parts.length > 0) contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts });
       });
 
-      const currentParts: any[] = [];
-      if (userMessage.content) currentParts.push({ text: userMessage.content });
-      if (uploadedImages.length > 0) {
-        uploadedImages.forEach(img => {
-          const base64Data = img.imageData.split(',')[1];
-          currentParts.push({ inline_data: { mime_type: img.mimeType, data: base64Data } });
-        });
-      }
-      if (currentParts.length > 0) contents.push({ role: 'user', parts: currentParts });
-
-      // Try the models in order: move to the next one when a model doesn't exist (404)
-      // or is overloaded (429/5xx); stop on errors that another model can't fix (e.g. bad key).
-      const MODELS = ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
-      const RETRYABLE = [404, 429, 500, 502, 503, 504];
-      let lastError = '';
-      let success = false;
-
-      for (const model of MODELS) {
-        let response: Response;
-        try {
-          response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-            body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }),
-          });
-        } catch {
-          lastError = 'Errore di connessione. Controlla la rete e riprova.';
-          break;
-        }
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
-          if (RETRYABLE.includes(response.status)) {
-            lastError = errorMsg;
-            continue;
-          }
-          if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
-            lastError = 'API key non valida o senza permessi. Usa "Cambia API key" per inserirne una nuova.';
-          } else {
-            lastError = errorMsg;
-          }
-          break;
-        }
-
-        const responseData = await response.json();
-        const text = responseData.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p.text || '')
-          .join('')
-          .trim();
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: text || 'Mi dispiace, non ho potuto generare una risposta.',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        success = true;
-        break;
-      }
-
-      if (!success) setError(lastError || 'Tutti i modelli sono occupati. Riprova tra poco.');
-    } catch (err: any) {
-      setError(err.message || 'Errore di connessione.');
+      const reply = await generateContent(apiKey, contents, { systemInstruction: SYSTEM_PROMPT, temperature: 0.6, maxOutputTokens: 8192 });
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: reply || 'Mi dispiace, non ho potuto generare una risposta.',
+        timestamp: new Date(),
+      }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Errore di connessione.');
     } finally {
       setIsLoading(false);
     }
@@ -256,7 +267,7 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           </div>
           <div>
             <h2 className={`text-xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-xs ${subTextColor}`}>Google Gemini • Con visione</p>
+            <p className={`text-xs ${subTextColor}`}>Studia sul tuo materiale • Google Gemini</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -269,12 +280,51 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${cardClass} p-4 space-y-4 mb-4`}>
+      <div className={`${cardClass} p-3 mb-3 space-y-2`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-sm font-medium flex items-center gap-1.5 ${textColor}`}><BookOpen className="w-4 h-4 text-blue-400" /> Studia su:</span>
+          <select value={scopeSubject} onChange={e => { setScopeSubject(e.target.value); setScopeTopic(''); }} className={selectClass} aria-label="Materia">
+            <option value="">Tutto l'archivio</option>
+            {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {scopeSubject && (
+            <select value={scopeTopic} onChange={e => setScopeTopic(e.target.value)} className={selectClass} aria-label="Argomento">
+              <option value="">Tutti gli argomenti</option>
+              {topics.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
+          <button onClick={onOpenArchive} className="text-xs text-blue-400 underline flex items-center gap-1 ml-auto">
+            <FolderOpen className="w-3.5 h-3.5" /> Apri archivio
+          </button>
+        </div>
+        <p className={`text-xs ${subTextColor}`}>
+          {archive.every(a => !a.file)
+            ? <>Non hai ancora caricato file: aggiungi PDF, foto del libro e appunti nell'<button onClick={onOpenArchive} className="text-blue-400 underline">Archivio</button> e potrò aiutarti a studiarli.</>
+            : <>
+                📄 {readable.length} file pronti
+                {reading.length > 0 && <> · <Loader2 className="w-3 h-3 inline animate-spin" /> {reading.length} in lettura</>}
+                {unread.length > 0 && <> · {unread.length} da leggere <button onClick={() => onAnalyze(unread.map(a => a.id))} className="text-blue-400 underline">leggili ora</button></>}
+              </>}
+        </p>
+        {notice && <p className="text-xs text-amber-400">{notice}</p>}
+      </div>
+
+      <div className={`flex-1 overflow-y-auto ${cardClass} p-4 space-y-4 mb-3`}>
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Bot className={`w-12 h-12 mb-3 ${darkMode ? 'text-blue-400' : 'text-blue-500'}`} />
-            <p className={`font-medium ${textColor}`}>Ciao! Sono il tuo tutor AI</p>
-            <p className={`text-sm ${subTextColor} mt-1`}>Chiedimi aiuto o carica foto</p>
+            <p className={`font-medium ${textColor}`}>Ciao! Sono il tuo tutor di studio</p>
+            <p className={`text-sm ${subTextColor} mt-1 max-w-md`}>
+              Scegli qui sopra cosa studiare, poi fammi una domanda o usa uno dei pulsanti. Rispondo in base ai file del tuo archivio.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-lg">
+              {QUICK_ACTIONS.map(a => (
+                <button key={a.label} onClick={() => sendMessage(a.prompt)} disabled={isLoading}
+                  className={`text-sm px-3 py-1.5 rounded-full border ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -291,7 +341,7 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
                   {msg.images.map(img => <img key={img.id} src={img.imageData} alt={img.name} className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />)}
                 </div>
               )}
-              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+              {msg.role === 'assistant' ? <FormattedText text={msg.content} /> : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
             </div>
             {msg.role === 'user' && (
               <div className={`w-8 h-8 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/10'} flex items-center justify-center flex-shrink-0`}>
@@ -331,6 +381,17 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
         </div>
       )}
 
+      {messages.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-1">
+          {QUICK_ACTIONS.map(a => (
+            <button key={a.label} onClick={() => sendMessage(a.prompt)} disabled={isLoading}
+              className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap disabled:opacity-50 ${darkMode ? 'border-white/15 text-white/70 hover:bg-white/10' : 'border-black/10 text-gray-600 hover:bg-black/5'}`}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className={`${cardClass} p-3`}>
         <div className="flex gap-2">
           <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" multiple className="hidden" />
@@ -339,7 +400,7 @@ export default function GuidaStudioAI({ data, darkMode }: GuidaStudioAIProps) {
           </button>
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             placeholder="Chiedi aiuto..." rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
-          <button onClick={sendMessage} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
+          <button onClick={() => sendMessage()} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white disabled:opacity-50">
             <Send className="w-4 h-4" />
           </button>
@@ -406,7 +467,7 @@ function ApiKeyGuide({ darkMode }: { darkMode: boolean }) {
           <li><b>Età:</b> Google permette di creare API key solo a chi ha almeno 18 anni. Se sei minorenne, chiedi a un genitore di crearla con il suo account.</li>
           <li><b>Tienila segreta:</b> chi ha la tua chiave può usarla al posto tuo. Non mandarla in chat e non pubblicarla.</li>
           <li><b>Resta su questo dispositivo:</b> la chiave è salvata solo in questo browser. Su un altro computer o sul telefono dovrai incollarla di nuovo (puoi creare più chiavi o riusare la stessa).</li>
-          <li><b>Cosa viene inviato a Google:</b> quando usi il tutor, le tue domande, le foto che carichi e un riepilogo di voti, impegni e archivio vengono inviati a Google per generare la risposta. Con la versione gratuita Google può usarli per migliorare i suoi servizi: evita di scrivere dati personali sensibili.</li>
+          <li><b>Cosa viene inviato a Google:</b> quando usi il tutor, le tue domande, le foto che carichi, il testo dei file dell'Archivio che scegli di studiare e un riepilogo di voti e impegni vengono inviati a Google per generare la risposta. Anche per leggere le foto e i PDF scansionati dell'Archivio il file viene inviato a Google. Con la versione gratuita Google può usarli per migliorare i suoi servizi: evita di scrivere dati personali sensibili.</li>
         </ul>
       </div>
 

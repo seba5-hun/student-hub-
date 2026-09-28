@@ -80,3 +80,64 @@ export function authErrorMessage(err: unknown): string {
   if (/failed to fetch|network/i.test(msg)) return 'Errore di connessione. Controlla la rete e riprova.';
   return msg || 'Si è verificato un errore. Riprova.';
 }
+
+// ---- Archive files (Supabase Storage, bucket "archive", one folder per user) ----
+
+const BUCKET = 'archive';
+export const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+function client(): SupabaseClient {
+  if (!supabase) throw new Error('Supabase non configurato');
+  return supabase;
+}
+
+function safeFileName(name: string): string {
+  const clean = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '_');
+  return clean.slice(-80) || 'file';
+}
+
+export async function uploadArchiveFile(userId: string, file: File): Promise<string> {
+  const path = `${userId}/${crypto.randomUUID ? crypto.randomUUID() : Date.now()}-${safeFileName(file.name)}`;
+  const { error } = await client().storage.from(BUCKET).upload(path, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false,
+  });
+  if (error) throw error;
+  return path;
+}
+
+export async function uploadArchiveText(path: string, text: string): Promise<void> {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const { error } = await client().storage.from(BUCKET).upload(path, blob, {
+    contentType: 'text/plain;charset=utf-8',
+    upsert: true,
+  });
+  if (error) throw error;
+}
+
+export async function downloadArchiveFile(path: string): Promise<Blob> {
+  const { data, error } = await client().storage.from(BUCKET).download(path);
+  if (error) throw error;
+  return data;
+}
+
+export async function archiveFileUrl(path: string): Promise<string> {
+  const { data, error } = await client().storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export async function removeArchiveFiles(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await client().storage.from(BUCKET).remove(paths);
+  if (error) throw error;
+}
+
+export function storageErrorMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (/bucket not found/i.test(msg)) return 'Manca lo spazio file su Supabase: esegui di nuovo lo script supabase/schema.sql (vedi GUIDA_SUPABASE.md).';
+  if (/row-level security|unauthorized|not allowed|403/i.test(msg)) return 'Permesso negato dallo spazio file: esegui di nuovo lo script supabase/schema.sql.';
+  if (/exceeded|too large|payload/i.test(msg)) return 'File troppo grande (massimo 50 MB).';
+  if (/failed to fetch|network/i.test(msg)) return 'Errore di connessione. Controlla la rete e riprova.';
+  return msg || 'Errore durante il caricamento.';
+}
