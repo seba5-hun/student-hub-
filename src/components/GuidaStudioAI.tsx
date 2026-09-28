@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen } from 'lucide-react';
+import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2 } from 'lucide-react';
 import { ArchiveItem, Grade, Task, UserData } from '../lib/store';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
 import { loadTranscript } from '../lib/archiveText';
@@ -66,13 +66,13 @@ Quando rispondi:
 - non inventare pagine, date o citazioni che non sono nel materiale.`;
 
 // Minimal formatting for the AI's answers: headings, bullet points and **bold**.
-function FormattedText({ text }: { text: string }) {
+function FormattedText({ text, large = false }: { text: string; large?: boolean }) {
   const inline = (line: string) =>
     line.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
       part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : <React.Fragment key={i}>{part}</React.Fragment>,
     );
   return (
-    <div className="text-sm space-y-1">
+    <div className={large ? 'text-base leading-relaxed space-y-1.5' : 'text-sm space-y-1'}>
       {text.split('\n').map((line, i) => {
         const heading = /^(#{1,4})\s+(.*)$/.exec(line);
         if (heading) return <p key={i} className="font-bold mt-2">{inline(heading[2])}</p>;
@@ -97,6 +97,7 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
   const [uploadedImages, setUploadedImages] = useState<MessageImage[]>([]);
   const [scopeSubject, setScopeSubject] = useState('');
   const [scopeTopic, setScopeTopic] = useState('');
+  const [fullscreen, setFullscreen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -104,6 +105,19 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
   const selectClass = `${darkMode ? 'input-glass' : 'input-light'} py-1.5 text-sm`;
+
+  // Esc closes full screen; the page behind must not scroll while it is open.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false); };
+    window.addEventListener('keydown', onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [fullscreen]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -259,7 +273,10 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className={fullscreen
+      ? `fixed inset-0 z-[60] flex flex-col p-3 sm:p-6 ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`
+      : 'flex flex-col h-[calc(100vh-8rem)]'}>
+      <div className={`flex flex-col flex-1 min-h-0 w-full ${fullscreen ? 'max-w-5xl mx-auto' : ''}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
@@ -271,6 +288,9 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button onClick={() => setFullscreen(f => !f)} title={fullscreen ? 'Esci da schermo intero (Esc)' : 'Schermo intero'} aria-label={fullscreen ? 'Esci da schermo intero' : 'Schermo intero'} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+            {fullscreen ? <Minimize2 className={`w-4 h-4 ${textColor}`} /> : <Maximize2 className={`w-4 h-4 ${textColor}`} />}
+          </button>
           <button onClick={() => { setTempApiKey(''); setShowApiKeyInput(true); }} title="Cambia API key" aria-label="Cambia API key" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
             <Key className={`w-4 h-4 ${textColor}`} />
           </button>
@@ -335,13 +355,13 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
                 <Bot className="w-4 h-4 text-white" />
               </div>
             )}
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white' : darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
+            <div className={`${fullscreen ? 'max-w-[90%]' : 'max-w-[80%]'} rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white' : darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
               {msg.images && msg.images.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {msg.images.map(img => <img key={img.id} src={img.imageData} alt={img.name} className="max-w-[200px] max-h-[200px] rounded-lg object-cover" />)}
                 </div>
               )}
-              {msg.role === 'assistant' ? <FormattedText text={msg.content} /> : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
+              {msg.role === 'assistant' ? <FormattedText text={msg.content} large={fullscreen} /> : <p className={`${fullscreen ? 'text-base' : 'text-sm'} whitespace-pre-wrap`}>{msg.content}</p>}
             </div>
             {msg.role === 'user' && (
               <div className={`w-8 h-8 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/10'} flex items-center justify-center flex-shrink-0`}>
@@ -405,6 +425,7 @@ export default function GuidaStudioAI({ data, darkMode, analyzing, onAnalyze, on
             <Send className="w-4 h-4" />
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
