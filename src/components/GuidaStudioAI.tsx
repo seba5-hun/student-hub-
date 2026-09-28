@@ -3,7 +3,7 @@ import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X,
 import { Grade, Task, UserData, createId } from '../lib/store';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
 import { loadTranscript } from '../lib/archiveText';
-import { ChatSummary, StoredMessage, listChats, loadChat, saveChat, renameChat, deleteChat, chatErrorMessage, titleFrom } from '../lib/chats';
+import { ChatSummary, StoredMessage, listChats, loadChat, saveChat, renameChat, deleteChat, syncLocalChats, chatErrorMessage, titleFrom } from '../lib/chats';
 
 interface GuidaStudioAIProps {
   userId: string;
@@ -207,7 +207,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   const openChat = async (id: string) => {
     try {
-      const chat = await loadChat(id);
+      const chat = await loadChat(userId, id);
       if (!chat) return;
       activeChatId.current = chat.id;
       setCurrentChat({ id: chat.id, subject: chat.subject, topic: chat.topic, title: chat.title });
@@ -234,20 +234,25 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   // Saved chats are reloaded when the page opens, and the last open one comes back.
   useEffect(() => {
     let cancelled = false;
-    listChats()
-      .then(list => {
-        if (cancelled) return;
-        setChats(list);
-        let last: string | null = null;
-        try { last = localStorage.getItem(lastChatKey); } catch { /* ignore */ }
-        if (last && list.some(c => c.id === last)) openChat(last);
-      })
-      .catch(err => { if (!cancelled) setChatError(chatErrorMessage(err)); });
+    (async () => {
+      const { chats: list, error: listError } = await listChats(userId);
+      if (cancelled) return;
+      setChats(list);
+      let last: string | null = null;
+      try { last = localStorage.getItem(lastChatKey); } catch { /* ignore */ }
+      if (last && list.some(c => c.id === last)) openChat(last);
+      // Chats kept only on this device are uploaded now that Supabase may work again.
+      const syncError = listError ?? await syncLocalChats(userId);
+      if (!cancelled) setChatError(syncError ? chatErrorMessage(syncError) : '');
+    })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const persistChat = async (meta: ChatMeta, list: Message[]) => {
+  // Saves of the same chat run in order, so an older version never overwrites a newer one.
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+
+  const persistChat = (meta: ChatMeta, list: Message[]) => {
     const stored: StoredMessage[] = list.map(m => ({
       id: m.id,
       role: m.role,
@@ -255,22 +260,26 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       ...((m.images?.length || m.imageCount) ? { images: m.images?.length || m.imageCount } : {}),
     }));
     const updatedAt = new Date().toISOString();
-    try {
-      await saveChat(userId, { ...meta, messages: stored, updatedAt });
-      setChatError('');
-      setChats(prev => [{ ...meta, updatedAt }, ...prev.filter(c => c.id !== meta.id)]);
-    } catch (err) {
-      setChatError(chatErrorMessage(err));
-    }
+    // The chat is in the list right away: it is saved on this device even if Supabase fails.
+    setChats(prev => [{ ...meta, updatedAt }, ...prev.filter(c => c.id !== meta.id)]);
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        await saveChat(userId, { ...meta, messages: stored, updatedAt });
+        setChatError('');
+      } catch (err) {
+        console.error('Chat save error:', err);
+        setChatError(chatErrorMessage(err));
+      }
+    });
   };
 
   const handleRenameChat = async (chat: ChatSummary) => {
     const title = window.prompt('Nuovo nome della chat:', chat.title)?.trim();
     if (!title || title === chat.title) return;
+    setChats(prev => prev.map(c => (c.id === chat.id ? { ...c, title } : c)));
+    if (currentChat?.id === chat.id) setCurrentChat({ ...currentChat, title });
     try {
-      await renameChat(chat.id, title);
-      setChats(prev => prev.map(c => (c.id === chat.id ? { ...c, title } : c)));
-      if (currentChat?.id === chat.id) setCurrentChat({ ...currentChat, title });
+      await renameChat(userId, chat.id, title);
     } catch (err) {
       setChatError(chatErrorMessage(err));
     }
@@ -278,10 +287,10 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   const handleDeleteChat = async (chat: ChatSummary) => {
     if (!window.confirm(`Eliminare la chat "${chat.title}"?`)) return;
+    setChats(prev => prev.filter(c => c.id !== chat.id));
+    if (currentChat?.id === chat.id) newChat();
     try {
-      await deleteChat(chat.id);
-      setChats(prev => prev.filter(c => c.id !== chat.id));
-      if (currentChat?.id === chat.id) newChat();
+      await deleteChat(userId, chat.id);
     } catch (err) {
       setChatError(chatErrorMessage(err));
     }
@@ -508,7 +517,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
         <button onClick={() => { newChat(); onPicked?.(); }} className="btn-primary text-sm flex items-center justify-center gap-2 mb-3">
           <Plus className="w-4 h-4" /> Nuova chat
         </button>
-        {chatError && <p className="text-xs text-amber-400 mb-2">{chatError}</p>}
+        {chatError && <p className="text-xs text-amber-400 mb-2">💾 Alcune chat sono salvate solo su questo dispositivo.</p>}
         <div className="flex-1 overflow-y-auto space-y-1 pr-1">
           {chats.length === 0 && (
             <p className={`text-xs ${subTextColor}`}>Qui trovi le chat salvate, divise in cartelle per materia e argomento.</p>
@@ -606,6 +615,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
             {isLoading && <Loader2 className="w-5 h-5 animate-spin text-blue-400" />}
             {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
+            {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
             <div ref={messagesEndRef} />
           </div>
         </div>
@@ -727,6 +737,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
         )}
 
         {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
+        {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
         <div ref={messagesEndRef} />
       </div>
 
