@@ -62,9 +62,30 @@ export interface UserSettings {
   colorTheme: string;
   notes: string;
   subjects?: SubjectDef[];
+  // Subjects removed from the list that still appear in old grades/sessions: not re-added.
+  hiddenSubjects?: string[];
+}
+
+// Every subject name used anywhere in the data (grades, study sessions, tasks, archive).
+export function usedSubjectNames(data: UserData): string[] {
+  const names = [
+    ...data.grades.map(g => g.subject),
+    ...data.sessions.map(s => s.subject),
+    ...data.tasks.map(t => t.subject || ''),
+    ...data.archive.map(a => a.subject),
+  ].map(n => n.trim()).filter(Boolean);
+  const unique: string[] = [];
+  for (const n of names) if (!unique.some(u => u.toLowerCase() === n.toLowerCase())) unique.push(n);
+  return unique;
 }
 
 export const SUBJECT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6', '#3b82f6', '#a855f7'];
+
+// First palette color not used yet by the given subjects (cycles when all are taken).
+export function nextSubjectColor(subjects: SubjectDef[]): string {
+  const used = subjects.map(s => s.color.toLowerCase());
+  return SUBJECT_COLORS.find(c => !used.includes(c)) || SUBJECT_COLORS[subjects.length % SUBJECT_COLORS.length];
+}
 
 // Color of a subject: the one chosen by the student, otherwise a fixed one derived from the name.
 export function subjectColor(name: string, subjects: SubjectDef[] = []): string {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Save, Trash2, Palette, Plus, X } from 'lucide-react';
+import { Play, Pause, Save, Trash2, Palette, Plus } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { useDialog } from './Dialog';
-import { StudySession, Grade, SubjectDef, SUBJECT_COLORS, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
+import SubjectManager from './SubjectManager';
+import { StudySession, Grade, SubjectDef, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
 
 interface TimerProps {
   sessions: StudySession[];
@@ -13,6 +13,7 @@ interface TimerProps {
   preselectedSubject?: string;
   subjectDefs: SubjectDef[];
   onUpdateSubjects: (subjects: SubjectDef[]) => void;
+  onRenameSubject: (oldName: string, newName: string) => void;
 }
 
 const TIMER_KEY = 'studenthub_timer';
@@ -39,7 +40,7 @@ function saveTimerState(state: TimerState | null): void {
   } catch { /* ignore */ }
 }
 
-export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects }: TimerProps) {
+export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects, onRenameSubject }: TimerProps) {
   // Time is computed from timestamps (not by counting ticks), so it stays correct when the
   // tab is in background, and the state is saved so the timer survives changing section.
   const [saved] = useState(loadTimerState);
@@ -54,47 +55,15 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
 
-  const dialog = useDialog();
   const [showSubjects, setShowSubjects] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(SUBJECT_COLORS[subjectDefs.length % SUBJECT_COLORS.length]);
-  const [subjectError, setSubjectError] = useState('');
 
-  // The student's own subjects first (in their order), then any other name already used in the app.
+  // All subjects live in "Le mie materie" (the app adds the ones found in the data).
   const ownNames = subjectDefs.map(d => d.name);
-  const otherNames = [...new Set([...grades.map(g => g.subject), ...sessions.map(s => s.subject), ...extraSubjects, ...(subject ? [subject] : [])])]
-    .filter(n => !ownNames.some(o => o.toLowerCase() === n.toLowerCase()))
-    .sort();
+  const otherNames = subject && !ownNames.some(o => o.toLowerCase() === subject.toLowerCase()) ? [subject] : [];
 
-  const addSubject = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = newName.trim();
-    if (!name) return;
-    if (subjectDefs.some(d => d.name.toLowerCase() === name.toLowerCase())) {
-      setSubjectError('Questa materia c\'è già.');
-      return;
-    }
-    const next = [...subjectDefs, { name, color: newColor }];
-    onUpdateSubjects(next);
-    setNewName('');
-    setSubjectError('');
-    setNewColor(SUBJECT_COLORS[next.length % SUBJECT_COLORS.length]);
-    if (!subject) setSubject(name);
-  };
-
-  const setColor = (name: string, color: string) => {
-    onUpdateSubjects(subjectDefs.map(d => (d.name === name ? { ...d, color } : d)));
-  };
-
-  const removeSubject = async (name: string) => {
-    const ok = await dialog.confirm({
-      title: `Togliere "${name}"?`,
-      message: 'La materia viene tolta dal tuo elenco su tutti i dispositivi. Le sessioni di studio già salvate restano.',
-      confirmLabel: 'Togli',
-      danger: true,
-    });
-    if (!ok) return;
-    onUpdateSubjects(subjectDefs.filter(d => d.name !== name));
+  const renameSubject = (oldName: string, newName: string) => {
+    onRenameSubject(oldName, newName);
+    if (subject.toLowerCase() === oldName.toLowerCase()) setSubject(newName);
   };
 
   useEffect(() => {
@@ -155,7 +124,6 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             <select value={subject} onChange={e => setSubject(e.target.value)} className={`${darkMode ? 'input-glass' : 'input-light'} text-center max-w-xs`}>
               <option value="">Seleziona materia...</option>
               {ownNames.map(s => <option key={s} value={s}>{s}</option>)}
-              {otherNames.length > 0 && ownNames.length > 0 && <option disabled>──────────</option>}
               {otherNames.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
@@ -167,45 +135,13 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
         </div>
 
         {showSubjects && (
-          <div className={`text-left max-w-md mx-auto mb-6 p-4 rounded-xl ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className={`font-semibold ${textColor}`}>Le mie materie</h3>
-              <button onClick={() => setShowSubjects(false)} className={subTextColor} aria-label="Chiudi"><X className="w-4 h-4" /></button>
-            </div>
-
-            {subjectDefs.length === 0 && <p className={`text-sm mb-3 ${subTextColor}`}>Aggiungi le materie che studi e scegli un colore per ognuna.</p>}
-            <ul className="space-y-2 mb-4">
-              {subjectDefs.map(d => (
-                <li key={d.name} className="flex items-center gap-3">
-                  <label className="relative w-7 h-7 rounded-full cursor-pointer flex-shrink-0 border-2 border-white/30" style={{ backgroundColor: d.color }} title="Cambia colore">
-                    <input type="color" value={d.color} onChange={e => setColor(d.name, e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label={`Colore di ${d.name}`} />
-                  </label>
-                  <span className={`flex-1 text-sm ${textColor}`}>{d.name}</span>
-                  <button onClick={() => removeSubject(d.name)} className="text-red-400 p-1" aria-label={`Togli ${d.name}`}><Trash2 className="w-4 h-4" /></button>
-                </li>
-              ))}
-            </ul>
-
-            <form onSubmit={addSubject} className="space-y-3">
-              <input value={newName} onChange={e => { setNewName(e.target.value); setSubjectError(''); }} className={`${darkMode ? 'input-glass' : 'input-light'} w-full`} placeholder="Nome materia (es. Matematica)" maxLength={40} />
-              <div className="flex flex-wrap items-center gap-2">
-                {SUBJECT_COLORS.map(c => (
-                  <button key={c} type="button" onClick={() => setNewColor(c)} aria-label={`Colore ${c}`}
-                    className={`w-7 h-7 rounded-full transition-transform ${newColor === c ? 'ring-2 ring-offset-2 ring-white scale-110' : ''} ${darkMode ? 'ring-offset-gray-900' : 'ring-offset-white'}`}
-                    style={{ backgroundColor: c }} />
-                ))}
-                <label className={`relative w-7 h-7 rounded-full cursor-pointer border-2 border-dashed flex items-center justify-center ${darkMode ? 'border-white/40' : 'border-black/30'}`} title="Altro colore"
-                  style={SUBJECT_COLORS.includes(newColor) ? undefined : { backgroundColor: newColor, borderStyle: 'solid' }}>
-                  {SUBJECT_COLORS.includes(newColor) && <Plus className={`w-3.5 h-3.5 ${subTextColor}`} />}
-                  <input type="color" value={newColor} onChange={e => setNewColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Altro colore" />
-                </label>
-              </div>
-              {subjectError && <p className="text-sm text-red-400">{subjectError}</p>}
-              <button type="submit" disabled={!newName.trim()} className="btn-primary text-sm w-full disabled:opacity-50 flex items-center justify-center gap-2">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: newColor }} /> Aggiungi materia
-              </button>
-            </form>
-          </div>
+          <SubjectManager
+            subjects={subjectDefs}
+            darkMode={darkMode}
+            onChange={onUpdateSubjects}
+            onRename={renameSubject}
+            onClose={() => setShowSubjects(false)}
+          />
         )}
 
         <div className={`text-6xl md:text-7xl font-mono font-bold ${textColor} py-8`}>

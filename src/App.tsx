@@ -11,6 +11,7 @@ import Archivio from './components/Archivio';
 import CosaStudiare from './components/CosaStudiare';
 import Calendario from './components/Calendario';
 import GuidaStudioAI from './components/GuidaStudioAI';
+import { useDialog } from './components/Dialog';
 import {
   AuthUser,
   UserData,
@@ -19,7 +20,11 @@ import {
   loadCachedData,
   findLegacyLocalData,
   generateDemoData,
+  usedSubjectNames,
+  nextSubjectColor,
+  SubjectDef,
 } from './lib/store';
+import { renameSubjectInChats } from './lib/chats';
 import {
   supabase,
   fetchRemoteData,
@@ -45,6 +50,9 @@ function App() {
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
+  const dialog = useDialog();
+  // Login screens are light; inside the app the dialogs follow the dashboard theme.
+  useEffect(() => { dialog.setDark(!!user && darkMode); }, [dialog, user, darkMode]);
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
@@ -200,6 +208,55 @@ function App() {
     }
     analyzeRunning.current = false;
   }, [setArchiveFile]);
+
+  // All subjects are editable in "Le mie materie": those found in grades, sessions, tasks or
+  // archive but not in the list yet are added to it (with the color they already had).
+  useEffect(() => {
+    if (!data) return;
+    const defs = data.settings.subjects || [];
+    const hidden = (data.settings.hiddenSubjects || []).map(h => h.toLowerCase());
+    const missing = usedSubjectNames(data).filter(n =>
+      !defs.some(d => d.name.toLowerCase() === n.toLowerCase()) && !hidden.includes(n.toLowerCase()));
+    if (missing.length === 0) return;
+    updateData(prev => {
+      const current = prev.settings.subjects || [];
+      const add = missing.filter(n => !current.some(d => d.name.toLowerCase() === n.toLowerCase()));
+      if (add.length === 0) return prev;
+      const next = [...current];
+      for (const name of add) next.push({ name, color: nextSubjectColor(next) });
+      return { ...prev, settings: { ...prev.settings, subjects: next } };
+    });
+  }, [data, updateData]);
+
+  const updateSubjects = useCallback((subjects: SubjectDef[]) => {
+    updateData(prev => {
+      const before = prev.settings.subjects || [];
+      const removed = before.filter(b => !subjects.some(s => s.name.toLowerCase() === b.name.toLowerCase())).map(b => b.name);
+      const hidden = (prev.settings.hiddenSubjects || [])
+        .filter(h => !subjects.some(s => s.name.toLowerCase() === h.toLowerCase()))
+        .concat(removed);
+      return { ...prev, settings: { ...prev.settings, subjects, hiddenSubjects: [...new Set(hidden)] } };
+    });
+  }, [updateData]);
+
+  // Renaming a subject renames it everywhere: grades, sessions, tasks, archive and chat folders.
+  const renameSubject = useCallback((oldName: string, newName: string) => {
+    if (!user) return;
+    const same = (s?: string) => !!s && s.toLowerCase() === oldName.toLowerCase();
+    updateData(prev => ({
+      ...prev,
+      grades: prev.grades.map(g => (same(g.subject) ? { ...g, subject: newName } : g)),
+      sessions: prev.sessions.map(x => (same(x.subject) ? { ...x, subject: newName } : x)),
+      tasks: prev.tasks.map(t => (same(t.subject) ? { ...t, subject: newName } : t)),
+      archive: prev.archive.map(a => (same(a.subject) ? { ...a, subject: newName } : a)),
+      settings: {
+        ...prev.settings,
+        subjects: (prev.settings.subjects || []).map(d => (same(d.name) ? { ...d, name: newName } : d)),
+        hiddenSubjects: (prev.settings.hiddenSubjects || []).filter(h => !same(h)),
+      },
+    }));
+    renameSubjectInChats(user.id, oldName, newName).catch(err => console.error('Chat folders not renamed:', err));
+  }, [user, updateData]);
 
   // Sync between devices: when the user comes back to the app (tab shown again, phone
   // unlocked) and every 30 seconds while it is open, load the changes made elsewhere.
@@ -438,7 +495,8 @@ function App() {
             onUpdate={(sessions) => updateData({ ...data, sessions })}
             preselectedSubject={preselectedSubject}
             subjectDefs={data.settings.subjects || []}
-            onUpdateSubjects={(subjects) => updateData(prev => ({ ...prev, settings: { ...prev.settings, subjects } }))}
+            onUpdateSubjects={updateSubjects}
+            onRenameSubject={renameSubject}
           />
         )}
         {currentSection === 'archivio' && (

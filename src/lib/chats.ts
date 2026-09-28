@@ -165,6 +165,17 @@ export async function deleteChat(userId: string, id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Keeps the chat folders right when a subject is renamed.
+export async function renameSubjectInChats(userId: string, oldName: string, newName: string): Promise<void> {
+  const local = readLocal(userId);
+  for (const c of Object.values(local)) {
+    if (c.subject.toLowerCase() === oldName.toLowerCase()) local[c.id] = { ...c, subject: newName };
+  }
+  writeLocal(userId, local);
+  const { error } = await client().from(TABLE).update({ subject: newName }).ilike('subject', oldName.replace(/[%_\\]/g, m => `\\${m}`));
+  if (error) throw error;
+}
+
 export function chatErrorMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : typeof err === 'object' && err && 'message' in err ? String((err as { message: unknown }).message) : String(err ?? '');
   const detail = raw ? ` (Supabase: ${raw})` : '';
