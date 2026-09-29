@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, Activity } from 'lucide-react';
+import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 
@@ -17,6 +17,8 @@ interface LayoutProps {
   onThemeChange?: (theme: string) => void;
   hiddenSections?: string[];
   showDeveloper?: boolean;
+  // Accounts waiting for approval, shown next to "Admin" in the menu.
+  adminBadge?: number;
 }
 
 export const SECTIONS = [
@@ -31,9 +33,9 @@ export const SECTIONS = [
 ];
 
 // Only for the developer account (statistics of the whole site).
-const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Sviluppatori', icon: Activity };
+const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Admin', icon: ShieldCheck };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0 }: LayoutProps) {
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -89,7 +91,10 @@ export default function Layout({ children, currentSection, onSectionChange, user
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
-              <Menu className="w-5 h-5" />
+              <span className="relative block">
+                <Menu className="w-5 h-5" />
+                {adminBadge > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500" />}
+              </span>
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
@@ -158,6 +163,9 @@ export default function Layout({ children, currentSection, onSectionChange, user
                 >
                   <section.icon className="w-5 h-5" />
                   {section.label}
+                  {section.id === 'sviluppatori' && adminBadge > 0 && (
+                    <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center">{adminBadge}</span>
+                  )}
                 </button>
               ))}
             </nav>

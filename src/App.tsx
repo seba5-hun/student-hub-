@@ -12,7 +12,8 @@ import CosaStudiare from './components/CosaStudiare';
 import Calendario from './components/Calendario';
 import GuidaStudioAI from './components/GuidaStudioAI';
 import { useDialog } from './components/Dialog';
-import DeveloperDashboard from './components/DeveloperDashboard';
+import AdminPanel from './components/AdminPanel';
+import { AccountStatus, fetchMyStatus, loadAdminUsers } from './lib/admin';
 import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
   AuthUser,
@@ -52,6 +53,10 @@ function App() {
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
+  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
+  const [adminPending, setAdminPending] = useState(0);
+  // Opened as …/admin: go straight to the admin panel after login.
+  const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
   const dialog = useDialog();
   // Login screens are light; inside the app the dialogs follow the dashboard theme.
   useEffect(() => { dialog.setDark(!!user && darkMode); }, [dialog, user, darkMode]);
@@ -76,6 +81,14 @@ function App() {
     setUser(authUser);
     setLoadError('');
     try {
+      // Accounts not approved by the admin see only the waiting screen (the server refuses
+      // their data anyway).
+      const status = isDeveloper(authUser.email) ? 'approved' : await fetchMyStatus(authUser.id);
+      setAccountStatus(status);
+      if (status !== 'approved') {
+        setData(null);
+        return;
+      }
       let userData = await fetchRemoteData(authUser.id);
       if (!userData) {
         const legacy = loadCachedData(authUser.id) || findLegacyLocalData(authUser.email);
@@ -318,6 +331,31 @@ function App() {
   const handleLogin = (authUser: AuthUser) => loadUser(authUser);
 
   // Handle logout
+  // Admin: how many accounts are waiting, for the badge in the menu (refreshed every minute).
+  useEffect(() => {
+    if (!user || !data || !isDeveloper(user.email)) return;
+    const check = () => loadAdminUsers()
+      .then(r => setAdminPending(r.users.filter(u => u.status === 'pending').length))
+      .catch(() => {});
+    check();
+    const id = window.setInterval(check, 60000);
+    return () => window.clearInterval(id);
+  }, [user, data]);
+
+  useEffect(() => {
+    if (!openAdmin.current || !user || !data) return;
+    openAdmin.current = false;
+    window.history.replaceState({}, document.title, '/');
+    if (isDeveloper(user.email)) setCurrentSection('sviluppatori');
+  }, [user, data]);
+
+  // Waiting screen: check again every 20 seconds, so the app opens as soon as the admin approves.
+  useEffect(() => {
+    if (!user || accountStatus !== 'pending') return;
+    const id = window.setInterval(() => { loadUser(user); }, 20000);
+    return () => window.clearInterval(id);
+  }, [user, accountStatus, loadUser]);
+
   const handleLogout = async () => {
     analyzeQueue.current = [];
     setAnalyzing([]);
@@ -326,6 +364,8 @@ function App() {
     setUser(null);
     setData(null);
     setLoadError('');
+    setAccountStatus(null);
+    setAdminPending(0);
     setCurrentSection('home');
   };
 
@@ -426,6 +466,29 @@ function App() {
     }} />;
   }
 
+  // Account waiting for approval, rejected or blocked
+  if (user && accountStatus && accountStatus !== 'approved') {
+    const info = {
+      pending: { icon: '⏳', title: 'Account in attesa di approvazione', text: 'La tua registrazione è arrivata! Potrai usare Student Hub appena verrà approvata. Questa pagina si aggiorna da sola.' },
+      rejected: { icon: '🚫', title: 'Richiesta non accettata', text: 'La tua richiesta di accesso non è stata accettata. Se pensi sia un errore, contatta l\'amministratore.' },
+      blocked: { icon: '🔒', title: 'Account sospeso', text: 'Il tuo account è stato sospeso. Per informazioni contatta l\'amministratore.' },
+    }[accountStatus];
+    return (
+      <div className="min-h-screen gradient-bg-light mesh-gradient-light flex items-center justify-center p-4">
+        <div className="glass-card-light p-8 max-w-md w-full text-center">
+          <div className="text-5xl mb-4">{info.icon}</div>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">{info.title}</h1>
+          <p className="text-sm text-gray-600 mb-2">{info.text}</p>
+          <p className="text-xs text-gray-500 mb-6">Account: {user.email}</p>
+          <div className="flex gap-2 justify-center">
+            {accountStatus === 'pending' && <button onClick={() => loadUser(user)} className="btn-primary text-sm">Controlla di nuovo</button>}
+            <button onClick={handleLogout} className="px-4 py-2 rounded-xl text-sm text-gray-700 bg-black/5 hover:bg-black/10">Esci</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Data could not be loaded
   if (user && !data) {
     return (
@@ -480,6 +543,7 @@ function App() {
         colorTheme={data?.settings.colorTheme}
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
+        adminBadge={adminPending}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -537,7 +601,7 @@ function App() {
           />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
-          <DeveloperDashboard darkMode={darkMode} />
+          <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} />
         )}
         {currentSection === 'guida-ai' && (
           <GuidaStudioAI
