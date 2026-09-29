@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles } from 'lucide-react';
+import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, Activity } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 
@@ -16,6 +16,7 @@ interface LayoutProps {
   colorTheme?: string;
   onThemeChange?: (theme: string) => void;
   hiddenSections?: string[];
+  showDeveloper?: boolean;
 }
 
 export const SECTIONS = [
@@ -29,7 +30,10 @@ export const SECTIONS = [
   { id: 'guida-ai', label: 'Guida Studio AI', icon: Sparkles },
 ];
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [] }: LayoutProps) {
+// Only for the developer account (statistics of the whole site).
+const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Sviluppatori', icon: Activity };
+
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false }: LayoutProps) {
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -142,7 +146,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {SECTIONS.filter(section => section.id === 'home' || !hiddenSections.includes(section.id)).map(section => (
+              {[...SECTIONS.filter(section => section.id === 'home' || !hiddenSections.includes(section.id)), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}

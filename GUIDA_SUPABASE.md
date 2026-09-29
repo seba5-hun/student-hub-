@@ -15,6 +15,10 @@ lo spazio file `archive` (dove finiscono PDF, foto e appunti caricati nell'Archi
 Puoi rilanciarlo senza problemi: non cancella i dati esistenti. **Ogni volta che l'app riceve una funzione nuova
 che usa Supabase (file nell'Archivio, chat salvate…), eseguilo di nuovo** per creare quello che manca.
 
+Lo script crea anche le **statistiche per lo sviluppatore** (tabella `analytics_events` e funzione
+`admin_dashboard`): solo l'account `flowbase.service@gmail.com`, con l'email confermata, può leggerle
+dalla sezione "Sviluppatori" dell'app.
+
 Il piano gratuito di Supabase include 1 GB di spazio file: basta per centinaia di PDF e foto.
 
 ## 2. Imposta gli indirizzi dell'app

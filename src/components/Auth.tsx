@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage } from '../lib/supabase';
+import { track } from '../lib/analytics';
 import { BookOpen, Mail, Lock, UserPlus, LogIn, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 
 interface AuthProps {
@@ -90,6 +91,7 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
         options: { emailRedirectTo: redirectTo() },
       });
       if (error) throw error;
+      if (data.user && data.user.identities?.length !== 0) track('signup', 'accesso');
       if (data.session && data.user) {
         onLogin({ id: data.user.id, email: data.user.email || email.trim() });
       } else if (data.user && data.user.identities?.length === 0) {

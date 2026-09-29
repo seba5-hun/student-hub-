@@ -12,6 +12,8 @@ import CosaStudiare from './components/CosaStudiare';
 import Calendario from './components/Calendario';
 import GuidaStudioAI from './components/GuidaStudioAI';
 import { useDialog } from './components/Dialog';
+import DeveloperDashboard from './components/DeveloperDashboard';
+import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
   AuthUser,
   UserData,
@@ -53,6 +55,16 @@ function App() {
   const dialog = useDialog();
   // Login screens are light; inside the app the dialogs follow the dashboard theme.
   useEffect(() => { dialog.setDark(!!user && darkMode); }, [dialog, user, darkMode]);
+
+  // Usage statistics: who is using the app (or just the login page) and which section is open.
+  useEffect(() => {
+    if (!initialized) return;
+    setAnalyticsUser(user?.id ?? null);
+  }, [initialized, user]);
+  useEffect(() => {
+    if (!initialized) return;
+    setAnalyticsSection(user && data ? currentSection : isResetPassword ? 'reset-password' : 'accesso');
+  }, [initialized, user, data, currentSection, isResetPassword]);
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
@@ -467,6 +479,7 @@ function App() {
         }}
         colorTheme={data?.settings.colorTheme}
         hiddenSections={data.settings.hiddenSections}
+        showDeveloper={isDeveloper(user.email)}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -522,6 +535,9 @@ function App() {
             onNavigate={handleSectionChange}
             onAddTask={(task) => updateData({ ...data, tasks: [...data.tasks, task] })}
           />
+        )}
+        {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
+          <DeveloperDashboard darkMode={darkMode} />
         )}
         {currentSection === 'guida-ai' && (
           <GuidaStudioAI

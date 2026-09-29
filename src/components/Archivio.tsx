@@ -10,6 +10,7 @@ import {
 import { readKind } from '../lib/archiveText';
 import { getGeminiKey } from '../lib/gemini';
 import { useDialog } from './Dialog';
+import { track } from '../lib/analytics';
 
 interface ArchivioProps {
   userId: string;
@@ -132,6 +133,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         };
         onUpdate(prev => [...prev, item]);
         newIds.push(item.id);
+        track('file_upload', 'archivio');
       } catch (err) {
         console.error('Upload error:', err);
         failed.push(`${file.name}: ${storageErrorMessage(err)}`);

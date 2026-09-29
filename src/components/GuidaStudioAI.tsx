@@ -4,6 +4,7 @@ import { Grade, Task, UserData, createId } from '../lib/store';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
 import { loadTranscript } from '../lib/archiveText';
 import { useDialog } from './Dialog';
+import { track } from '../lib/analytics';
 import { ChatSummary, StoredMessage, listChats, loadChat, saveChat, renameChat, deleteChat, syncLocalChats, chatErrorMessage, titleFrom } from '../lib/chats';
 
 interface GuidaStudioAIProps {
@@ -335,6 +336,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       timestamp: new Date(),
     };
 
+    track('ai_message', 'guida-ai');
     const history = [...messages, userMessage];
     setMessages(history);
     persistChat(meta, history);

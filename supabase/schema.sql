@@ -91,3 +91,132 @@ create policy "chats_update_own" on public.chats
 
 create policy "chats_delete_own" on public.chats
   for delete to authenticated using ((select auth.uid()) = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Statistiche per lo sviluppatore (pagina "Sviluppatori").
+-- Tutti possono SCRIVERE i propri eventi (anche chi non ha fatto login, ad es. la pagina di
+-- accesso); solo l'account sviluppatore può LEGGERE i dati aggregati, tramite admin_dashboard().
+
+create table if not exists public.analytics_events (
+  id          bigint generated always as identity primary key,
+  user_id     uuid references auth.users (id) on delete set null,
+  visitor_id  text not null,
+  session_id  text not null,
+  event       text not null check (event in ('visit', 'section_view', 'section_time', 'ai_message', 'file_upload', 'signup')),
+  section     text,
+  seconds     integer not null default 0 check (seconds between 0 and 3600),
+  device      text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists analytics_events_created on public.analytics_events (created_at);
+create index if not exists analytics_events_user on public.analytics_events (user_id, created_at);
+
+alter table public.analytics_events enable row level security;
+
+drop policy if exists "analytics_insert_own" on public.analytics_events;
+create policy "analytics_insert_own" on public.analytics_events
+  for insert to anon, authenticated
+  with check (user_id is null or user_id = (select auth.uid()));
+-- Nessuna policy di lettura: i dati si leggono solo con admin_dashboard().
+
+create or replace function public.is_developer()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select exists (
+    select 1 from auth.users
+    where id = auth.uid()
+      and lower(email) = 'flowbase.service@gmail.com'
+      and email_confirmed_at is not null
+  );
+$$;
+
+create or replace function public.admin_dashboard(p_days integer default 30)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+declare
+  since timestamptz := now() - make_interval(days => greatest(1, least(p_days, 365)));
+  result jsonb;
+begin
+  if not public.is_developer() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+
+  -- The developer's own use of the site is left out, so testing doesn't inflate the numbers.
+  with ev as (
+    select * from public.analytics_events
+    where created_at >= since and (user_id is null or user_id <> auth.uid())
+  ),
+  per_user as (
+    select user_id, sum(seconds) filter (where event = 'section_time') as secs,
+           count(distinct session_id) as sessions, max(created_at) as last_seen
+    from ev where user_id is not null group by user_id
+  )
+  select jsonb_build_object(
+    'totals', jsonb_build_object(
+      'visitors_all', (select count(distinct visitor_id) from public.analytics_events where user_id is null or user_id <> auth.uid()),
+      'visitors', (select count(distinct visitor_id) from ev),
+      'sessions', (select count(distinct session_id) from ev),
+      'registered_users', (select count(*) from auth.users),
+      'new_users', (select count(*) from auth.users where created_at >= since),
+      'active_1d', (select count(distinct user_id) from ev where created_at >= now() - interval '1 day'),
+      'active_7d', (select count(distinct user_id) from ev where created_at >= now() - interval '7 days'),
+      'active_period', (select count(distinct user_id) from ev),
+      'total_seconds', (select coalesce(sum(seconds), 0) from ev where event = 'section_time'),
+      'avg_seconds_per_user', (select coalesce(round(avg(secs)), 0) from per_user),
+      'avg_seconds_per_session', (
+        select coalesce(round(sum(seconds)::numeric / nullif(count(distinct session_id), 0)), 0)
+        from ev where event = 'section_time'),
+      'ai_messages', (select count(*) from ev where event = 'ai_message'),
+      'file_uploads', (select count(*) from ev where event = 'file_upload')
+    ),
+    'sections', coalesce((
+      select jsonb_agg(s order by s.seconds desc) from (
+        select section,
+               count(*) filter (where event = 'section_view') as views,
+               coalesce(sum(seconds) filter (where event = 'section_time'), 0) as seconds,
+               count(distinct user_id) as users
+        from ev where section is not null group by section
+      ) s), '[]'::jsonb),
+    'daily', coalesce((
+      select jsonb_agg(d order by d.day) from (
+        select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
+               count(distinct visitor_id) as visitors,
+               count(distinct user_id) as users,
+               coalesce(sum(seconds) filter (where event = 'section_time'), 0) as seconds
+        from ev group by 1
+      ) d), '[]'::jsonb),
+    'signups', coalesce((
+      select jsonb_agg(d order by d.day) from (
+        select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, count(*) as users
+        from auth.users where created_at >= since group by 1
+      ) d), '[]'::jsonb),
+    'devices', coalesce((
+      select jsonb_agg(d order by d.visitors desc) from (
+        select coalesce(device, 'sconosciuto') as device, count(distinct visitor_id) as visitors
+        from ev where event = 'visit' group by 1
+      ) d), '[]'::jsonb),
+    'users', coalesce((
+      select jsonb_agg(u order by u.seconds desc nulls last) from (
+        select au.email, au.created_at, pu.last_seen, coalesce(pu.secs, 0) as seconds, coalesce(pu.sessions, 0) as sessions
+        from auth.users au left join per_user pu on pu.user_id = au.id
+        order by coalesce(pu.secs, 0) desc, au.created_at desc
+        limit 200
+      ) u), '[]'::jsonb)
+  ) into result;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.admin_dashboard(integer) from public, anon;
+grant execute on function public.admin_dashboard(integer) to authenticated;
+grant execute on function public.is_developer() to authenticated;
