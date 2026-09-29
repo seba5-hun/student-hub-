@@ -466,6 +466,7 @@ function App() {
           setDarkMode(imported.settings.darkMode);
         }}
         colorTheme={data?.settings.colorTheme}
+        hiddenSections={data.settings.hiddenSections}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -477,7 +478,7 @@ function App() {
             data={data}
             darkMode={darkMode}
             onNavigate={handleSectionChange}
-            onUpdateSettings={(settings) => updateData({ ...data, settings })}
+            onUpdateSettings={(patch) => updateData(prev => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
           />
         )}
         {currentSection === 'impegni' && (

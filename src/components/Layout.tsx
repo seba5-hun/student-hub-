@@ -15,9 +15,10 @@ interface LayoutProps {
   onDataImport: (data: UserData) => void;
   colorTheme?: string;
   onThemeChange?: (theme: string) => void;
+  hiddenSections?: string[];
 }
 
-const SECTIONS = [
+export const SECTIONS = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'impegni', label: 'Impegni', icon: Target },
   { id: 'voti', label: 'Voti', icon: BarChart3 },
@@ -28,7 +29,7 @@ const SECTIONS = [
   { id: 'guida-ai', label: 'Guida Studio AI', icon: Sparkles },
 ];
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [] }: LayoutProps) {
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -141,7 +142,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {SECTIONS.map(section => (
+              {SECTIONS.filter(section => section.id === 'home' || !hiddenSections.includes(section.id)).map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}

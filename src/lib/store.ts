@@ -64,6 +64,10 @@ export interface UserSettings {
   subjects?: SubjectDef[];
   // Subjects removed from the list that still appear in old grades/sessions: not re-added.
   hiddenSubjects?: string[];
+  // Home dashboard: order of the panels and the ones the student has hidden.
+  homeLayout?: { order: string[]; hidden: string[] };
+  // Menu sections the student has hidden.
+  hiddenSections?: string[];
 }
 
 // Every subject name used anywhere in the data (grades, study sessions, tasks, archive).
