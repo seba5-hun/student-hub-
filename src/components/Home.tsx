@@ -61,6 +61,17 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
   const visible = order.filter(id => !hidden.includes(id));
   const hiddenSections = settings.hiddenSections || [];
 
+  // Half-width panels go side by side in pairs; one left alone (next to a wide panel or at
+  // the end) takes the full row, so no row is left half empty.
+  const fullRow = new Set<string>();
+  for (let i = 0; i < visible.length; i++) {
+    const w = WIDGETS.find(x => x.id === visible[i]);
+    const next = WIDGETS.find(x => x.id === visible[i + 1]);
+    if (w?.wide) { fullRow.add(visible[i]); continue; }
+    if (next && !next.wide) { i++; continue; }
+    fullRow.add(visible[i]);
+  }
+
   const saveLayout = (nextOrder: string[], nextHidden: string[]) =>
     onUpdateSettings?.({ homeLayout: { order: nextOrder, hidden: nextHidden } });
   const hideWidget = (id: string) => saveLayout(order, [...hidden, id]);
@@ -85,7 +96,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
     switch (id) {
       case 'quote':
         return (
-          <div className={`${cardClass} p-5 border-l-4 border-l-indigo-500 h-full`}>
+          <div className={`${cardClass} p-5 border-l-4 border-l-indigo-500 h-full flex items-center`}>
             <p className={`italic ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>"{quote}"</p>
           </div>
         );
@@ -100,7 +111,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         );
       case 'goal':
         return (
-          <div className={`${cardClass} p-6 flex items-center gap-6 h-full`}>
+          <div className={`${cardClass} p-6 flex items-center justify-center sm:justify-start gap-6 h-full`}>
             <div className="relative">
               <svg width="110" height="110" className="transform -rotate-90">
                 <circle cx="55" cy="55" r="45" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth="8" fill="none" />
@@ -125,9 +136,9 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         );
       case 'summary':
         return (
-          <div className={`${cardClass} p-6 h-full`}>
+          <div className={`${cardClass} p-6 h-full flex flex-col`}>
             <h3 className={`font-semibold mb-3 ${textColor}`}>Riepilogo</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 flex-1 content-center">
               <SummaryItem icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} label="Migliore" value={bestSubject ? bestSubject[0] : '—'} sub={bestSubject ? `${bestSubject[1]}` : ''} darkMode={darkMode} />
               <SummaryItem icon={<TrendingDown className="w-4 h-4 text-red-400" />} label="Più debole" value={worstSubject ? worstSubject[0] : '—'} sub={worstSubject ? `${worstSubject[1]}` : ''} darkMode={darkMode} />
               <SummaryItem icon={<Award className="w-4 h-4 text-amber-400" />} label="Più studiata" value={mostStudied ? mostStudied[0] : '—'} sub={mostStudied ? `${Math.round(mostStudied[1] / 60)}h` : ''} darkMode={darkMode} />
@@ -164,7 +175,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         );
       case 'chart':
         return (
-          <div className={`${cardClass} p-6 h-full`}>
+          <div className={`${cardClass} p-6 h-full flex flex-col`}>
             <h3 className={`font-semibold mb-4 ${textColor}`}>Tempo studio per materia</h3>
             {studyChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
@@ -182,18 +193,18 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className={`text-sm ${subTextColor} text-center py-8`}>Nessun dato disponibile</p>
+              <p className={`text-sm ${subTextColor} text-center py-8 flex-1 flex items-center justify-center`}>Nessun dato disponibile</p>
             )}
           </div>
         );
       case 'notes':
         return (
-          <div className={`${cardClass} p-6 border-l-4 border-l-amber-500 h-full`}>
+          <div className={`${cardClass} p-6 border-l-4 border-l-amber-500 h-full flex flex-col`}>
             <h3 className={`font-semibold mb-2 ${textColor}`}>📝 Note rapide</h3>
             <textarea
               value={settings.notes}
               onChange={(e) => onUpdateSettings?.({ notes: e.target.value })}
-              className={`w-full h-24 rounded-lg p-3 text-sm resize-none ${darkMode ? 'bg-white/5 text-white border-white/10' : 'bg-black/5 text-gray-800 border-black/10'} border outline-none focus:border-indigo-500/50`}
+              className={`w-full min-h-24 flex-1 rounded-lg p-3 text-sm resize-none ${darkMode ? 'bg-white/5 text-white border-white/10' : 'bg-black/5 text-gray-800 border-black/10'} border outline-none focus:border-indigo-500/50`}
               placeholder="Scrivi qui le tue note rapide..."
             />
           </div>
@@ -285,7 +296,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         {visible.map((id, i) => {
           const widget = WIDGETS.find(w => w.id === id)!;
           return (
-            <div key={id} className={`relative ${widget.wide ? 'md:col-span-2' : ''} ${editing ? `rounded-2xl outline-2 outline-dashed outline-offset-4 ${darkMode ? 'outline-indigo-400/60' : 'outline-indigo-500/50'}` : ''}`}>
+            <div key={id} className={`relative h-full ${fullRow.has(id) ? 'md:col-span-2' : ''} ${editing ? `rounded-2xl outline-2 outline-dashed outline-offset-4 ${darkMode ? 'outline-indigo-400/60' : 'outline-indigo-500/50'}` : ''}`}>
               {editing && (
                 <div className="absolute -top-3 right-3 z-10 flex items-center gap-1">
                   {toolButton('Sposta su', <ChevronUp className="w-4 h-4" />, () => moveWidget(id, -1), i === 0)}
@@ -293,7 +304,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
                   {toolButton(`Nascondi ${widget.label}`, <EyeOff className="w-4 h-4" />, () => hideWidget(id))}
                 </div>
               )}
-              <div className={editing ? 'pointer-events-none select-none opacity-90' : ''}>{renderWidget(id)}</div>
+              <div className={`h-full ${editing ? 'pointer-events-none select-none opacity-90' : ''}`}>{renderWidget(id)}</div>
             </div>
           );
         })}
