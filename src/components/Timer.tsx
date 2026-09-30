@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, Save, Trash2, Palette, Plus } from 'lucide-react';
+import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw } from 'lucide-react';
+import { useDialog } from './Dialog';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import SubjectManager from './SubjectManager';
 import { StudySession, Grade, SubjectDef, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
@@ -41,6 +42,7 @@ function saveTimerState(state: TimerState | null): void {
 }
 
 export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects, onRenameSubject }: TimerProps) {
+  const dialog = useDialog();
   // Time is computed from timestamps (not by counting ticks), so it stays correct when the
   // tab is in background, and the state is saved so the timer survives changing section.
   const [saved] = useState(loadTimerState);
@@ -105,6 +107,17 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   };
 
   const subjectTimes = getSubjectStudyTime(sessions);
+
+  const resetStats = async () => {
+    const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
+    const ok = await dialog.confirm({
+      title: 'Azzerare le statistiche di studio?',
+      message: `Verranno eliminate tutte le ${sessions.length} sessioni registrate (${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}min in totale): ore settimanali, serie di giorni, grafici e tempo per materia ripartono da zero su tutti i dispositivi. Impegni, voti, materie e archivio non vengono toccati. L'operazione non si può annullare.`,
+      confirmLabel: 'Azzera tutto',
+      danger: true,
+    });
+    if (ok) onUpdate([]);
+  };
   const pieData = Object.entries(subjectTimes).map(([name, minutes]) => ({ name, value: minutes }));
 
   return (
@@ -182,7 +195,14 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
       </div>
 
       <div className={`${cardClass} p-6`}>
-        <h3 className={`font-semibold mb-4 ${textColor}`}>Sessioni recenti</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h3 className={`font-semibold ${textColor}`}>Sessioni recenti</h3>
+          {sessions.length > 0 && (
+            <button onClick={resetStats} className="text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25">
+              <RotateCcw className="w-3.5 h-3.5" /> Azzera statistiche
+            </button>
+          )}
+        </div>
         {sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {[...sessions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map(session => (
