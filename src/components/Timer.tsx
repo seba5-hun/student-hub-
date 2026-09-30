@@ -109,14 +109,15 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   const subjectTimes = getSubjectStudyTime(sessions);
 
   const resetStats = async () => {
-    const totalMinutes = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
     const ok = await dialog.confirm({
       title: 'Azzerare le statistiche di studio?',
-      message: `Verranno eliminate tutte le ${sessions.length} sessioni registrate (${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}min in totale): ore settimanali, serie di giorni, grafici e tempo per materia ripartono da zero su tutti i dispositivi. Impegni, voti, materie e archivio non vengono toccati. L'operazione non si può annullare.`,
+      message: 'Tutte le sessioni registrate vengono eliminate: ore settimanali, serie di giorni, grafici e tempo per materia ripartono da zero su tutti i dispositivi. Impegni, voti, materie e archivio non vengono toccati. L\'operazione non si può annullare.',
       confirmLabel: 'Azzera tutto',
       danger: true,
     });
-    if (ok) onUpdate([]);
+    if (!ok) return;
+    onUpdate([]);
+    reset();
   };
   const pieData = Object.entries(subjectTimes).map(([name, minutes]) => ({ name, value: minutes }));
 
@@ -197,11 +198,10 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
       <div className={`${cardClass} p-6`}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <h3 className={`font-semibold ${textColor}`}>Sessioni recenti</h3>
-          {sessions.length > 0 && (
-            <button onClick={resetStats} className="text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25">
-              <RotateCcw className="w-3.5 h-3.5" /> Azzera statistiche
-            </button>
-          )}
+          <button onClick={resetStats} disabled={sessions.length === 0 && seconds === 0} title={sessions.length === 0 && seconds === 0 ? 'Non ci sono ancora statistiche da azzerare' : undefined}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 disabled:opacity-40 disabled:cursor-not-allowed">
+            <RotateCcw className="w-3.5 h-3.5" /> Azzera statistiche
+          </button>
         </div>
         {sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
           <div className="space-y-2 max-h-64 overflow-y-auto">
