@@ -136,13 +136,11 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
     reset();
   };
 
-  const handleSave = () => {
-    if (seconds < 60) return;
-    const at = Date.now();
-    const final = commitRunning(at);
+  // Stops the timer and returns the minutes per subject, rounded so they add up to the total.
+  const stopAndCount = (): Record<string, number> => {
+    const final = commitRunning(Date.now());
     setStartedAt(null);
-    // Minutes per subject, rounded so that they add up to the total.
-    const totalMin = Math.round(Object.values(final).reduce((a, b) => a + b, 0) / 60000);
+    const totalMin = Math.round(Object.values(final).reduce((sum, ms) => sum + ms, 0) / 60000);
     const entries = Object.entries(final).filter(([, ms]) => ms > 0);
     const minutes: Record<string, number> = {};
     let used = 0;
@@ -151,16 +149,24 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
       minutes[name] = m;
       used += m;
     });
-    if (!minutes['']) {
-      saveParts(minutes);
-      return;
-    }
-    // Some time has no subject yet: open the split panel.
+    return minutes;
+  };
+
+  // Opens the split panel, starting from the current division.
+  const openSplit = (minutes: Record<string, number> = stopAndCount()) => {
     const draft: Record<string, number> = {};
     ownNames.forEach(n => { draft[n] = 0; });
     Object.entries(minutes).forEach(([n, m]) => { if (n) draft[n] = m; });
-    draft[''] = minutes[''];
+    draft[''] = minutes[''] || 0;
     setSplitting(draft);
+  };
+
+  const handleSave = () => {
+    if (seconds < 60) return;
+    const minutes = stopAndCount();
+    // Some time has no subject yet: it has to be split first.
+    if (minutes['']) openSplit(minutes);
+    else saveParts(minutes);
   };
 
   const formatTime = (s: number) => {
@@ -267,7 +273,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             onSave={() => saveParts(splitting)}
           />
         ) : (
-          <div className="flex items-center justify-center gap-4 mt-6">
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mt-6">
             {!isRunning ? (
               <button onClick={start} className="btn-primary flex items-center gap-2 px-6 py-3">
                 <Play className="w-5 h-5" /> {seconds > 0 ? 'Riprendi' : 'Avvia'}
@@ -280,6 +286,12 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             <button onClick={handleSave} disabled={seconds < 60} title={seconds < 60 ? 'Serve almeno 1 minuto' : undefined} className="px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold flex items-center gap-2 disabled:opacity-50">
               {unassignedMs > 0 ? <><Split className="w-5 h-5" /> Dividi e salva</> : <><Save className="w-5 h-5" /> Salva</>}
             </button>
+            {unassignedMs === 0 && (
+              <button onClick={() => openSplit()} disabled={seconds < 60} title="Cambia la divisione del tempo tra le materie"
+                className="px-4 py-3 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 font-semibold flex items-center gap-2 disabled:opacity-50">
+                <Split className="w-5 h-5" /> Dividi
+              </button>
+            )}
             <button onClick={reset} className={`px-4 py-3 rounded-xl ${darkMode ? 'bg-white/5 text-white/60' : 'bg-black/5 text-gray-500'}`}>
               Reset
             </button>
@@ -350,10 +362,27 @@ function SplitPanel({ draft, darkMode, subjectDefs, onChange, onCancel, onSave }
   const total = Object.values(draft).reduce((a, b) => a + b, 0);
   const assigned = total - left;
 
+  // Raising a subject takes the minutes still to assign first, then from the other subjects
+  // (largest first); lowering it gives the minutes back to "da assegnare".
   const set = (name: string, value: number) => {
     const current = draft[name] || 0;
-    const next = Math.max(0, Math.min(current + left, Math.round(value)));
-    onChange({ ...draft, [name]: next, '': left - (next - current) });
+    const target = Math.max(0, Math.min(total, Math.round(value)));
+    const next: Record<string, number> = { ...draft, [name]: target };
+    if (target <= current) {
+      next[''] = left + (current - target);
+    } else {
+      let need = target - current;
+      const fromLeft = Math.min(left, need);
+      next[''] = left - fromLeft;
+      need -= fromLeft;
+      names.filter(n => n !== name).sort((a, b) => (draft[b] || 0) - (draft[a] || 0)).forEach(n => {
+        if (need <= 0) return;
+        const take = Math.min(next[n] || 0, need);
+        next[n] = (next[n] || 0) - take;
+        need -= take;
+      });
+    }
+    onChange(next);
   };
   const even = () => {
     const chosen = names.filter(n => draft[n] > 0);
@@ -369,10 +398,11 @@ function SplitPanel({ draft, darkMode, subjectDefs, onChange, onCancel, onSave }
     <div className={`mt-6 text-left max-w-xl mx-auto rounded-2xl p-4 animate-scale-in ${darkMode ? 'bg-white/5 border border-white/10' : 'bg-black/5 border border-black/10'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h3 className={`font-semibold ${textColor}`}>Dividi {total} min tra le materie</h3>
-        <span className={`text-sm font-medium ${left > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+        <span title="Togli minuti a una materia per darli a un'altra" className={`text-sm font-medium ${left > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
           {left > 0 ? `Da assegnare: ${left} min` : 'Tutto assegnato ✓'}
         </span>
       </div>
+      <p className={`text-xs mb-3 ${subTextColor}`}>Sposta i cursori: i minuti in più vengono presi dal tempo da assegnare o dalle altre materie.</p>
       {names.length === 0 ? (
         <p className={`text-sm ${subTextColor}`}>Aggiungi prima le tue materie con “Le mie materie”.</p>
       ) : (
@@ -390,7 +420,7 @@ function SplitPanel({ draft, darkMode, subjectDefs, onChange, onCancel, onSave }
                   className={`p-1 rounded-lg disabled:opacity-30 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}><Minus className="w-3.5 h-3.5" /></button>
                 <input type="number" min={0} value={value} onChange={e => set(name, Number(e.target.value) || 0)} aria-label={`Minuti ${name}`}
                   className={`${darkMode ? 'input-glass' : 'input-light'} w-16 text-center text-sm py-1 px-1`} />
-                <button type="button" onClick={() => set(name, value + 5)} disabled={left === 0} aria-label={`Aggiungi 5 minuti a ${name}`}
+                <button type="button" onClick={() => set(name, value + 5)} disabled={value >= total} aria-label={`Aggiungi 5 minuti a ${name}`}
                   className={`p-1 rounded-lg disabled:opacity-30 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}><Plus className="w-3.5 h-3.5" /></button>
                 <button type="button" onClick={() => set(name, value + left)} disabled={left === 0}
                   className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-30 whitespace-nowrap">+ resto</button>
