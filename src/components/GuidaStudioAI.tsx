@@ -65,7 +65,7 @@ function studentContext(data: UserData): string {
   const activeTasks = tasks.filter((t: Task) => !t.done);
   if (activeTasks.length > 0) {
     context += '\nIMPEGNI IN PROGRAMMA:\n';
-    activeTasks.forEach((t: Task) => { context += `- ${t.title} (${t.date}${t.subject ? `, ${t.subject}` : ''})\n`; });
+    activeTasks.forEach((t: Task) => { context += `- ${t.title} (${t.date}${t.time ? ` ore ${t.time}` : ''}${t.subject ? `, ${t.subject}` : ''})\n`; });
   }
   return context;
 }

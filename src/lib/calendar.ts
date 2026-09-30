@@ -12,8 +12,12 @@ export function generateICS(tasks: Task[]): string {
   ];
 
   tasks.forEach(task => {
-    const startDate = new Date(task.date + 'T09:00:00');
-    const endDate = new Date(startDate.getTime() + task.estimatedTime * 60000);
+    const startDate = new Date(`${task.date}T${task.time || '09:00'}:00`);
+    let endDate = new Date(startDate.getTime() + (task.estimatedTime || 60) * 60000);
+    if (task.time && task.endTime) {
+      const end = new Date(`${task.endDate || task.date}T${task.endTime}:00`);
+      if (end > startDate) endDate = end;
+    }
     
     const formatDate = (date: Date) => {
       return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw } from 'lucide-react';
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, parseDate, formatDate } from '../lib/store';
+import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDate, formatTaskTime, compareTasks } from '../lib/store';
 
 // Panels of the Home page, in their default order. `wide` panels take the full row.
 const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
@@ -26,7 +26,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
   const { tasks, grades, sessions, settings } = data;
   const quote = useMemo(() => getRandomQuote(), []);
 
-  const activeTasks = tasks.filter(t => !t.done).sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+  const activeTasks = tasks.filter(t => !t.done).sort(compareTasks);
   const avgGrade = grades.length > 0 ? (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1) : '—';
   const totalHours = (sessions.reduce((s, ss) => s + ss.duration, 0) / 60).toFixed(1);
   const streak = getStudyStreak(sessions);
@@ -163,7 +163,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
                     <div key={task.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'} border-l-3`} style={{ borderLeftColor: imp.color }}>
                       <div>
                         <p className={`text-sm font-medium ${textColor}`}>{task.title}</p>
-                        <p className={`text-xs ${subTextColor}`}>{formatDate(task.date)}</p>
+                        <p className={`text-xs ${subTextColor}`}>{formatDate(task.date)}{task.time ? ` · 🕒 ${formatTaskTime(task)}` : ''}</p>
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full ${imp.bg} ${imp.text}`}>{imp.label}</span>
                     </div>

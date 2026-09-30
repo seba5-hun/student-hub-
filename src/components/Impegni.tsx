@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Check, Clock } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId, parseDate, formatDate } from '../lib/store';
+import { Task, IMPORTANCE_CONFIG, createId, formatDate, formatTaskTime, compareTasks } from '../lib/store';
 
 interface ImpegniProps {
   tasks: Task[];
@@ -14,6 +14,9 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(prefillDate || '');
   const [endDate, setEndDate] = useState('');
+  const [time, setTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [isMultiDay, setIsMultiDay] = useState(false);
   const [type, setType] = useState<'scolastico' | 'personale'>('scolastico');
   const [importance, setImportance] = useState<1 | 2 | 3 | 4 | 5>(2);
@@ -33,12 +36,18 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
       setFormError('La data di fine non può essere prima della data di inizio.');
       return;
     }
+    if (time && endTime && endTime <= time && !(isMultiDay && endDate && endDate > date)) {
+      setFormError('L\'orario di fine deve essere dopo quello di inizio.');
+      return;
+    }
     setFormError('');
     const newTask: Task = {
       id: createId(),
       title: title.trim(),
       date,
       endDate: isMultiDay && endDate ? endDate : undefined,
+      time: time || undefined,
+      endTime: time && endTime ? endTime : undefined,
       type,
       importance,
       estimatedTime: Math.max(0, estimatedTime || 0),
@@ -49,6 +58,8 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
     setTitle('');
     setDate('');
     setEndDate('');
+    setTime('');
+    setEndTime('');
     setIsMultiDay(false);
     setSubject('');
     setEstimatedTime(60);
@@ -59,11 +70,17 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
     onUpdate(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
   };
 
+  const setTaskTime = (id: string, value: string) => {
+    onUpdate(tasks.map(t => t.id === id
+      ? { ...t, time: value || undefined, endTime: value && t.endTime && t.endTime > value ? t.endTime : undefined }
+      : t));
+  };
+
   const deleteTask = (id: string) => {
     onUpdate(tasks.filter(t => t.id !== id));
   };
 
-  const pendingTasks = tasks.filter(t => !t.done).sort((a, b) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+  const pendingTasks = tasks.filter(t => !t.done).sort(compareTasks);
   const subjectOptions = [...new Set([...knownSubjects, ...tasks.map(t => t.subject).filter((s): s is string => !!s)])].sort();
   const doneTasks = tasks.filter(t => t.done);
 
@@ -87,6 +104,17 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Data inizio</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} required />
+            </div>
+            <div>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>Orario (opzionale)</label>
+              <div className="flex items-center gap-2">
+                <input type="time" value={time} onChange={e => setTime(e.target.value)} aria-label="Orario di inizio" className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 min-w-0`} />
+                <span className={`text-sm ${subTextColor}`}>–</span>
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} disabled={!time} aria-label="Orario di fine (opzionale)" title="Fine (opzionale)" className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 min-w-0 disabled:opacity-40`} />
+                {time && (
+                  <button type="button" onClick={() => { setTime(''); setEndTime(''); }} className={`text-xs ${subTextColor} hover:underline`}>Togli</button>
+                )}
+              </div>
             </div>
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Tipo</label>
@@ -147,8 +175,24 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
               <button onClick={() => toggleDone(task.id)} aria-label="Segna come completato" className={`w-6 h-6 rounded-full flex-shrink-0 border-2 ${darkMode ? 'border-white/30' : 'border-gray-300'}`}></button>
               <div className="flex-1">
                 <p className={`font-medium ${textColor}`}>{task.title}</p>
-                <div className="flex items-center gap-3 mt-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                   <span className={`text-xs ${subTextColor}`}>{formatDate(task.date)}{task.endDate ? ` → ${formatDate(task.endDate)}` : ''}</span>
+                  {editingTimeId === task.id ? (
+                    <input type="time" autoFocus defaultValue={task.time || ''} aria-label="Orario"
+                      onChange={e => setTaskTime(task.id, e.target.value)}
+                      onBlur={() => setEditingTimeId(null)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingTimeId(null); }}
+                      className={`${darkMode ? 'input-glass' : 'input-light'} text-xs py-0.5 px-2`} />
+                  ) : task.time ? (
+                    <button onClick={() => setEditingTimeId(task.id)} title="Cambia orario"
+                      className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 flex items-center gap-1 hover:bg-indigo-500/25">
+                      <Clock className="w-3 h-3" />{formatTaskTime(task)}
+                    </button>
+                  ) : (
+                    <button onClick={() => setEditingTimeId(task.id)} className={`text-xs flex items-center gap-1 ${subTextColor} hover:text-indigo-400`}>
+                      <Clock className="w-3 h-3" />+ orario
+                    </button>
+                  )}
                   {task.subject && <span className={`text-xs ${subTextColor}`}>{task.subject}</span>}
                   <span className={`text-xs px-2 py-0.5 rounded-full ${imp.bg} ${imp.text}`}>{imp.label}</span>
                 </div>
@@ -172,6 +216,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
                   </button>
                   <div className="flex-1">
                     <p className={`font-medium line-through ${textColor}`}>{task.title}</p>
+                    {task.time && <p className={`text-xs ${subTextColor}`}>{formatDate(task.date)} · {formatTaskTime(task)}</p>}
                   </div>
                   <button onClick={() => deleteTask(task.id)} className="p-2 text-red-400">
                     <Trash2 className="w-4 h-4" />

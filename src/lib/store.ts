@@ -6,6 +6,8 @@ export interface Task {
   title: string;
   date: string;
   endDate?: string;
+  time?: string;    // "HH:MM", optional
+  endTime?: string; // "HH:MM", optional
   type: 'scolastico' | 'personale';
   importance: 1 | 2 | 3 | 4 | 5;
   estimatedTime: number;
@@ -145,6 +147,17 @@ export function dateKeyOf(value: string): string {
 
 export function formatDate(value: string): string {
   return parseDate(value).toLocaleDateString('it-IT');
+}
+
+// "15:30" or "15:30 – 17:00"; empty when the task has no time.
+export function formatTaskTime(task: Pick<Task, 'time' | 'endTime'>): string {
+  if (!task.time) return '';
+  return task.endTime ? `${task.time} – ${task.endTime}` : task.time;
+}
+
+// By date, then by time (tasks without a time come first in their day).
+export function compareTasks(a: Task, b: Task): number {
+  return parseDate(a.date).getTime() - parseDate(b.date).getTime() || (a.time || '').localeCompare(b.time || '');
 }
 
 export function normalizeData(parsed: any): UserData {

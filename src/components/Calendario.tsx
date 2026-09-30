@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download, Plus, X } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey } from '../lib/store';
+import { ChevronLeft, ChevronRight, Clock, Download, Plus, X } from 'lucide-react';
+import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey, formatTaskTime, compareTasks } from '../lib/store';
 import { downloadICS } from '../lib/calendar';
 import { useDialog } from './Dialog';
 
@@ -18,6 +18,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAddDate, setQuickAddDate] = useState('');
   const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [quickAddTime, setQuickAddTime] = useState('');
   const [quickAddType, setQuickAddType] = useState<'scolastico' | 'personale'>('scolastico');
   const [quickAddImportance, setQuickAddImportance] = useState<1 | 2 | 3 | 4 | 5>(2);
 
@@ -50,7 +51,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
     return map;
   }, [tasks]);
 
-  const selectedTasks = selectedDay ? (tasksByDate[selectedDay] || []) : [];
+  const selectedTasks = selectedDay ? [...(tasksByDate[selectedDay] || [])].sort(compareTasks) : [];
   const today = todayKey();
 
   const calendarDays = [];
@@ -65,9 +66,9 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
 
   const handleQuickAdd = () => {
     if (!quickAddTitle.trim() || !quickAddDate) return;
-    const newTask: Task = { id: createId(), title: quickAddTitle.trim(), date: quickAddDate, type: quickAddType, importance: quickAddImportance, estimatedTime: 60, done: false };
+    const newTask: Task = { id: createId(), title: quickAddTitle.trim(), date: quickAddDate, type: quickAddType, importance: quickAddImportance, estimatedTime: 60, done: false, time: quickAddTime || undefined };
     if (onAddTask) onAddTask(newTask);
-    setQuickAddTitle(''); setQuickAddType('scolastico'); setQuickAddImportance(2); setShowQuickAdd(false);
+    setQuickAddTitle(''); setQuickAddTime(''); setQuickAddType('scolastico'); setQuickAddImportance(2); setShowQuickAdd(false);
   };
 
   const openQuickAdd = (date?: string) => {
@@ -139,6 +140,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: imp.color }} />
                     <div className="flex-1">
                       <p className={`text-sm font-medium ${task.done ? 'line-through opacity-60' : ''} ${textColor}`}>{task.title}</p>
+                      {task.time && <span className="text-xs font-medium text-indigo-400 flex items-center gap-1"><Clock className="w-3 h-3" />{formatTaskTime(task)}</span>}
                       <span className={`text-xs ${subTextColor}`}>{task.type} • {imp.label}</span>
                     </div>
                   </div>
@@ -171,7 +173,10 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
             </div>
             <div className="space-y-4">
               <input type="text" value={quickAddTitle} onChange={e => setQuickAddTitle(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="Titolo" autoFocus />
-              <input type="date" value={quickAddDate} onChange={e => setQuickAddDate(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} />
+              <div className="flex gap-2">
+                <input type="date" value={quickAddDate} onChange={e => setQuickAddDate(e.target.value)} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 min-w-0`} />
+                <input type="time" value={quickAddTime} onChange={e => setQuickAddTime(e.target.value)} aria-label="Orario (opzionale)" title="Orario (opzionale)" className={`${darkMode ? 'input-glass' : 'input-light'} w-32`} />
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => setQuickAddType('scolastico')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'scolastico' ? 'bg-indigo-500 text-white' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>📚 Scolastico</button>
                 <button onClick={() => setQuickAddType('personale')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'personale' ? 'bg-indigo-500 text-white' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>👤 Personale</button>
