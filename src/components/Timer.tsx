@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus } from 'lucide-react';
 import { useDialog } from './Dialog';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -176,7 +176,6 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
 
-  const subjectTimes = getSubjectStudyTime(sessions);
 
   const resetStats = async () => {
     const ok = await dialog.confirm({
@@ -189,7 +188,50 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
     onUpdate([]);
     reset();
   };
-  const pieData = Object.entries(subjectTimes).map(([name, minutes]) => ({ name, value: minutes }));
+
+  // The chart and the list don't depend on the running time: memoized so the timer ticking
+  // every second doesn't redraw them.
+  const distribution = useMemo(() => {
+    const pieData = Object.entries(getSubjectStudyTime(sessions)).map(([name, minutes]) => ({ name, value: minutes }));
+    return (
+      <div className={`${cardClass} p-6`}>
+        <h3 className={`font-semibold mb-4 ${textColor}`}>Distribuzione tempo</h3>
+        {pieData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                {pieData.map(d => <Cell key={d.name} fill={subjectColor(d.name, subjectDefs)} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background: darkMode ? '#1f2937' : '#fff', border: 'none', borderRadius: '8px' }} formatter={(val: number) => `${Math.round(val)}min`} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : <p className={`text-sm ${subTextColor} text-center py-8`}>Nessuna sessione</p>}
+      </div>
+    );
+  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor]);
+
+  const recentList = useMemo(() => (
+        sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {[...sessions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map(session => (
+              <div key={session.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: subjectColor(session.subject, subjectDefs) }}>
+                    {session.subject[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <p className={`text-sm font-medium ${textColor}`}>{session.subject}</p>
+                    <p className={`text-xs ${subTextColor}`}>{formatDate(session.date)} • {session.duration}min</p>
+                  </div>
+                </div>
+                <button onClick={() => onUpdate(sessions.filter(s => s.id !== session.id))} className="p-2 text-red-400">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )
+  ), [sessions, subjectDefs, darkMode, textColor, subTextColor, onUpdate]);
 
   return (
     <div className="space-y-6">
@@ -299,19 +341,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
         )}
       </div>
 
-      <div className={`${cardClass} p-6`}>
-        <h3 className={`font-semibold mb-4 ${textColor}`}>Distribuzione tempo</h3>
-        {pieData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                {pieData.map(d => <Cell key={d.name} fill={subjectColor(d.name, subjectDefs)} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: darkMode ? '#1f2937' : '#fff', border: 'none', borderRadius: '8px' }} formatter={(val: number) => `${Math.round(val)}min`} />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : <p className={`text-sm ${subTextColor} text-center py-8`}>Nessuna sessione</p>}
-      </div>
+      {distribution}
 
       <div className={`${cardClass} p-6`}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -321,26 +351,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             <RotateCcw className="w-3.5 h-3.5" /> Azzera statistiche
           </button>
         </div>
-        {sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {[...sessions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map(session => (
-              <div key={session.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold" style={{ backgroundColor: subjectColor(session.subject, subjectDefs) }}>
-                    {session.subject[0]?.toUpperCase()}
-                  </div>
-                  <div>
-                    <p className={`text-sm font-medium ${textColor}`}>{session.subject}</p>
-                    <p className={`text-xs ${subTextColor}`}>{formatDate(session.date)} • {session.duration}min</p>
-                  </div>
-                </div>
-                <button onClick={() => onUpdate(sessions.filter(s => s.id !== session.id))} className="p-2 text-red-400">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        {recentList}
       </div>
     </div>
   );

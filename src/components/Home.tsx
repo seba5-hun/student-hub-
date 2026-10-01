@@ -328,7 +328,7 @@ function StatCard({ icon, label, value, color, darkMode }: { icon: React.ReactNo
   };
 
   return (
-    <div className={`rounded-xl p-4 bg-gradient-to-br ${colors[color]} border backdrop-blur-xl`}>
+    <div className={`rounded-xl p-4 bg-gradient-to-br ${colors[color]} border`}>
       <div className={`${iconColors[color]} mb-2`}>{icon}</div>
       <p className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{value}</p>
       <p className={`text-xs ${darkMode ? 'text-white/60' : 'text-gray-500'}`}>{label}</p>

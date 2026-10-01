@@ -115,7 +115,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                  <div className={`absolute right-0 top-10 w-56 rounded-xl ${darkMode ? 'bg-gray-900/95 border-white/10' : 'bg-white border-black/10'} border backdrop-blur-xl shadow-xl z-50 animate-scale-in overflow-hidden`}>
+                  <div className={`absolute right-0 top-10 w-56 rounded-xl ${darkMode ? 'bg-gray-900/95 border-white/10' : 'bg-white border-black/10'} border shadow-xl z-50 animate-scale-in overflow-hidden`}>
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
                       <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{user.email}</p>
                     </div>
@@ -138,7 +138,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 sidebar-overlay" onClick={() => setSidebarOpen(false)}>
-          <div className={`h-full w-72 ${darkMode ? 'bg-gray-900/95' : 'bg-white/95'} backdrop-blur-xl border-r ${darkMode ? 'border-white/10' : 'border-black/5'} animate-slide-in`} onClick={e => e.stopPropagation()}>
+          <div className={`h-full w-72 ${darkMode ? 'bg-gray-900/95' : 'bg-white/95'} border-r shadow-2xl ${darkMode ? 'border-white/10' : 'border-black/5'} animate-slide-in`} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
@@ -174,7 +174,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
       )}
 
       <main className="pt-14 pb-8 px-4 max-w-7xl mx-auto">
-        <div className="animate-fade-in">{children}</div>
+        <div key={currentSection} className="animate-section-in">{children}</div>
       </main>
     </div>
   );

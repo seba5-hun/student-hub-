@@ -1,18 +1,45 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
 import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Home from './components/Home';
-import Impegni from './components/Impegni';
-import Voti from './components/Voti';
-import Timer from './components/Timer';
-import Archivio from './components/Archivio';
-import CosaStudiare from './components/CosaStudiare';
-import Calendario from './components/Calendario';
-import GuidaStudioAI from './components/GuidaStudioAI';
+// Sections are downloaded separately (the first page opens faster) and preloaded in the
+// background right after login, so switching section stays instant.
+const loaders = {
+  impegni: () => import('./components/Impegni'),
+  voti: () => import('./components/Voti'),
+  timer: () => import('./components/Timer'),
+  archivio: () => import('./components/Archivio'),
+  cosaStudiare: () => import('./components/CosaStudiare'),
+  calendario: () => import('./components/Calendario'),
+  guida: () => import('./components/GuidaStudioAI'),
+  admin: () => import('./components/AdminPanel'),
+};
+const Impegni = lazy(loaders.impegni);
+const Voti = lazy(loaders.voti);
+const Timer = lazy(loaders.timer);
+const Archivio = lazy(loaders.archivio);
+const CosaStudiare = lazy(loaders.cosaStudiare);
+const Calendario = lazy(loaders.calendario);
+const GuidaStudioAI = lazy(loaders.guida);
+const AdminPanel = lazy(loaders.admin);
+
+function preloadSections() {
+  const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 3000 });
+  else window.setTimeout(run, 1500);
+}
+
+function SectionFallback() {
+  return (
+    <div className="py-24 flex justify-center">
+      <div className="w-8 h-8 rounded-full border-2 border-indigo-400/30 border-t-indigo-400 animate-spin" />
+    </div>
+  );
+}
 import { useDialog } from './components/Dialog';
-import AdminPanel from './components/AdminPanel';
 import { AccountStatus, fetchMyStatus, loadAdminUsers } from './lib/admin';
 import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
@@ -79,6 +106,7 @@ function App() {
   // Load the user's data from Supabase. The first time, upload what this browser already has.
   const loadUser = useCallback(async (authUser: AuthUser) => {
     setUser(authUser);
+    preloadSections();
     setLoadError('');
     try {
       // Accounts not approved by the admin see only the waiting screen (the server refuses
@@ -550,6 +578,7 @@ function App() {
           }
         }}
       >
+        <Suspense fallback={<SectionFallback />}>
         {currentSection === 'home' && (
           <Home
             data={data}
@@ -613,6 +642,7 @@ function App() {
             onOpenArchive={() => handleSectionChange('archivio')}
           />
         )}
+        </Suspense>
       </Layout>
       <SaveIndicator />
     </>

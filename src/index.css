@@ -48,8 +48,13 @@ body {
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
+  from { transform: scale(0.96); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sectionIn {
+  from { transform: translate3d(0, 10px, 0); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }
 
 @keyframes pulseGlow {
@@ -80,19 +85,17 @@ body {
    layer they would win over every utility (e.g. input icons ended up on top of the text). */
 @layer components {
   /* Glassmorphism Cards */
+  /* No backdrop-filter: the cards sit on a soft gradient, where a blur is almost invisible
+     but has to be recomputed for every card at every scroll frame (the main cause of lag). */
   .glass-card {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.06));
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 1rem;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   }
 
   .glass-card-light {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 1rem;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
@@ -117,11 +120,29 @@ body {
   /* Both classes set `background`, so used together the later one would replace the other
      and the page would show through (white text on an almost white page in dark mode).
      The combined rules draw the mesh on top of the base gradient. */
-  .gradient-bg.mesh-gradient {
+  /* The background is painted once on a fixed layer behind the page, so scrolling doesn't
+     have to repaint a gradient as tall as the whole page. */
+  .gradient-bg.mesh-gradient,
+  .gradient-bg-light.mesh-gradient-light {
+    background: none;
+    isolation: isolate;
+  }
+
+  .gradient-bg.mesh-gradient::before,
+  .gradient-bg-light.mesh-gradient-light::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    transform: translateZ(0);
+  }
+
+  .gradient-bg.mesh-gradient::before {
     background: var(--mesh-dark), var(--bg-dark);
   }
 
-  .gradient-bg-light.mesh-gradient-light {
+  .gradient-bg-light.mesh-gradient-light::before {
     background: var(--mesh-light), var(--bg-light);
   }
 
@@ -131,11 +152,19 @@ body {
   }
 
   .animate-slide-in {
-    animation: slideIn 0.3s ease-out;
+    animation: slideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
   }
 
   .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+    animation: scaleIn 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Entrance of every section */
+  .animate-section-in {
+    /* "backwards", not "both": a transform left on the wrapper would break the
+       position: fixed elements inside the sections (fullscreen chat, dialogs). */
+    animation: sectionIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 
   .animate-pulse-glow {
@@ -151,7 +180,7 @@ body {
     padding: 0.625rem 1.25rem;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
     box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
   }
 
@@ -172,7 +201,7 @@ body {
     padding: 0.625rem 1rem;
     color: white;
     outline: none;
-    transition: all 0.2s;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .input-glass:focus {
@@ -187,7 +216,7 @@ body {
     padding: 0.625rem 1rem;
     color: #1f2937;
     outline: none;
-    transition: all 0.2s;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .input-light:focus {
@@ -197,8 +226,8 @@ body {
 
   /* Sidebar Overlay */
   .sidebar-overlay {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.55);
+    animation: fadeIn 0.3s ease-out;
   }
 
   /* Progress Ring */
@@ -209,7 +238,7 @@ body {
   /* Heatmap */
   .heatmap-cell {
     border-radius: 3px;
-    transition: all 0.2s;
+    transition: transform 0.2s ease;
   }
 
   .heatmap-cell:hover {
@@ -217,3 +246,11 @@ body {
   }
 }
 
+
+/* Respect the system setting "reduce motion" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
