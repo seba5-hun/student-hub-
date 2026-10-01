@@ -328,33 +328,7 @@ export function getHeatmapData(sessions: StudySession[]): Record<string, number>
   return data;
 }
 
-export function generateDemoData(): UserData {
-  const today = new Date();
-  const d = (offset: number) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() + offset);
-    return toDateKey(date);
-  };
-
-  return {
-    tasks: [
-      { id: createId(), title: 'Compito di Matematica', date: d(2), type: 'scolastico', importance: 4, estimatedTime: 120, done: false, subject: 'Matematica' },
-      { id: createId(), title: 'Interrogazione Storia', date: d(4), type: 'scolastico', importance: 5, estimatedTime: 90, done: false, subject: 'Storia' },
-    ],
-    grades: [
-      { id: createId(), subject: 'Matematica', value: 7.5, description: 'Verifica', date: d(-10) },
-      { id: createId(), subject: 'Storia', value: 8, description: 'Tema', date: d(-5) },
-    ],
-    sessions: [
-      { id: createId(), subject: 'Matematica', duration: 45, date: d(-1) },
-      { id: createId(), subject: 'Storia', duration: 30, date: d(-1) },
-    ],
-    archive: [],
-    settings: {
-      darkMode: true,
-      weeklyGoal: 15,
-      colorTheme: 'default',
-      notes: 'Benvenuto in Student Hub!',
-    },
-  };
+// A new account starts empty: no example tasks, grades or study sessions.
+export function createEmptyData(): UserData {
+  return normalizeData({});
 }

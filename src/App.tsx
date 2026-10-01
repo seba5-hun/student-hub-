@@ -49,7 +49,7 @@ import {
   todayKey,
   loadCachedData,
   findLegacyLocalData,
-  generateDemoData,
+  createEmptyData,
   usedSubjectNames,
   nextSubjectColor,
   SubjectDef,
@@ -126,7 +126,7 @@ function App() {
         } else {
           // Not saved until the first change: if the account is opened from another browser
           // (e.g. the confirmation link), the old data can still be uploaded from the right one.
-          userData = generateDemoData();
+          userData = createEmptyData();
         }
       }
       setData(userData);
