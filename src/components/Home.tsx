@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw } from 'lucide-react';
+import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw } from 'lucide-react';
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDate, formatTaskTime, compareTasks } from '../lib/store';
@@ -111,28 +111,9 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
         );
       case 'goal':
         return (
-          <div className={`${cardClass} p-6 flex items-center justify-center sm:justify-start gap-6 h-full`}>
-            <div className="relative">
-              <svg width="110" height="110" className="transform -rotate-90">
-                <circle cx="55" cy="55" r="45" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth="8" fill="none" />
-                <circle cx="55" cy="55" r="45" stroke="url(#goalGrad)" strokeWidth="8" fill="none"
-                  strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" className="progress-ring" />
-                <defs>
-                  <linearGradient id="goalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#6366f1" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className={`text-lg font-bold ${textColor}`}>{Math.round(goalProgress)}%</span>
-              </div>
-            </div>
-            <div>
-              <h3 className={`font-semibold ${textColor}`}>Obiettivo Settimanale</h3>
-              <p className={`text-sm ${subTextColor}`}>{weeklyHours.toFixed(1)}h / {settings.weeklyGoal}h</p>
-            </div>
-          </div>
+          <GoalCard weeklyHours={weeklyHours} goal={settings.weeklyGoal} progress={goalProgress}
+            circumference={circumference} strokeDashoffset={strokeDashoffset} darkMode={darkMode}
+            onChange={onUpdateSettings ? (weeklyGoal) => onUpdateSettings({ weeklyGoal }) : undefined} />
         );
       case 'summary':
         return (
@@ -342,6 +323,108 @@ function SummaryItem({ icon, label, value, sub, darkMode }: { icon: React.ReactN
       <div className="flex items-center gap-1 mb-1">{icon}<span className={`text-xs ${darkMode ? 'text-white/60' : 'text-gray-500'}`}>{label}</span></div>
       <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{value}</p>
       <p className={`text-xs ${darkMode ? 'text-white/40' : 'text-gray-400'}`}>{sub}</p>
+    </div>
+  );
+}
+
+const GOAL_PRESETS = [5, 10, 15, 20, 30];
+
+// Weekly goal ring; the pencil opens an inline editor (stepper, presets, slider).
+function GoalCard({ weeklyHours, goal, progress, circumference, strokeDashoffset, darkMode, onChange }: {
+  weeklyHours: number;
+  goal: number;
+  progress: number;
+  circumference: number;
+  strokeDashoffset: number;
+  darkMode: boolean;
+  onChange?: (hours: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(goal);
+  const textColor = darkMode ? 'text-white' : 'text-gray-800';
+  const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
+  const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
+  const chip = darkMode ? 'bg-white/10 hover:bg-white/15 text-white/80' : 'bg-black/5 hover:bg-black/10 text-gray-600';
+  const clamp = (h: number) => Math.max(1, Math.min(100, Math.round(h)));
+  // While editing, the ring and the numbers preview the new goal.
+  const shownGoal = editing ? clamp(draft) : goal;
+  const shownProgress = editing ? Math.min((weeklyHours / shownGoal) * 100, 100) : progress;
+  const shownOffset = editing ? circumference - (shownProgress / 100) * circumference : strokeDashoffset;
+  const left = Math.max(0, goal - weeklyHours);
+
+  const open = () => { setDraft(goal || 10); setEditing(true); };
+  const save = () => { onChange?.(clamp(draft)); setEditing(false); };
+
+  return (
+    <div className={`${cardClass} p-6 h-full flex flex-col justify-center relative`}>
+      {onChange && !editing && (
+        <button onClick={open} aria-label="Modifica obiettivo settimanale" title="Modifica obiettivo"
+          className={`absolute top-3 right-3 p-2 rounded-lg transition-colors ${darkMode ? 'text-white/50 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-gray-700 hover:bg-black/5'}`}>
+          <Pencil className="w-4 h-4" />
+        </button>
+      )}
+      <div className="flex items-center justify-center sm:justify-start gap-6">
+        <div className="relative flex-shrink-0">
+          <svg width="110" height="110" className="transform -rotate-90">
+            <circle cx="55" cy="55" r="45" stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} strokeWidth="8" fill="none" />
+            <circle cx="55" cy="55" r="45" stroke="url(#goalGrad)" strokeWidth="8" fill="none"
+              strokeDasharray={circumference} strokeDashoffset={shownOffset} strokeLinecap="round" className="progress-ring" />
+            <defs>
+              <linearGradient id="goalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6366f1" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={`text-lg font-bold ${textColor}`}>{Math.round(shownProgress)}%</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <h3 className={`font-semibold ${textColor}`}>Obiettivo Settimanale</h3>
+          <p className={`text-sm ${subTextColor}`}>{weeklyHours.toFixed(1)}h / <span className="transition-colors">{shownGoal}h</span></p>
+          {!editing && goal > 0 && (
+            <p className={`text-xs mt-1 ${left === 0 ? 'text-emerald-400' : subTextColor}`}>
+              {left === 0 ? 'Obiettivo raggiunto 🎉' : `Mancano ${left.toFixed(1)}h negli ultimi 7 giorni`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {editing && (
+        <div className={`mt-5 pt-4 border-t animate-scale-in ${darkMode ? 'border-white/10' : 'border-black/10'}`}>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => setDraft(d => clamp(d - 1))} aria-label="Un'ora in meno" className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${chip}`}>
+              <Minus className="w-4 h-4" />
+            </button>
+            <div className="flex items-baseline gap-1">
+              <input type="number" min={1} max={100} value={draft} aria-label="Ore a settimana"
+                onChange={e => setDraft(Number(e.target.value) || 0)}
+                onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false); }}
+                className={`w-16 text-center text-2xl font-bold bg-transparent outline-none ${textColor}`} />
+              <span className={`text-sm ${subTextColor}`}>ore / settimana</span>
+            </div>
+            <button onClick={() => setDraft(d => clamp(d + 1))} aria-label="Un'ora in più" className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${chip}`}>
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <input type="range" min={1} max={60} value={Math.min(draft, 60)} onChange={e => setDraft(Number(e.target.value))}
+            aria-label="Obiettivo in ore" className="w-full mt-4 accent-indigo-500" />
+          <div className="flex flex-wrap justify-center gap-2 mt-3">
+            {GOAL_PRESETS.map(h => (
+              <button key={h} onClick={() => setDraft(h)}
+                className={`text-xs px-3 py-1 rounded-full transition-colors ${draft === h ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : chip}`}>
+                {h}h
+              </button>
+            ))}
+          </div>
+          <p className={`text-xs text-center mt-3 ${subTextColor}`}>Circa {(clamp(draft) / 7).toFixed(1)}h al giorno</p>
+          <div className="flex justify-end gap-2 mt-4">
+            <button onClick={() => setEditing(false)} className={`px-4 py-2 rounded-lg text-sm ${subTextColor}`}>Annulla</button>
+            <button onClick={save} className="btn-primary text-sm">Salva</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
