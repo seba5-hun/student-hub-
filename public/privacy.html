@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy · Student Hub</title>
+  <link rel="icon" href="/icon.svg">
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; font-family: Inter, system-ui, -apple-system, sans-serif; line-height: 1.65;
+      color: rgba(255,255,255,0.85);
+      background:
+        radial-gradient(at 20% 20%, rgba(99,102,241,0.3) 0%, transparent 50%),
+        radial-gradient(at 80% 80%, rgba(59,130,246,0.2) 0%, transparent 50%),
+        linear-gradient(135deg, #0f0c29 0%, #1a1145 25%, #302b63 50%, #24243e 75%, #0f0c29 100%) fixed;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 28px; }
+    h1 { color: #fff; font-size: 2rem; margin: 0 0 4px; }
+    h2 { color: #fff; font-size: 1.15rem; margin: 28px 0 8px; }
+    p, li { font-size: 0.97rem; }
+    ul { padding-left: 1.2rem; }
+    a { color: #a5b4fc; }
+    .muted { color: rgba(255,255,255,0.55); font-size: 0.9rem; }
+    .back { display: inline-block; margin-bottom: 20px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← Torna a Student Hub</a>
+    <div class="card">
+      <h1>Informativa sulla privacy</h1>
+      <p class="muted">Ultimo aggiornamento: 2 ottobre 2026</p>
+
+      <p>Student Hub è un'app per organizzare lo studio: impegni, voti, timer, archivio dei materiali e un tutor AI.
+      Questa pagina spiega quali dati usa e come.</p>
+
+      <h2>Dati che salviamo</h2>
+      <ul>
+        <li><b>Account</b>: indirizzo email e password (gestita in forma cifrata dal servizio di autenticazione Supabase).</li>
+        <li><b>Dati di studio</b>: impegni, voti, sessioni di studio, materie, note e impostazioni che inserisci tu.</li>
+        <li><b>Archivio</b>: i file che carichi e il loro testo trascritto, usato dal tutor AI.</li>
+        <li><b>Chat</b> con la Guida Studio AI.</li>
+        <li><b>Statistiche d'uso anonime</b>: quali sezioni vengono aperte e per quanto tempo, il tipo di dispositivo.
+        Non registriamo il contenuto di note, file o chat nelle statistiche.</li>
+      </ul>
+      <p>I dati sono conservati su Supabase (database e spazio file) e ogni utente può vedere solo i propri.</p>
+
+      <h2>Google Drive</h2>
+      <p>Se scegli di collegare Google Drive, Student Hub chiede solo il permesso <b>drive.file</b>: può vedere,
+      creare e modificare <b>esclusivamente i file che carica lui</b> nella cartella "Student Hub" del tuo Drive.
+      Non può leggere né modificare nessun altro file del tuo Drive.</p>
+      <ul>
+        <li>I file caricati restano nel tuo Google Drive e sono tuoi.</li>
+        <li>L'app legge anche il tuo indirizzo email Google e lo spazio usato, solo per mostrarteli nell'Archivio.</li>
+        <li>Il testo trascritto dei file (per il tutor AI) viene salvato in Student Hub.</li>
+        <li>L'accesso a Google resta nel tuo browser per circa un'ora; puoi revocarlo in qualsiasi momento con
+        "Scollega" o da <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</li>
+      </ul>
+      <p>L'uso delle informazioni ricevute dalle API di Google rispetta le
+      <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
+      inclusi i requisiti di Uso Limitato (Limited Use). I dati di Google Drive non vengono venduti, non sono usati
+      per pubblicità e non vengono usati per addestrare modelli di intelligenza artificiale.</p>
+
+      <h2>Tutor AI (Google Gemini)</h2>
+      <p>Quando usi la Guida Studio AI o fai leggere un file, il testo o l'immagine vengono inviati a Google Gemini
+      con la <b>tua</b> chiave API, direttamente dal tuo browser, per generare la risposta. La chiave resta salvata
+      solo nel tuo browser.</p>
+
+      <h2>Cosa non facciamo</h2>
+      <ul>
+        <li>Non vendiamo né cediamo i tuoi dati a terzi.</li>
+        <li>Non mostriamo pubblicità.</li>
+      </ul>
+
+      <h2>I tuoi diritti</h2>
+      <p>Puoi esportare i tuoi dati dal menu dell'app, modificarli o cancellarli in qualsiasi momento. Per chiedere
+      la cancellazione completa dell'account o per qualsiasi domanda scrivi a
+      <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
+
+      <h2>Contatti</h2>
+      <p>Student Hub — Sebastiano Zorzi · <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a></p>
+    </div>
+  </main>
+</body>
+</html>

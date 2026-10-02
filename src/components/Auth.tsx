@@ -291,6 +291,9 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
             </form>
           )}
         </div>
+        <p className="text-center text-xs text-gray-500 mt-4">
+          <a href="/privacy.html" className="hover:text-indigo-600 underline-offset-2 hover:underline">Privacy</a>
+        </p>
       </div>
     </div>
   );
