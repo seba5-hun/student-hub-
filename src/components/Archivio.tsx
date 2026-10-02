@@ -1,13 +1,18 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Search, FolderOpen, FileText, ExternalLink, ChevronRight, ChevronDown,
   Upload, Image as ImageIcon, File as FileIcon, Link as LinkIcon, Pencil, Check, X, Loader2, Sparkles, RotateCw,
+  HardDrive, Cloud, ShieldCheck,
 } from 'lucide-react';
 import { ArchiveItem, createId } from '../lib/store';
 import {
   uploadArchiveFile, archiveFileUrl, removeArchiveFiles, storageErrorMessage, MAX_FILE_SIZE,
 } from '../lib/supabase';
 import { readKind } from '../lib/archiveText';
+import {
+  driveConfigured, hasDriveToken, ensureDriveToken, loadGoogleIdentity, disconnectDrive, uploadToDrive,
+  trashOnDrive, driveInfo, driveViewUrl, DriveInfo, DRIVE_MAX_FILE_SIZE,
+} from '../lib/googleDrive';
 import { getGeminiKey } from '../lib/gemini';
 import { useDialog } from './Dialog';
 import { track } from '../lib/analytics';
@@ -46,6 +51,19 @@ function baseName(fileName: string): string {
   return dot > 0 ? fileName.slice(0, dot) : fileName;
 }
 
+type StorageChoice = 'app' | 'drive';
+
+function readPref(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key: string, value: string | null) {
+  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* ignore */ }
+}
+
+function formatGB(bytes: number): string {
+  return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
+}
+
 // Photos of book pages are usually named IMG_0001, IMG_0002…: keep them in page order.
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
@@ -67,6 +85,84 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   const [editingName, setEditingName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Where new files go: the app's storage or the student's own Google Drive (per device).
+  const storageKey = `studenthub_archive_storage_${userId}`;
+  const connectedKey = `studenthub_drive_connected_${userId}`;
+  const [storage, setStorageState] = useState<StorageChoice>(() => (driveConfigured && readPref(storageKey) === 'drive' ? 'drive' : 'app'));
+  const [driveReady, setDriveReady] = useState(hasDriveToken());
+  const [driveWasConnected, setDriveWasConnected] = useState(() => readPref(connectedKey) === '1');
+  const [driveDetails, setDriveDetails] = useState<DriveInfo | null>(null);
+  const [driveBusy, setDriveBusy] = useState(false);
+  const [driveError, setDriveError] = useState('');
+  const useDrive = storage === 'drive';
+  const maxSize = useDrive ? DRIVE_MAX_FILE_SIZE : MAX_FILE_SIZE;
+  const hasDriveFiles = archive.some(a => a.file?.drive);
+
+  const setStorage = (value: StorageChoice) => {
+    setStorageState(value);
+    writePref(storageKey, value);
+    setFiles(prev => prev.filter(f => f.size <= (value === 'drive' ? DRIVE_MAX_FILE_SIZE : MAX_FILE_SIZE)));
+  };
+
+  // Load Google's library in advance, so the permission window opens right on the click.
+  useEffect(() => {
+    if (driveConfigured && (useDrive || hasDriveFiles)) loadGoogleIdentity().catch(() => { /* shown on use */ });
+  }, [useDrive, hasDriveFiles]);
+
+  useEffect(() => {
+    if (!driveReady) { setDriveDetails(null); return; }
+    let alive = true;
+    driveInfo().then(info => { if (alive) setDriveDetails(info); }).catch(() => { /* optional */ });
+    return () => { alive = false; };
+  }, [driveReady]);
+
+  // The Google token lasts about an hour: notice when it expires.
+  useEffect(() => {
+    if (!driveReady) return;
+    const id = window.setInterval(() => { if (!hasDriveToken()) setDriveReady(false); }, 30_000);
+    return () => window.clearInterval(id);
+  }, [driveReady]);
+
+  const markConnected = () => {
+    setDriveReady(true);
+    setDriveWasConnected(true);
+    writePref(connectedKey, '1');
+    setDriveError('');
+  };
+
+  // Must be called straight from a click (it may open Google's window).
+  const connectDrive = () => {
+    setDriveBusy(true);
+    setDriveError('');
+    return ensureDriveToken()
+      .then(() => { markConnected(); return true; })
+      .catch(err => { setDriveError(err instanceof Error ? err.message : String(err)); return false; })
+      .finally(() => setDriveBusy(false));
+  };
+
+  const unlinkDrive = async () => {
+    const ok = await dialog.confirm({
+      title: 'Scollegare Google Drive?',
+      message: 'I file già caricati restano nel tuo Drive e nell\'archivio. Per aprirli o caricarne altri dovrai ricollegarlo.',
+      confirmLabel: 'Scollega',
+    });
+    if (!ok) return;
+    disconnectDrive();
+    writePref(connectedKey, null);
+    setDriveWasConnected(false);
+    setDriveReady(false);
+  };
+
+  // Reading a Drive file needs Drive connected on this device.
+  const analyze = (ids: string[]) => {
+    const needsDrive = ids.some(id => archive.find(a => a.id === id)?.file?.drive);
+    if (needsDrive && !hasDriveToken()) {
+      connectDrive().then(ok => { if (ok) onAnalyze(ids); });
+      return;
+    }
+    onAnalyze(ids);
+  };
+
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
@@ -83,9 +179,11 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   const addFiles = (list: FileList | File[]) => {
     const incoming = Array.from(list);
-    const tooBig = incoming.filter(f => f.size > MAX_FILE_SIZE);
-    setFormError(tooBig.length ? `Troppo grandi (massimo 50 MB): ${tooBig.map(f => f.name).join(', ')}` : '');
-    setFiles(prev => [...prev, ...incoming.filter(f => f.size <= MAX_FILE_SIZE)].sort(byName));
+    const tooBig = incoming.filter(f => f.size > maxSize);
+    setFormError(tooBig.length
+      ? `Troppo grandi (massimo ${useDrive ? '2 GB' : '50 MB'}): ${tooBig.map(f => f.name).join(', ')}${useDrive ? '' : '. Con Google Drive puoi caricare file più grandi.'}`
+      : '');
+    setFiles(prev => [...prev, ...incoming.filter(f => f.size <= maxSize)].sort(byName));
   };
 
   const resetForm = () => {
@@ -102,6 +200,8 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     const subj = subject.trim();
     const top = topic.trim();
     if (!subj || !top) return;
+    // Asked right away (still inside the click) so Google's window isn't blocked.
+    const driveToken = useDrive && files.length > 0 ? ensureDriveToken() : null;
 
     if (files.length === 0) {
       if (!name.trim()) {
@@ -115,13 +215,29 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     }
 
     setFormError('');
+    if (driveToken) {
+      try {
+        await driveToken;
+        markConnected();
+      } catch (err) {
+        setFormError(err instanceof Error ? err.message : String(err));
+        return;
+      }
+    }
     setUploading({ done: 0, total: files.length });
     const newIds: string[] = [];
     const failed: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        const path = await uploadArchiveFile(userId, file);
+        let path: string;
+        let drive: { id: string; webViewLink?: string } | undefined;
+        if (useDrive) {
+          drive = await uploadToDrive(file, subj, top);
+          path = `drive:${drive.id}`;
+        } else {
+          path = await uploadArchiveFile(userId, file);
+        }
         const itemName = name.trim() ? (files.length > 1 ? `${name.trim()} (${i + 1})` : name.trim()) : baseName(file.name);
         const item: ArchiveItem = {
           id: createId(),
@@ -129,14 +245,14 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           topic: top,
           name: itemName,
           link: files.length === 1 ? link.trim() || undefined : undefined,
-          file: { path, mimeType: file.type || 'application/octet-stream', size: file.size, originalName: file.name, textStatus: 'pending' },
+          file: { path, drive, mimeType: file.type || 'application/octet-stream', size: file.size, originalName: file.name, textStatus: 'pending' },
         };
         onUpdate(prev => [...prev, item]);
         newIds.push(item.id);
         track('file_upload', 'archivio');
       } catch (err) {
         console.error('Upload error:', err);
-        failed.push(`${file.name}: ${storageErrorMessage(err)}`);
+        failed.push(`${file.name}: ${useDrive ? (err instanceof Error ? err.message : String(err)) : storageErrorMessage(err)}`);
       }
       setUploading({ done: i + 1, total: files.length });
     }
@@ -153,6 +269,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   const openItem = async (item: ArchiveItem) => {
     if (!item.file) return;
+    if (item.file.drive) {
+      window.open(driveViewUrl(item.file.drive), '_blank', 'noopener');
+      return;
+    }
     // Open the tab right away (browsers block pop-ups opened after an await).
     const tab = window.open('', '_blank');
     try {
@@ -168,18 +288,36 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   const deleteItem = async (item: ArchiveItem) => {
     if (item.file && !(await dialog.confirm({
       title: `Eliminare "${item.name}"?`,
-      message: 'Il file verrà cancellato definitivamente da tutti i tuoi dispositivi.',
+      message: item.file.drive
+        ? 'Il file verrà tolto dall\'archivio e spostato nel cestino del tuo Google Drive (recuperabile per 30 giorni).'
+        : 'Il file verrà cancellato definitivamente da tutti i tuoi dispositivi.',
       confirmLabel: 'Elimina',
       danger: true,
     }))) return;
-    if (item.file) {
+    let leftOnDrive = false;
+    if (item.file?.drive) {
       try {
-        await removeArchiveFiles([item.file.path, ...(item.file.textPath ? [item.file.textPath] : [])]);
+        await ensureDriveToken();
+        markConnected();
+        await trashOnDrive(item.file.drive.id);
+      } catch (err) {
+        console.error('Drive delete error:', err);
+        leftOnDrive = true;
+      }
+    }
+    if (item.file) {
+      const paths = item.file.drive ? [] : [item.file.path];
+      if (item.file.textPath) paths.push(item.file.textPath);
+      try {
+        await removeArchiveFiles(paths);
       } catch (err) {
         console.error('Delete error:', err);
       }
     }
     onUpdate(prev => prev.filter(a => a.id !== item.id));
+    if (leftOnDrive) {
+      dialog.alert({ title: 'File tolto dall\'archivio', message: 'Non sono riuscito a raggiungere Google Drive: il file è rimasto nella cartella "Student Hub" del tuo Drive, puoi cancellarlo da lì.' });
+    }
   };
 
   const saveName = (id: string) => {
@@ -221,13 +359,13 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         return <span className={`${base} ${darkMode ? 'bg-white/10 text-white/50' : 'bg-black/5 text-gray-500'}`} title="L'AI legge PDF, foto (JPG, PNG, WEBP, HEIC) e file di testo">Non leggibile dall'AI</span>;
       case 'error':
         return (
-          <button onClick={() => onAnalyze([item.id])} title={item.file.textError} className={`${base} bg-red-500/20 text-red-400`}>
+          <button onClick={() => analyze([item.id])} title={item.file.textError} className={`${base} bg-red-500/20 text-red-400`}>
             <RotateCw className="w-3 h-3" /> Errore, riprova
           </button>
         );
       default:
         return (
-          <button onClick={() => onAnalyze([item.id])} title={item.file.textError} className={`${base} bg-amber-500/20 text-amber-400`}>
+          <button onClick={() => analyze([item.id])} title={item.file.textError} className={`${base} bg-amber-500/20 text-amber-400`}>
             <Sparkles className="w-3 h-3" /> Da leggere
           </button>
         );
@@ -251,6 +389,71 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           puoi chiederle riassunti, spiegazioni e di interrogarti su quello che hai caricato.
         </p>
       </div>
+
+      {driveConfigured && (
+        <div className={`${cardClass} p-4 space-y-3`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className={`text-sm font-semibold ${textColor}`}>Dove salvare i file</h3>
+            <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="radiogroup" aria-label="Dove salvare i file">
+              {([
+                { id: 'app' as const, label: 'Student Hub', icon: <HardDrive className="w-4 h-4" /> },
+                { id: 'drive' as const, label: 'Google Drive', icon: <Cloud className="w-4 h-4" /> },
+              ]).map(o => (
+                <button key={o.id} role="radio" aria-checked={storage === o.id} onClick={() => setStorage(o.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${storage === o.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+                  {o.icon}{o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!useDrive ? (
+            <p className={`text-xs ${subTextColor}`}>I file vanno nello spazio dell'app, massimo 50 MB ciascuno. Per avere più spazio scegli Google Drive.</p>
+          ) : driveReady ? (
+            <div className="animate-scale-in space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className={`text-sm flex items-center gap-2 ${textColor}`}>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Collegato{driveDetails?.email ? <> come <b className="font-medium">{driveDetails.email}</b></> : ''}
+                </p>
+                <div className="flex items-center gap-3 text-xs">
+                  <a href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300 inline-flex items-center gap-1">
+                    Apri Drive <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button onClick={unlinkDrive} className={`${subTextColor} hover:text-red-400`}>Scollega</button>
+                </div>
+              </div>
+              {driveDetails?.limit ? (
+                <div>
+                  <div className={`h-1.5 rounded-full overflow-hidden ${darkMode ? 'bg-white/10' : 'bg-black/10'}`}>
+                    <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-indigo-500 transition-all duration-700"
+                      style={{ width: `${Math.min(100, (driveDetails.used / driveDetails.limit) * 100)}%` }} />
+                  </div>
+                  <p className={`text-xs mt-1 ${subTextColor}`}>
+                    Usati {formatGB(driveDetails.used)} di {formatGB(driveDetails.limit)} · i file vanno nella cartella “Student Hub”, divisi per materia e argomento
+                  </p>
+                </div>
+              ) : (
+                <p className={`text-xs ${subTextColor}`}>I file vanno nella cartella “Student Hub” del tuo Drive, divisi per materia e argomento.</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 animate-scale-in">
+              <p className={`text-xs flex items-start gap-1.5 max-w-md ${subTextColor}`}>
+                <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                {driveWasConnected
+                  ? 'Il collegamento a Google scade dopo circa un\'ora: ricollegalo con un clic.'
+                  : 'Usi lo spazio del tuo Google Drive (15 GB gratis). Student Hub vede solo i file che carica lui, non il resto del tuo Drive.'}
+              </p>
+              <button onClick={connectDrive} disabled={driveBusy} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-60">
+                {driveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
+                {driveWasConnected ? 'Ricollega Google Drive' : 'Collega Google Drive'}
+              </button>
+            </div>
+          )}
+          {driveError && <p className="text-xs text-red-400">{driveError}</p>}
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleAdd} className={`${cardClass} p-6 space-y-4`}>
@@ -287,7 +490,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           >
             <Upload className={`w-8 h-8 mx-auto mb-2 ${subTextColor}`} />
             <p className={`text-sm font-medium ${textColor}`}>Clicca per scegliere i file o trascinali qui</p>
-            <p className={`text-xs ${subTextColor} mt-1`}>PDF, foto (anche più pagine insieme), file di testo e altri documenti · max 50 MB per file</p>
+            <p className={`text-xs ${subTextColor} mt-1`}>PDF, foto (anche più pagine insieme), file di testo e altri documenti · max {useDrive ? '2 GB' : '50 MB'} per file</p>
+            <p className={`text-xs mt-2 inline-flex items-center gap-1 ${useDrive ? 'text-sky-400' : subTextColor}`}>
+              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Salvati nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Salvati in Student Hub</>}
+            </p>
             <input
               ref={fileInputRef}
               type="file"
@@ -337,7 +543,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
               : <>{waitingItems.length} file non ancora letti dall'AI.</>}
           </p>
           {waitingItems.length > 0 && (
-            <button onClick={() => onAnalyze(waitingItems.map(a => a.id))} className="btn-primary text-sm flex items-center gap-2">
+            <button onClick={() => analyze(waitingItems.map(a => a.id))} className="btn-primary text-sm flex items-center gap-2">
               <Sparkles className="w-4 h-4" /> Fai leggere all'AI ({waitingItems.length})
             </button>
           )}
@@ -386,9 +592,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                                   <button type="button" onClick={() => setEditingId(null)} className={subTextColor} aria-label="Annulla"><X className="w-4 h-4" /></button>
                                 </form>
                               ) : item.file ? (
-                                <button onClick={() => openItem(item)} className={`text-sm ${textColor} flex-1 text-left hover:underline min-w-0 truncate`} title="Apri il file">
+                                <button onClick={() => openItem(item)} className={`text-sm ${textColor} flex-1 text-left hover:underline min-w-0 truncate`} title={item.file.drive ? 'Apri in Google Drive' : 'Apri il file'}>
                                   {item.name}
                                   <span className={`ml-2 text-xs ${subTextColor}`}>{formatSize(item.file.size)}</span>
+                                  {item.file.drive && <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 align-middle">Drive</span>}
                                 </button>
                               ) : (
                                 <span className={`text-sm ${textColor} flex-1 min-w-0 truncate`}>{item.name}</span>

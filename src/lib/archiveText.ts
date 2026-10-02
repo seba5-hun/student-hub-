@@ -3,6 +3,7 @@
 
 import { ArchiveFile, ArchiveItem } from './store';
 import { downloadArchiveFile, uploadArchiveText } from './supabase';
+import { downloadFromDrive } from './googleDrive';
 import { generateContent, blobToBase64 } from './gemini';
 
 type ReadKind = 'text' | 'pdf' | 'image' | 'unsupported';
@@ -93,15 +94,16 @@ async function extractText(blob: Blob, file: ArchiveFile, apiKey: string): Promi
 const transcriptCache = new Map<string, string>();
 
 // Reads the file, saves its transcription next to it and returns the updated file info.
-export async function analyzeArchiveFile(item: ArchiveItem, apiKey: string): Promise<ArchiveFile> {
+// The transcription of a Google Drive file is small and stays in the app (user's folder).
+export async function analyzeArchiveFile(item: ArchiveItem, apiKey: string, userId: string): Promise<ArchiveFile> {
   const file = item.file!;
   if (readKind(file) === 'unsupported') {
     return { ...file, textStatus: 'unsupported', textError: undefined };
   }
-  const blob = await downloadArchiveFile(file.path);
+  const blob = file.drive ? await downloadFromDrive(file.drive.id) : await downloadArchiveFile(file.path);
   const text = await extractText(blob, file, apiKey);
   if (!text) throw new Error('Non ho trovato testo in questo file.');
-  const textPath = `${file.path}.txt`;
+  const textPath = file.drive ? `${userId}/drive-${file.drive.id}.txt` : `${file.path}.txt`;
   await uploadArchiveText(textPath, text);
   transcriptCache.set(textPath, text);
   return { ...file, textPath, textStatus: 'done', textError: undefined };

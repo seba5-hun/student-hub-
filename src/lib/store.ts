@@ -34,7 +34,8 @@ export interface StudySession {
 // A file uploaded to Supabase Storage. The AI reads it through `textPath`: a plain-text
 // transcription saved next to the file, so the chat doesn't have to re-read PDFs and photos.
 export interface ArchiveFile {
-  path: string;
+  path: string;          // Supabase Storage path, or "drive:<id>" for files kept in Google Drive
+  drive?: { id: string; webViewLink?: string };
   mimeType: string;
   size: number;
   originalName: string;

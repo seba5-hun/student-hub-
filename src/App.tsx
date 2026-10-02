@@ -65,6 +65,7 @@ import {
   configError,
 } from './lib/supabase';
 import { analyzeArchiveFile, MissingApiKeyError } from './lib/archiveText';
+import { DriveNotConnectedError } from './lib/googleDrive';
 import { getGeminiKey } from './lib/gemini';
 
 type SaveStatus = 'idle' | 'saving' | 'error';
@@ -223,6 +224,8 @@ function App() {
   }, [user, flushSave]);
 
   const dataRef = useRef(data);
+  const userRef = useRef(user);
+  userRef.current = user;
   dataRef.current = data;
 
   // Archive files are read by the AI one at a time, in the background, so it keeps going
@@ -250,11 +253,13 @@ function App() {
       }
       if (item?.file) {
         try {
-          setArchiveFile(id, await analyzeArchiveFile(item, getGeminiKey()));
+          setArchiveFile(id, await analyzeArchiveFile(item, getGeminiKey(), userRef.current?.id || ''));
         } catch (err) {
-          if (!(err instanceof MissingApiKeyError)) console.error('Error reading file:', err);
+          // Missing API key or Drive not connected here: the file stays "to read", not failed.
+          const waiting = err instanceof MissingApiKeyError || err instanceof DriveNotConnectedError;
+          if (!waiting) console.error('Error reading file:', err);
           const message = err instanceof Error ? err.message : String(err);
-          setArchiveFile(id, { ...item.file, textStatus: err instanceof MissingApiKeyError ? 'pending' : 'error', textError: message });
+          setArchiveFile(id, { ...item.file, textStatus: waiting ? 'pending' : 'error', textError: message });
         }
       }
       setAnalyzing(prev => prev.filter(x => x !== id));

@@ -16,6 +16,15 @@ body {
   padding: 0;
 }
 
+/* Colour shown under the fixed background (e.g. the bounce at the end of the page on iPhone/Mac) */
+body:has(.gradient-bg.mesh-gradient) {
+  background-color: #1a1145;
+}
+
+body:has(.gradient-bg-light.mesh-gradient-light) {
+  background-color: #f0f4ff;
+}
+
 #root {
   width: 100%;
   min-height: 100vh;
