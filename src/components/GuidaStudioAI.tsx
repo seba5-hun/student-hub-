@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import { Grade, Task, UserData, createId } from '../lib/store';
-import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from '../lib/gemini';
+import { askTutor, isReady, providerLabel, ChatTurn } from '../lib/ai';
+import AISettings from './AISettings';
 import { loadTranscript } from '../lib/archiveText';
 import { useDialog } from './Dialog';
 import { track } from '../lib/analytics';
@@ -70,13 +71,19 @@ function studentContext(data: UserData): string {
   return context;
 }
 
-const SYSTEM_PROMPT = `Sei il tutor di studio di Student Hub. Rispondi sempre in italiano, in modo chiaro e adatto a uno studente.
-Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file.
-Quando rispondi:
-- basati prima di tutto su quel materiale e indica da quale file prendi le informazioni (es. «dal file "Capitolo 3 (2)"»);
-- se un'informazione non c'è nel materiale, dillo chiaramente; poi, se è utile, aggiungi quello che sai precisando che non viene dai suoi file;
-- per i riassunti usa titoli ed elenchi puntati; per le interrogazioni fai una domanda alla volta e aspetta la risposta prima di correggere;
-- non inventare pagine, date o citazioni che non sono nel materiale.`;
+const SYSTEM_PROMPT = `Sei il tutor di studio di Student Hub: un insegnante paziente ed esperto che aiuta uno studente delle scuole superiori italiane. Rispondi sempre in italiano.
+
+Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file, più i suoi voti e i suoi impegni.
+
+Come lavori:
+- Basati prima di tutto sul materiale e indica da quale file prendi le informazioni (es. «dal file "Capitolo 3"»). Se qualcosa non c'è, dillo chiaramente; poi, se è utile, aggiungi ciò che sai precisando che non viene dai suoi file. Non inventare pagine, date, citazioni o dati.
+- Prima di rispondere capisci cosa chiede davvero lo studente; se la domanda è ambigua, fai una breve domanda di chiarimento.
+- Spiega in modo chiaro e ordinato, partendo dai concetti base e arrivando ai dettagli, con esempi concreti. Adatta la lunghezza alla domanda: breve per le domande semplici, completo per riassunti e spiegazioni.
+- Per i riassunti usa titoli (##), elenchi puntati e i concetti chiave in **grassetto**.
+- Negli esercizi (matematica, fisica, chimica…) mostra i passaggi uno per uno e controlla i calcoli prima di dare il risultato.
+- Nelle interrogazioni fai una domanda alla volta, aspetta la risposta, poi correggi in modo preciso: cosa è giusto, cosa manca, cosa è sbagliato, con un voto in decimi motivato.
+- Se lo studente sbaglia, correggilo con gentilezza ma senza dargli ragione.
+- Tieni conto delle sue scadenze: se c'è una verifica vicina sulla materia, concentrati su ciò che è più probabile venga chiesto.`;
 
 // Minimal formatting for the AI's answers: headings, bullet points and **bold**.
 function FormattedText({ text, large = false }: { text: string; large?: boolean }) {
@@ -100,9 +107,9 @@ function FormattedText({ text, large = false }: { text: string; large?: boolean 
 
 export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAnalyze, onOpenArchive }: GuidaStudioAIProps) {
   const dialog = useDialog();
-  const [apiKey, setApiKey] = useState(getGeminiKey);
-  const [showApiKeyInput, setShowApiKeyInput] = useState(!apiKey);
-  const [tempApiKey, setTempApiKey] = useState('');
+  const [aiReady, setAiReady] = useState(isReady);
+  const [showSettings, setShowSettings] = useState(() => !isReady());
+  const [aiName, setAiName] = useState(providerLabel);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -174,13 +181,12 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     return material;
   };
 
-  const handleSaveApiKey = () => {
-    if (!tempApiKey.trim()) return;
-    setGeminiKey(tempApiKey.trim());
-    setApiKey(tempApiKey.trim());
-    setShowApiKeyInput(false);
+  const onSettingsDone = () => {
+    setAiReady(isReady());
+    setAiName(providerLabel());
+    setShowSettings(false);
     setError('');
-    // Files that were waiting for the key can be read now.
+    // Files that were waiting for a key can be read now.
     const waiting = archive.filter(a => a.file?.textStatus === 'pending' || a.file?.textStatus === 'error').map(a => a.id);
     if (waiting.length > 0) onAnalyze(waiting);
   };
@@ -306,12 +312,11 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     setScopeTopic(topic);
   };
 
-  const toParts = (m: Pick<Message, 'content' | 'images'>): GeminiPart[] => {
-    const parts: GeminiPart[] = [];
-    if (m.content) parts.push({ text: m.content });
-    m.images?.forEach(img => parts.push({ inline_data: { mime_type: img.mimeType, data: img.imageData.split(',')[1] } }));
-    return parts;
-  };
+  const toTurn = (m: Message): ChatTurn => ({
+    role: m.role,
+    text: m.content,
+    images: m.images?.map(img => ({ mimeType: img.mimeType, data: img.imageData.split(',')[1] })),
+  });
 
   const sendMessage = async (text = input, title?: string) => {
     if ((!text.trim() && uploadedImages.length === 0) || isLoading) return;
@@ -357,16 +362,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
         context += `\n\nALTRI ELEMENTI DELL'ARCHIVIO (solo il nome, contenuto non disponibile): ${otherItems.map(a => `"${a.name}"`).join(', ')}`;
       }
 
-      const contents: GeminiContent[] = [
-        { role: 'user', parts: [{ text: context }] },
-        { role: 'model', parts: [{ text: 'Ho letto il materiale. Sono pronto ad aiutarti a studiare.' }] },
-      ];
-      history.forEach(m => {
-        const parts = toParts(m);
-        if (parts.length > 0) contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts });
-      });
-
-      const reply = await generateContent(apiKey, contents, { systemInstruction: SYSTEM_PROMPT, temperature: 0.6, maxOutputTokens: 8192 });
+      const turns = history.map(toTurn).filter(t => t.text || t.images?.length);
+      const reply = await askTutor(SYSTEM_PROMPT, context, turns);
       const answer: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -383,39 +380,14 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     }
   };
 
-  if (showApiKeyInput || !apiKey) {
+  if (showSettings || !aiReady) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h2 className={`text-2xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-sm ${subTextColor}`}>Powered by Google Gemini</p>
-          </div>
-        </div>
-
-        <div className={`${cardClass} p-8 text-center`}>
-          <Bot className={`w-16 h-16 mx-auto mb-4 ${darkMode ? 'text-blue-400' : 'text-blue-500'}`} />
-          <h3 className={`text-xl font-semibold mb-2 ${textColor}`}>Configura API Key</h3>
-          <p className={`text-sm ${subTextColor} mb-6`}>
-            Ottieni la tua API key gratuita su <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">Google AI Studio</a>
-          </p>
-          <div className="max-w-md mx-auto space-y-4">
-            <input type="password" value={tempApiKey} onChange={e => setTempApiKey(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="AIza..." />
-            <button onClick={handleSaveApiKey} disabled={!tempApiKey.trim()} className="btn-primary w-full disabled:opacity-50">Salva e inizia</button>
-            {tempApiKey.trim() && !tempApiKey.trim().startsWith('AIza') && (
-              <p className="text-xs text-amber-400">Attenzione: di solito la chiave inizia con "AIza". Controlla di averla copiata tutta.</p>
-            )}
-            {apiKey && (
-              <button onClick={() => setShowApiKeyInput(false)} className={`text-sm ${subTextColor}`}>Annulla</button>
-            )}
-          </div>
-        </div>
-
-        <ApiKeyGuide darkMode={darkMode} />
-      </div>
+      <AISettings
+        darkMode={darkMode}
+        onDone={onSettingsDone}
+        onCancel={aiReady ? () => setShowSettings(false) : undefined}
+        geminiGuide={<ApiKeyGuide darkMode={darkMode} />}
+      />
     );
   }
 
@@ -658,13 +630,13 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           </div>
           <div>
             <h2 className={`text-xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-xs ${subTextColor}`}>Studia sul tuo materiale • Google Gemini</p>
+            <p className={`text-xs ${subTextColor}`}>Studia sul tuo materiale • {aiName}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <span className="lg:hidden">{iconButton('Le tue chat', <MessageSquare className={`w-4 h-4 ${textColor}`} />, () => setSidebarOpen(true))}</span>
           {iconButton('Schermo intero', <Maximize2 className={`w-4 h-4 ${textColor}`} />, () => setFullscreen(true))}
-          {iconButton('Cambia API key', <Key className={`w-4 h-4 ${textColor}`} />, () => { setTempApiKey(''); setShowApiKeyInput(true); })}
+          {iconButton('Impostazioni AI', <Key className={`w-4 h-4 ${textColor}`} />, () => setShowSettings(true))}
           {iconButton('Nuova chat', <Plus className={`w-4 h-4 ${textColor}`} />, clearChat)}
         </div>
       </div>
@@ -828,7 +800,7 @@ function ApiKeyGuide({ darkMode }: { darkMode: boolean }) {
       <div className={`${boxClass} rounded-xl p-4 space-y-2`}>
         <p className={`font-medium ${textColor}`}>🛠️ Se qualcosa non va</p>
         <ul className={`text-sm ${subTextColor} list-disc pl-5 space-y-1`}>
-          <li><b>"API key non valida":</b> probabilmente non è stata copiata tutta. Torna su AI Studio, copiala di nuovo e usa il pulsante 🔑 <b>Cambia API key</b> in alto nella chat.</li>
+          <li><b>"API key non valida":</b> probabilmente non è stata copiata tutta. Torna su AI Studio, copiala di nuovo e usa il pulsante 🔑 <b>Impostazioni AI</b> in alto nella chat.</li>
           <li><b>"Modelli occupati" o limite raggiunto:</b> la versione gratuita ha un numero massimo di domande al minuto e al giorno. Aspetta qualche minuto e riprova.</li>
           <li><b>Hai perso la chiave o pensi che qualcuno l'abbia vista:</b> su AI Studio eliminala (icona del cestino) e creane una nuova.</li>
           <li><b>Non vedi il pulsante "Create API key":</b> controlla di aver accettato i termini e di usare un account Google personale (quelli della scuola a volte hanno AI Studio bloccato).</li>

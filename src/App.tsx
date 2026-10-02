@@ -67,7 +67,6 @@ import {
 } from './lib/supabase';
 import { analyzeArchiveFile, MissingApiKeyError } from './lib/archiveText';
 import { DriveNotConnectedError } from './lib/googleDrive';
-import { getGeminiKey } from './lib/gemini';
 
 type SaveStatus = 'idle' | 'saving' | 'error';
 
@@ -273,7 +272,7 @@ function App() {
       }
       if (item?.file) {
         try {
-          setArchiveFile(id, await analyzeArchiveFile(item, getGeminiKey(), userRef.current?.id || ''));
+          setArchiveFile(id, await analyzeArchiveFile(item, userRef.current?.id || ''));
         } catch (err) {
           // Missing API key or Drive not connected here: the file stays "to read", not failed.
           const waiting = err instanceof MissingApiKeyError || err instanceof DriveNotConnectedError;

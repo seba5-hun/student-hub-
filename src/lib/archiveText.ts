@@ -1,21 +1,22 @@
 // Turns archive files (PDFs, photos of book pages, notes) into plain text the AI tutor can read.
-// Text PDFs and text files are read in the browser; photos and scanned PDFs are transcribed by Gemini.
+// Text PDFs and text files are read in the browser; photos and scanned PDFs are transcribed by the AI.
 
 import { ArchiveFile, ArchiveItem } from './store';
 import { downloadArchiveFile, uploadArchiveText } from './supabase';
 import { downloadFromDrive } from './googleDrive';
-import { generateContent, blobToBase64 } from './gemini';
+import { blobToBase64 } from './gemini';
+import { canTranscribe, transcribeFile } from './ai';
 
 type ReadKind = 'text' | 'pdf' | 'image' | 'unsupported';
 
-// Formats Gemini accepts inline.
+// Image formats the AI can read.
 const GEMINI_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'];
 // Requests are limited to ~20 MB and base64 adds a third.
 const AI_INLINE_LIMIT = 14 * 1024 * 1024;
 
 export class MissingApiKeyError extends Error {
   constructor() {
-    super('Per leggere foto e PDF scansionati serve la API key di Gemini: configurala nella Guida Studio AI.');
+    super('Per leggere foto e PDF scansionati serve una chiave AI (Gemini, Claude o OpenRouter): configurala nella Guida Studio AI.');
   }
 }
 
@@ -66,27 +67,25 @@ const TRANSCRIBE_PROMPT =
   'Se il testo è scritto a mano fai del tuo meglio. Se ci sono più pagine, separale con "--- Pagina N ---". ' +
   'Non aggiungere commenti o introduzioni: solo la trascrizione.';
 
-async function transcribeWithGemini(blob: Blob, mimeType: string, apiKey: string): Promise<string> {
-  if (!apiKey) throw new MissingApiKeyError();
+async function transcribeWithAI(blob: Blob, mimeType: string): Promise<string> {
+  if (!canTranscribe()) throw new MissingApiKeyError();
   if (blob.size > AI_INLINE_LIMIT) {
     throw new Error('File troppo grande perché l\'AI lo legga (massimo 14 MB). Dividilo in parti più piccole, ad esempio un capitolo per file.');
   }
   const data = await blobToBase64(blob);
-  return generateContent(apiKey, [
-    { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: TRANSCRIBE_PROMPT }] },
-  ], { temperature: 0.1, maxOutputTokens: 32768 });
+  return transcribeFile(data, mimeType, TRANSCRIBE_PROMPT);
 }
 
-async function extractText(blob: Blob, file: ArchiveFile, apiKey: string): Promise<string> {
+async function extractText(blob: Blob, file: ArchiveFile): Promise<string> {
   const kind = readKind(file);
   if (kind === 'text') return (await blob.text()).trim();
-  if (kind === 'image') return transcribeWithGemini(blob, imageMime(file), apiKey);
+  if (kind === 'image') return transcribeWithAI(blob, imageMime(file));
   if (kind === 'pdf') {
     const { text, pages } = await pdfTextLayer(blob);
     const letters = text.replace(/--- Pagina \d+ ---|\s/g, '').length;
-    // A PDF with (almost) no text layer is a scan: let Gemini read the images.
+    // A PDF with (almost) no text layer is a scan: let the AI read the images.
     if (letters >= pages * 40) return text;
-    return transcribeWithGemini(blob, 'application/pdf', apiKey);
+    return transcribeWithAI(blob, 'application/pdf');
   }
   throw new Error('Formato non leggibile dall\'AI');
 }
@@ -95,13 +94,13 @@ const transcriptCache = new Map<string, string>();
 
 // Reads the file, saves its transcription next to it and returns the updated file info.
 // The transcription of a Google Drive file is small and stays in the app (user's folder).
-export async function analyzeArchiveFile(item: ArchiveItem, apiKey: string, userId: string): Promise<ArchiveFile> {
+export async function analyzeArchiveFile(item: ArchiveItem, userId: string): Promise<ArchiveFile> {
   const file = item.file!;
   if (readKind(file) === 'unsupported') {
     return { ...file, textStatus: 'unsupported', textError: undefined };
   }
   const blob = file.drive ? await downloadFromDrive(file.drive.id) : await downloadArchiveFile(file.path);
-  const text = await extractText(blob, file, apiKey);
+  const text = await extractText(blob, file);
   if (!text) throw new Error('Non ho trovato testo in questo file.');
   const textPath = file.drive ? `${userId}/drive-${file.drive.id}.txt` : `${file.path}.txt`;
   await uploadArchiveText(textPath, text);

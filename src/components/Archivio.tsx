@@ -13,7 +13,7 @@ import {
   driveConfigured, hasDriveToken, ensureDriveToken, loadGoogleIdentity, disconnectDrive, uploadToDrive,
   trashOnDrive, driveInfo, driveViewUrl, DriveInfo, DRIVE_MAX_FILE_SIZE,
 } from '../lib/googleDrive';
-import { getGeminiKey } from '../lib/gemini';
+import { canTranscribe } from '../lib/ai';
 import { useDialog } from './Dialog';
 import { track } from '../lib/analytics';
 
@@ -175,7 +175,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   );
 
   const waitingItems = archive.filter(a => a.file && (a.file.textStatus === 'pending' || a.file.textStatus === 'error') && !analyzing.includes(a.id));
-  const needsKey = !getGeminiKey() && archive.some(a => a.file?.textStatus === 'pending' && a.file.textError);
+  const needsKey = !canTranscribe() && archive.some(a => a.file?.textStatus === 'pending' && a.file.textError);
 
   const addFiles = (list: FileList | File[]) => {
     const incoming = Array.from(list);
@@ -544,7 +544,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         <div className={`${cardClass} p-4 flex flex-wrap items-center justify-between gap-3`}>
           <p className={`text-sm ${subTextColor}`}>
             {needsKey
-              ? <>Per far leggere <b>foto e PDF scansionati</b> all'AI serve la API key di Gemini. <button onClick={onOpenGuide} className="text-blue-400 underline">Configurala nella Guida Studio AI</button>, poi torna qui.</>
+              ? <>Per far leggere <b>foto e PDF scansionati</b> all'AI serve una chiave AI. <button onClick={onOpenGuide} className="text-blue-400 underline">Configurala nella Guida Studio AI</button>, poi torna qui.</>
               : <>{waitingItems.length} file non ancora letti dall'AI.</>}
           </p>
           {waitingItems.length > 0 && (

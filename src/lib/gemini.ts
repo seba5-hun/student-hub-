@@ -23,19 +23,23 @@ export interface GeminiContent {
 }
 
 // Google renames and retires models often: ask the API which ones this key can use and pick
-// the best "flash" models, instead of hard-coding names that stop working.
-const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
+// the best ones ("pro" first, then "flash"; "lite" only as a last resort), instead of
+// hard-coding names that stop working. When the free quota of a model is used up, the next one answers.
+const FALLBACK_MODELS = ['gemini-3.5-pro', 'gemini-3.5-flash', 'gemini-pro-latest', 'gemini-flash-latest', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-flash-lite-latest'];
 const RETRYABLE = [404, 429, 500, 502, 503, 504];
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 
 let modelCache: { key: string; models: string[] } | null = null;
-let lastWorkingModel: string | null = null;
+// Models whose free quota is used up are skipped for a while, then tried again (best first).
+const QUOTA_PAUSE_MS = 10 * 60 * 1000;
+const quotaPausedUntil = new Map<string, number>();
 
-// Stable before preview, newer before older, full before lite.
+// Stable before preview, pro before flash, newer before older, lite last.
 function modelRank(name: string): number {
   const version = parseFloat(/gemini-(\d+(?:\.\d+)?)/.exec(name)?.[1] || '0');
   let rank = version * 10;
-  if (/-lite/.test(name)) rank -= 3;
+  if (/-pro/.test(name)) rank += 8;
+  if (/-lite/.test(name)) rank -= 40;
   if (/preview|exp/.test(name)) rank -= 100;
   if (/-latest$/.test(name)) rank -= 50;
   return rank;
@@ -50,11 +54,11 @@ async function availableModels(apiKey: string): Promise<string[]> {
     const models: string[] = (data.models || [])
       .filter((m: { name?: string; supportedGenerationMethods?: string[] }) =>
         m.supportedGenerationMethods?.includes('generateContent') &&
-        /gemini-.*flash/.test(m.name || '') &&
+        /gemini-.*(flash|pro)/.test(m.name || '') &&
         !/image|tts|audio|live|embedding|thinking|computer|robotics/.test(m.name || ''))
       .map((m: { name: string }) => m.name.replace(/^models\//, ''))
       .sort((a: string, b: string) => modelRank(b) - modelRank(a))
-      .slice(0, 8);
+      .slice(0, 10);
     const list = models.length > 0 ? models : FALLBACK_MODELS;
     modelCache = { key: apiKey, models: list };
     return list;
@@ -69,9 +73,9 @@ export async function generateContent(
   options: { temperature?: number; maxOutputTokens?: number; systemInstruction?: string } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
-  const ordered = lastWorkingModel && models.includes(lastWorkingModel)
-    ? [lastWorkingModel, ...models.filter(m => m !== lastWorkingModel)]
-    : models;
+  const now = Date.now();
+  const available = models.filter(m => (quotaPausedUntil.get(m) || 0) <= now);
+  const ordered = available.length > 0 ? available : models;
   let lastError = '';
   const tried = new Set<string>();
   const retired = new Set<string>();
@@ -91,7 +95,8 @@ export async function generateContent(
           body: JSON.stringify({
             contents,
             ...(options.systemInstruction ? { systemInstruction: { parts: [{ text: options.systemInstruction }] } } : {}),
-            generationConfig: { temperature: options.temperature ?? 0.7, maxOutputTokens: options.maxOutputTokens ?? 4096 },
+            // Newer models also "think" inside this limit: a low value gave short or cut answers.
+            generationConfig: { ...(options.temperature !== undefined ? { temperature: options.temperature } : {}), maxOutputTokens: options.maxOutputTokens ?? 16384 },
           }),
         });
       } catch {
@@ -105,6 +110,7 @@ export async function generateContent(
           throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
         }
         if (response.status === 429 || /quota|rate limit|resource.?exhausted/i.test(errorMsg)) {
+          quotaPausedUntil.set(model, Date.now() + QUOTA_PAUSE_MS);
           lastError = 'Hai raggiunto il limite della versione gratuita di Gemini. Aspetta qualche minuto e riprova.';
           continue;
         }
@@ -130,7 +136,7 @@ export async function generateContent(
       if (!text && data.promptFeedback?.blockReason) {
         throw new Error('Google ha bloccato la richiesta per i suoi filtri di sicurezza. Prova a riformularla.');
       }
-      lastWorkingModel = model;
+      quotaPausedUntil.delete(model);
       return text;
     }
     if (!overloaded) break;
