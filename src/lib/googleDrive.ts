@@ -6,7 +6,7 @@
 
 // OAuth client ID (public, like the Supabase publishable key). Created in Google Cloud Console,
 // see GUIDA_GOOGLE_DRIVE.md. Can be overridden with VITE_GOOGLE_CLIENT_ID.
-const DEFAULT_GOOGLE_CLIENT_ID = '';
+const DEFAULT_GOOGLE_CLIENT_ID = '1048106841609-ipbbd7vkt38j9brvdlshubh5tuesgsb4.apps.googleusercontent.com';
 const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || DEFAULT_GOOGLE_CLIENT_ID;
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
