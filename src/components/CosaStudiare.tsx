@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Brain, Calendar, TrendingDown, Clock, AlertTriangle, Zap } from 'lucide-react';
-import { UserData, getSubjectAverages, getSubjectStudyTime, parseDate, todayKey } from '../lib/store';
+import { UserData, getSubjectAverages, getSubjectStudyTime, parseDate, todayKey, effectiveImportance } from '../lib/store';
 
 interface CosaStudiareProps {
   data: UserData;
@@ -31,7 +31,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
           score += Math.max(0, 7 - daysUntil) * 2;
           if (daysUntil <= 2) reasons.push(`Verifica tra ${daysUntil === 0 ? 'oggi' : daysUntil === 1 ? '1 giorno' : `${daysUntil} giorni`}`);
         }
-        score += task.importance * 1.5;
+        score += effectiveImportance(task) * 1.5;
       });
 
       const avg = subjectAvgs[subject];

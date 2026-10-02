@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw } from 'lucide-react';
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDate, formatTaskTime, compareTasks } from '../lib/store';
+import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDate, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
 
 // Panels of the Home page, in their default order. `wide` panels take the full row.
 const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
@@ -139,7 +139,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
             ) : (
               <div className="space-y-2">
                 {activeTasks.slice(0, 5).map(task => {
-                  const imp = IMPORTANCE_CONFIG[task.importance - 1];
+                  const imp = IMPORTANCE_CONFIG[effectiveImportance(task) - 1];
                   return (
                     <div key={task.id} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'} border-l-3`} style={{ borderLeftColor: imp.color }}>
                       <div>

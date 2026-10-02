@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Check, Clock } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId, formatDate, formatTaskTime, compareTasks } from '../lib/store';
+import { Plus, Trash2, Check, Clock, TrendingUp, RotateCcw } from 'lucide-react';
+import { Task, IMPORTANCE_CONFIG, createId, formatDate, formatTaskTime, compareTasks, effectiveImportance, dueLabel, taskDeadline } from '../lib/store';
 
 interface ImpegniProps {
   tasks: Task[];
@@ -66,8 +66,11 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
     setShowForm(false);
   };
 
+  // Reopening a task stops the app from completing it again automatically.
   const toggleDone = (id: string) => {
-    onUpdate(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t));
+    onUpdate(tasks.map(t => (t.id !== id ? t
+      : t.done ? { ...t, done: false, autoDone: undefined, keepOpen: true }
+      : { ...t, done: true, autoDone: undefined })));
   };
 
   const setTaskTime = (id: string, value: string) => {
@@ -169,7 +172,11 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
 
       <div className="space-y-3">
         {pendingTasks.map(task => {
-          const imp = IMPORTANCE_CONFIG[task.importance - 1];
+          const level = effectiveImportance(task);
+          const imp = IMPORTANCE_CONFIG[level - 1];
+          const raised = level > task.importance;
+          const overdue = taskDeadline(task).getTime() <= Date.now();
+          const due = overdue ? 'scaduto' : dueLabel(task);
           return (
             <div key={task.id} className={`${cardClass} p-4 border-l-4 flex items-center gap-4`} style={{ borderLeftColor: imp.color }}>
               <button onClick={() => toggleDone(task.id)} aria-label="Segna come completato" className={`w-6 h-6 rounded-full flex-shrink-0 border-2 ${darkMode ? 'border-white/30' : 'border-gray-300'}`}></button>
@@ -194,7 +201,11 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
                     </button>
                   )}
                   {task.subject && <span className={`text-xs ${subTextColor}`}>{task.subject}</span>}
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${imp.bg} ${imp.text}`}>{imp.label}</span>
+                  <span title={raised ? `Priorità aumentata da sola perché ${due} (era ${IMPORTANCE_CONFIG[task.importance - 1].label})` : undefined}
+                    className={`text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition-colors duration-500 ${imp.bg} ${imp.text}`}>
+                    {raised && <TrendingUp className="w-3 h-3" />}{imp.label}
+                  </span>
+                  {(raised || overdue || level >= 4) && <span className={`text-xs ${overdue ? 'text-red-400' : subTextColor}`}>{due}</span>}
                 </div>
               </div>
               <button onClick={() => deleteTask(task.id)} className="p-2 text-red-400 hover:bg-red-500/10 rounded">
@@ -216,8 +227,16 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
                   </button>
                   <div className="flex-1">
                     <p className={`font-medium line-through ${textColor}`}>{task.title}</p>
-                    {task.time && <p className={`text-xs ${subTextColor}`}>{formatDate(task.date)} · {formatTaskTime(task)}</p>}
+                    <p className={`text-xs ${subTextColor}`}>
+                      {formatDate(task.date)}{task.time ? ` · ${formatTaskTime(task)}` : ''}
+                      {task.autoDone && ' · completato in automatico (data passata)'}
+                    </p>
                   </div>
+                  {task.autoDone && (
+                    <button onClick={() => toggleDone(task.id)} title="Riporta tra gli impegni da fare" className={`text-xs flex items-center gap-1 ${subTextColor} hover:text-indigo-400`}>
+                      <RotateCcw className="w-3.5 h-3.5" /> Riapri
+                    </button>
+                  )}
                   <button onClick={() => deleteTask(task.id)} className="p-2 text-red-400">
                     <Trash2 className="w-4 h-4" />
                   </button>

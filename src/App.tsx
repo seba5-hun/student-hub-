@@ -53,6 +53,7 @@ import {
   usedSubjectNames,
   nextSubjectColor,
   SubjectDef,
+  isTaskExpired,
 } from './lib/store';
 import { renameSubjectInChats } from './lib/chats';
 import {
@@ -227,6 +228,25 @@ function App() {
   const userRef = useRef(user);
   userRef.current = user;
   dataRef.current = data;
+
+  // Tasks whose date has passed are completed automatically (checked every minute).
+  const hasData = !!data;
+  useEffect(() => {
+    if (!hasData) return;
+    const check = () => {
+      const current = dataRef.current;
+      if (!current || !current.tasks.some(t => isTaskExpired(t))) return;
+      updateData(prev => {
+        const now = new Date();
+        if (!prev.tasks.some(t => isTaskExpired(t, now))) return prev;
+        return { ...prev, tasks: prev.tasks.map(t => (isTaskExpired(t, now) ? { ...t, done: true, autoDone: true } : t)) };
+      });
+    };
+    check();
+    const id = window.setInterval(check, 60_000);
+    window.addEventListener('focus', check);
+    return () => { window.clearInterval(id); window.removeEventListener('focus', check); };
+  }, [hasData, updateData]);
 
   // Archive files are read by the AI one at a time, in the background, so it keeps going
   // while the user moves between sections.

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, Download, Plus, X } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey, formatTaskTime, compareTasks } from '../lib/store';
+import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
 import { downloadICS } from '../lib/calendar';
 import { useDialog } from './Dialog';
 
@@ -114,7 +114,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
                 <span>{day}</span>
                 {dayTasks.length > 0 && (
                   <div className="flex gap-0.5 mt-0.5">
-                    {dayTasks.slice(0, 3).map((t, j) => <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: IMPORTANCE_CONFIG[t.importance - 1].color }} />)}
+                    {dayTasks.slice(0, 3).map((t, j) => <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: IMPORTANCE_CONFIG[effectiveImportance(t) - 1].color }} />)}
                   </div>
                 )}
               </button>
@@ -134,7 +134,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
           {selectedTasks.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessun impegno</p> : (
             <div className="space-y-2">
               {selectedTasks.map(task => {
-                const imp = IMPORTANCE_CONFIG[task.importance - 1];
+                const imp = IMPORTANCE_CONFIG[effectiveImportance(task) - 1];
                 return (
                   <div key={task.id} className={`flex items-center gap-3 p-3 rounded-lg ${darkMode ? 'bg-white/5' : 'bg-black/5'} border-l-3`} style={{ borderLeftColor: imp.color }}>
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: imp.color }} />

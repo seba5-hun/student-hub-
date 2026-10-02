@@ -12,6 +12,8 @@ export interface Task {
   importance: 1 | 2 | 3 | 4 | 5;
   estimatedTime: number;
   done: boolean;
+  autoDone?: boolean;  // completed by the app because its date had passed
+  keepOpen?: boolean;  // reopened by the user after that: never auto-completed again
   subject?: string;
   googleCalendarId?: string;
 }
@@ -154,6 +156,48 @@ export function formatDate(value: string): string {
 export function formatTaskTime(task: Pick<Task, 'time' | 'endTime'>): string {
   if (!task.time) return '';
   return task.endTime ? `${task.time} – ${task.endTime}` : task.time;
+}
+
+// When a task is over: the end of its (last) day, or its end time when it has one
+// (start time + estimated duration when only the start is set).
+export function taskDeadline(task: Task): Date {
+  const end = new Date(parseDate(task.endDate || task.date));
+  if (task.time) {
+    const [h, m] = (task.endTime || task.time).split(':').map(Number);
+    end.setHours(h || 0, m || 0, 0, 0);
+    if (!task.endTime) end.setMinutes(end.getMinutes() + Math.max(0, task.estimatedTime || 0));
+  } else {
+    end.setDate(end.getDate() + 1);
+  }
+  return end;
+}
+
+export function isTaskExpired(task: Task, now: Date = new Date()): boolean {
+  return !task.done && !task.keepOpen && taskDeadline(task).getTime() <= now.getTime();
+}
+
+// Whole days from today to the task's date (0 = today, negative = already started).
+export function daysUntilTask(task: Task, now: Date = new Date()): number {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return Math.round((parseDate(task.date).getTime() - today.getTime()) / 86400000);
+}
+
+// Importance grows as the date gets closer: at least "Normale" within a week, "Importante"
+// within 3 days, "Urgente" the day before and "Priorità massima" on the day itself.
+export function effectiveImportance(task: Task, now: Date = new Date()): 1 | 2 | 3 | 4 | 5 {
+  if (task.done) return task.importance;
+  const days = daysUntilTask(task, now);
+  const min = days <= 0 ? 5 : days === 1 ? 4 : days <= 3 ? 3 : days <= 7 ? 2 : 1;
+  return Math.max(task.importance, min) as 1 | 2 | 3 | 4 | 5;
+}
+
+export function dueLabel(task: Task, now: Date = new Date()): string {
+  const days = daysUntilTask(task, now);
+  if (days < 0) return 'in corso';
+  if (days === 0) return 'scade oggi';
+  if (days === 1) return 'scade domani';
+  return `scade tra ${days} giorni`;
 }
 
 // By date, then by time (tasks without a time come first in their day).

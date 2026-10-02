@@ -1,4 +1,4 @@
-import { Task } from './store';
+import { Task, effectiveImportance } from './store';
 
 export function generateICS(tasks: Task[]): string {
   const lines = [
@@ -34,7 +34,7 @@ export function generateICS(tasks: Task[]): string {
       `DTEND:${formatDate(endDate)}`,
       `SUMMARY:${escapeICS(task.title)}`,
       `DESCRIPTION:${escapeICS(description)}`,
-      `PRIORITY:${6 - task.importance}`,
+      `PRIORITY:${6 - effectiveImportance(task)}`,
       'STATUS:CONFIRMED',
       'BEGIN:VALARM',
       'TRIGGER:-PT1H',
