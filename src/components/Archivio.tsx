@@ -88,13 +88,13 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   // Where new files go: the app's storage or the student's own Google Drive (per device).
   const storageKey = `studenthub_archive_storage_${userId}`;
   const connectedKey = `studenthub_drive_connected_${userId}`;
-  const [storage, setStorageState] = useState<StorageChoice>(() => (driveConfigured && readPref(storageKey) === 'drive' ? 'drive' : 'app'));
+  const [storage, setStorageState] = useState<StorageChoice>(() => (readPref(storageKey) === 'drive' ? 'drive' : 'app'));
   const [driveReady, setDriveReady] = useState(hasDriveToken());
   const [driveWasConnected, setDriveWasConnected] = useState(() => readPref(connectedKey) === '1');
   const [driveDetails, setDriveDetails] = useState<DriveInfo | null>(null);
   const [driveBusy, setDriveBusy] = useState(false);
   const [driveError, setDriveError] = useState('');
-  const useDrive = storage === 'drive';
+  const useDrive = storage === 'drive' && driveConfigured;
   const maxSize = useDrive ? DRIVE_MAX_FILE_SIZE : MAX_FILE_SIZE;
   const hasDriveFiles = archive.some(a => a.file?.drive);
 
@@ -390,7 +390,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         </p>
       </div>
 
-      {driveConfigured && (
+      {(
         <div className={`${cardClass} p-4 space-y-3`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className={`text-sm font-semibold ${textColor}`}>Dove salvare i file</h3>
@@ -407,7 +407,12 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             </div>
           </div>
 
-          {!useDrive ? (
+          {storage === 'drive' && !driveConfigured ? (
+            <p className="text-xs text-amber-400 animate-scale-in">
+              Google Drive non è ancora attivo: l'amministratore deve completare la configurazione con Google.
+              Intanto i file vengono salvati in Student Hub.
+            </p>
+          ) : !useDrive ? (
             <p className={`text-xs ${subTextColor}`}>I file vanno nello spazio dell'app, massimo 50 MB ciascuno. Per avere più spazio scegli Google Drive.</p>
           ) : driveReady ? (
             <div className="animate-scale-in space-y-2">
