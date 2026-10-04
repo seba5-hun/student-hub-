@@ -239,11 +239,11 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           <div className="space-y-4">
             <div>
               <p className={`text-sm font-medium ${textColor}`}>Le tue chiavi gratuite</p>
-              <p className={`text-xs ${subTextColor}`}>Ne basta una, ma più ne metti più domande gratuite hai ogni giorno. Nessuna richiede la carta di credito.</p>
+              <p className={`text-xs ${subTextColor}`}>Ne basta una, ma più ne metti più domande gratuite hai ogni giorno. Consigliate: Gemini + OpenRouter. Nessuna richiede la carta di credito.</p>
             </div>
             {([
               { id: 'gemini' as const, name: '1. Google Gemini', url: 'https://aistudio.google.com/app/apikey', site: 'aistudio.google.com', note: 'il più intelligente dei tre, legge anche foto e PDF' },
-              { id: 'groq' as const, name: '2. Groq', url: 'https://console.groq.com/keys', site: 'console.groq.com/keys', note: 'velocissimo, risponde quando Gemini ha finito' },
+              { id: 'groq' as const, name: '2. Groq (facoltativo)', url: 'https://console.groq.com/keys', site: 'console.groq.com/keys', note: 'facoltativo: se non riesci a creare l\'account lascia vuoto, bastano Gemini e OpenRouter' },
               { id: 'openrouter' as const, name: '3. OpenRouter', url: 'https://openrouter.ai/keys', site: 'openrouter.ai/keys', note: 'modelli gratuiti come DeepSeek e Qwen, ultima riserva' },
             ]).map(f => (
               <div key={f.id} className={`rounded-xl p-3 ${boxClass}`}>
