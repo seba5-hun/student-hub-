@@ -408,10 +408,40 @@ async function askOne(p: KeyProvider, system: string, context: string, turns: Ch
 }
 
 // `buildContext` receives how many characters of material the chosen AI can take.
+// Photos attached in the chat are turned into text by Gemini (free) before going to a paid AI:
+// reading an image costs much more than reading its text. Kept in memory for the session.
+const PHOTO_PROMPT = 'Trascrivi fedelmente tutto il testo di questa foto (esercizi, pagine di libro, appunti, anche scritti a mano), ' +
+  'mantenendo la struttura e scrivendo le formule in modo leggibile. Descrivi brevemente tra [parentesi quadre] grafici, figure, tabelle e schemi ' +
+  'con tutti i dati che contengono. Solo la trascrizione, senza commenti.';
+const photoText = new Map<string, string>();
+
+async function photosToText(turns: ChatTurn[]): Promise<ChatTurn[]> {
+  return Promise.all(turns.map(async t => {
+    if (!t.images?.length) return t;
+    try {
+      const texts = await Promise.all(t.images.map(async (img, i) => {
+        const id = `${img.data.length}:${img.data.slice(0, 80)}:${img.data.slice(-80)}`;
+        let text = photoText.get(id);
+        if (text === undefined) {
+          text = await generateContent(getKey('gemini'), [
+            { role: 'user', parts: [{ inline_data: { mime_type: img.mimeType, data: img.data } }, { text: PHOTO_PROMPT }] },
+          ], { temperature: 0.1, maxOutputTokens: 16384 });
+          photoText.set(id, text);
+        }
+        return `[Foto ${i + 1} allegata dallo studente, trascritta]\n${text}`;
+      }));
+      return { role: t.role, text: [t.text, ...texts].filter(Boolean).join('\n\n') };
+    } catch {
+      return t; // Gemini not available right now: the photo goes as it is.
+    }
+  }));
+}
+
 export async function askTutor(system: string, buildContext: (budget: number) => Promise<string>, turns: ChatTurn[]): Promise<string> {
   const p = getProvider();
   if (p !== 'free') {
     if (!getKey(p)) throw new Error('Configura prima la chiave AI nelle impostazioni della Guida Studio AI.');
+    if (p !== 'gemini' && getKey('gemini') && turns.some(t => t.images?.length)) turns = await photosToText(turns);
     const answer = await askOne(p, system, await buildContext(materialBudget(p)), turns);
     lastAnsweredBy = PROVIDER_NAMES[p];
     return answer;
@@ -445,7 +475,8 @@ export function canTranscribe(): boolean {
 // file must be an image and the chosen model must accept images.
 export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
   const p = getProvider();
-  const order: AIProvider[] = [p, 'claude', 'gemini', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];
+  // Gemini first: it reads photos and PDFs well and for free, so the paid AIs only ever get text.
+  const order: AIProvider[] = ['gemini', p, 'claude', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];
   const usable = order.filter((x, i) => order.indexOf(x) === i && getKey(x));
   const claudeReads = mimeType === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
   const pick = usable.find(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));
