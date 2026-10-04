@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus } from 'lucide-react';
+import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus, BarChart3, ChevronDown } from 'lucide-react';
 import { useDialog } from './Dialog';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import SubjectManager from './SubjectManager';
@@ -204,6 +204,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   // every second doesn't redraw them.
   // The pie shows one week at a time (it starts again every Monday); the two previous weeks stay visible.
   const [pieWeek, setPieWeek] = useState(0);
+  const [showStats, setShowStats] = useState(false);
   const distribution = useMemo(() => {
     const week = periodOf('week', pieWeek);
     const pieData = Object.entries(getSubjectStudyTime(sessionsIn(sessions, week)))
@@ -218,6 +219,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             <h3 className={`font-semibold ${textColor}`}>Distribuzione tempo</h3>
             <p className={`text-xs ${subTextColor}`}>{week.label} · si azzera ogni lunedì</p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
           <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist" aria-label="Settimana">
             {[{ v: 0, l: 'Questa settimana' }, { v: -1, l: 'Scorsa' }, { v: -2, l: '2 sett. fa' }].map(o => (
               <button key={o.v} role="tab" aria-selected={pieWeek === o.v} onClick={() => setPieWeek(o.v)}
@@ -225,6 +227,12 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
                 {o.l}
               </button>
             ))}
+          </div>
+          <button onClick={() => setShowStats(v => !v)} aria-expanded={showStats}
+            className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-all ${showStats ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : darkMode ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10'}`}>
+            <BarChart3 className="w-4 h-4" /> Statistiche
+            <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showStats ? 'rotate-180' : ''}`} />
+          </button>
           </div>
         </div>
         {pieData.length > 0 ? (
@@ -276,7 +284,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
         ) : <p className={`text-sm ${subTextColor} text-center py-8`}>{pieWeek === 0 ? 'Nessuna sessione questa settimana: avvia il timer per iniziare!' : 'Nessuna sessione in questa settimana.'}</p>}
       </div>
     );
-  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor, pieWeek]);
+  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor, pieWeek, showStats]);
 
   const recentList = useMemo(() => (
         sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
@@ -423,7 +431,11 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
 
       {distribution}
 
-      <StudyStats sessions={sessions} subjectDefs={subjectDefs} darkMode={darkMode} />
+      {showStats && (
+        <div className="animate-section-in">
+          <StudyStats sessions={sessions} subjectDefs={subjectDefs} darkMode={darkMode} onClose={() => setShowStats(false)} />
+        </div>
+      )}
 
       <div className={`${cardClass} p-6`}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">

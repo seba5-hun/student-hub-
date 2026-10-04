@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, BarChart3, X } from 'lucide-react';
 import { StudySession, SubjectDef, subjectColor } from '../lib/store';
 import { PeriodKind, periodOf, sessionsIn, minutesBySubject, bucketsOf } from '../lib/studyPeriods';
 
@@ -18,7 +18,7 @@ function hm(total: number): string {
   return rest ? `${h} h ${rest} min` : `${h} h`;
 }
 
-export default function StudyStats({ sessions, subjectDefs, darkMode }: { sessions: StudySession[]; subjectDefs: SubjectDef[]; darkMode: boolean }) {
+export default function StudyStats({ sessions, subjectDefs, darkMode, onClose }: { sessions: StudySession[]; subjectDefs: SubjectDef[]; darkMode: boolean; onClose?: () => void }) {
   const [kind, setKind] = useState<PeriodKind>('week');
   const [offset, setOffset] = useState(0);
 
@@ -60,7 +60,7 @@ export default function StudyStats({ sessions, subjectDefs, darkMode }: { sessio
     <div className={`${cardClass} p-6 space-y-5`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className={`font-semibold flex items-center gap-2 ${textColor}`}><BarChart3 className="w-5 h-5 text-indigo-400" /> Statistiche</h3>
-        <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
+        <div className={`ml-auto flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
           {KINDS.map(k => (
             <button key={k.id} role="tab" aria-selected={kind === k.id} onClick={() => { setKind(k.id); setOffset(0); }}
               className={`px-3 py-1.5 rounded-lg text-sm transition-all ${kind === k.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
@@ -68,6 +68,11 @@ export default function StudyStats({ sessions, subjectDefs, darkMode }: { sessio
             </button>
           ))}
         </div>
+        {onClose && (
+          <button onClick={onClose} aria-label="Chiudi statistiche" title="Chiudi" className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white/70' : 'hover:bg-black/5 text-gray-500'}`}>
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2">
