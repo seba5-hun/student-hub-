@@ -364,6 +364,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
       const turns = history.map(toTurn).filter(t => t.text || t.images?.length);
       const reply = await askTutor(SYSTEM_PROMPT, context, turns);
+      setAiName(providerLabel()); // the model may have been chosen automatically
       const answer: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

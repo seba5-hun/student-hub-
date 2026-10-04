@@ -2,12 +2,13 @@
 // and pastes their own key (kept only in this browser):
 //  - Google Gemini: free, with daily limits;
 //  - Claude (Anthropic): the best quality, paid per use with prepaid credit;
-//  - OpenRouter: one key for many models, including free and very cheap ones.
+//  - OpenRouter: one key for many models, including free and very cheap ones;
+//  - OpenAI: the ChatGPT models (GPT), paid per use with prepaid credit.
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from './gemini';
 
-export type AIProvider = 'gemini' | 'claude' | 'openrouter';
+export type AIProvider = 'gemini' | 'claude' | 'openrouter' | 'openai';
 
 export interface ChatImage { mimeType: string; data: string } // base64, without the data: prefix
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; images?: ChatImage[] }
@@ -25,10 +26,13 @@ const KEY_STORAGE: Record<AIProvider, string> = {
   gemini: 'gemini_api_key',
   claude: 'studenthub_claude_key',
   openrouter: 'studenthub_openrouter_key',
+  openai: 'studenthub_openai_key',
 };
-const MODEL_STORAGE: Record<'claude' | 'openrouter', string> = {
+type ModelProvider = 'claude' | 'openrouter' | 'openai';
+const MODEL_STORAGE: Record<ModelProvider, string> = {
   claude: 'studenthub_claude_model',
   openrouter: 'studenthub_openrouter_model',
+  openai: 'studenthub_openai_model',
 };
 
 function read(key: string): string {
@@ -40,7 +44,7 @@ function write(key: string, value: string) {
 
 export function getProvider(): AIProvider {
   const saved = read(PROVIDER_KEY) as AIProvider;
-  return saved === 'claude' || saved === 'openrouter' ? saved : 'gemini';
+  return saved === 'claude' || saved === 'openrouter' || saved === 'openai' ? saved : 'gemini';
 }
 export function setProvider(p: AIProvider) { write(PROVIDER_KEY, p); }
 
@@ -52,12 +56,13 @@ export function setKey(p: AIProvider, key: string) {
   else write(KEY_STORAGE[p], key.trim());
 }
 
-export function getModel(p: 'claude' | 'openrouter'): string {
+export function getModel(p: ModelProvider): string {
   const saved = read(MODEL_STORAGE[p]);
   if (p === 'claude') return CLAUDE_MODELS.some(m => m.id === saved) ? saved : CLAUDE_MODELS[0].id;
+  if (p === 'openai') return saved; // '' = the best model available to the key, chosen at the first question
   return saved || OPENROUTER_AUTO;
 }
-export function setModel(p: 'claude' | 'openrouter', model: string) { write(MODEL_STORAGE[p], model); }
+export function setModel(p: ModelProvider, model: string) { write(MODEL_STORAGE[p], model); }
 
 export function isReady(): boolean {
   return !!getKey(getProvider());
@@ -67,6 +72,7 @@ export function providerLabel(): string {
   const p = getProvider();
   if (p === 'claude') return CLAUDE_MODELS.find(m => m.id === getModel('claude'))?.label || 'Claude';
   if (p === 'openrouter') return `OpenRouter · ${getModel('openrouter').replace(/^[^/]+\//, '')}`;
+  if (p === 'openai') return `ChatGPT${getModel('openai') ? ` · ${getModel('openai')}` : ''}`;
   return 'Google Gemini';
 }
 
@@ -168,15 +174,7 @@ export async function listOpenRouterModels(): Promise<OpenRouterModel[]> {
 }
 
 async function askOpenRouter(system: string, context: string, turns: ChatTurn[], maxTokens = 8192): Promise<string> {
-  const messages = [
-    { role: 'system', content: context ? `${system}\n\n${context}` : system },
-    ...turns.map(t => ({
-      role: t.role,
-      content: t.images?.length
-        ? [...(t.text ? [{ type: 'text', text: t.text }] : []), ...t.images.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))]
-        : t.text,
-    })),
-  ];
+  const messages = compatMessages(system, context, turns);
   let res: Response;
   try {
     res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -199,6 +197,84 @@ async function askOpenRouter(system: string, context: string, turns: ChatTurn[],
     if (res.status === 402) throw new Error('Credito di OpenRouter esaurito: ricaricalo su openrouter.ai o scegli un modello gratuito.');
     if (res.status === 429) throw new Error('Limite di richieste raggiunto per questo modello (i modelli gratuiti ne hanno pochi). Aspetta un po\' o scegli un altro modello.');
     throw new Error(`OpenRouter: ${msg}`);
+  }
+  return String(body.choices?.[0]?.message?.content || '').trim();
+}
+
+// ---------------------------------------------------------------- OpenAI (ChatGPT)
+
+export interface OpenAIModel { id: string; rank: number; small: boolean }
+
+const OPENAI_SKIP = /audio|realtime|image|tts|transcribe|search|embedding|instruct|dall|whisper|moderation|davinci|babbage|codex|computer|preview/i;
+
+// The models change often: they are read from the key's own list and the newest full one is
+// suggested first (mini / nano are cheaper but less smart).
+function openAIRank(id: string): number {
+  const version = parseFloat(/^gpt-(\d+(?:\.\d+)?)/.exec(id)?.[1] || (/^o(\d+)/.exec(id) ? '4.5' : '0'));
+  let rank = version * 100;
+  if (/mini/.test(id)) rank -= 30;
+  if (/nano/.test(id)) rank -= 60;
+  if (/\d{4}-\d{2}-\d{2}$/.test(id)) rank -= 5; // dated snapshot: prefer the alias
+  if (/chat-latest/.test(id)) rank -= 2;
+  return rank;
+}
+
+export async function listOpenAIModels(key: string): Promise<OpenAIModel[]> {
+  const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
+  if (res.status === 401) throw new Error('Chiave di OpenAI non valida: controlla di averla copiata tutta.');
+  if (!res.ok) throw new Error('Impossibile leggere i modelli di OpenAI. Riprova tra poco.');
+  const body = await res.json();
+  return (body.data || [])
+    .map((m: { id: string }) => m.id)
+    .filter((id: string) => (/^gpt-\d/.test(id) || /^o\d/.test(id)) && !OPENAI_SKIP.test(id))
+    .map((id: string) => ({ id, rank: openAIRank(id), small: /mini|nano/.test(id) }))
+    .sort((a: OpenAIModel, b: OpenAIModel) => b.rank - a.rank || a.id.localeCompare(b.id));
+}
+
+function compatMessages(system: string, context: string, turns: ChatTurn[]) {
+  return [
+    { role: 'system', content: context ? `${system}\n\n${context}` : system },
+    ...turns.map(t => ({
+      role: t.role,
+      content: t.images?.length
+        ? [...(t.text ? [{ type: 'text', text: t.text }] : []), ...t.images.map(img => ({ type: 'image_url', image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))]
+        : t.text,
+    })),
+  ];
+}
+
+async function askOpenAI(system: string, context: string, turns: ChatTurn[]): Promise<string> {
+  const key = getKey('openai');
+  let model = getModel('openai');
+  if (!model) {
+    const best = (await listOpenAIModels(key)).find(m => !m.small);
+    if (!best) throw new Error('Questa chiave di OpenAI non ha accesso a nessun modello GPT.');
+    model = best.id;
+    setModel('openai', model);
+  }
+  let res: Response;
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      // Reasoning models think inside this limit too: keep it generous.
+      body: JSON.stringify({ model, messages: compatMessages(system, context, turns), max_completion_tokens: 32000 }),
+    });
+  } catch {
+    throw new Error('Errore di connessione con OpenAI. Controlla la rete e riprova.');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg: string = body.error?.message || `Errore ${res.status}`;
+    const code: string = body.error?.code || '';
+    if (res.status === 401) throw new Error('Chiave di OpenAI non valida. Controllala nelle impostazioni AI.');
+    if (code === 'insufficient_quota' || /quota|billing/i.test(msg)) throw new Error('Il credito di OpenAI è finito: ricaricalo su platform.openai.com (Billing).');
+    if (res.status === 429) throw new Error('Troppe richieste a OpenAI in poco tempo. Aspetta un minuto e riprova.');
+    if (res.status === 404 || code === 'model_not_found') {
+      setModel('openai', '');
+      throw new Error(`Il modello "${model}" non è disponibile per questa chiave: riprova, ne sceglierò un altro.`);
+    }
+    throw new Error(`OpenAI: ${msg}`);
   }
   return String(body.choices?.[0]?.message?.content || '').trim();
 }
@@ -233,23 +309,24 @@ export async function askTutor(system: string, context: string, turns: ChatTurn[
   if (!getKey(p)) throw new Error('Configura prima la chiave AI nelle impostazioni della Guida Studio AI.');
   if (p === 'claude') return askClaude(system, context, turns);
   if (p === 'openrouter') return askOpenRouter(system, context, turns);
+  if (p === 'openai') return askOpenAI(system, context, turns);
   return askGemini(system, context, turns);
 }
 
 export function canTranscribe(): boolean {
-  return !!(getKey('gemini') || getKey('claude') || getKey('openrouter'));
+  return !!(getKey('gemini') || getKey('claude') || getKey('openrouter') || getKey('openai'));
 }
 
 // Reads photos and scanned PDFs. Claude and Gemini read PDFs directly; with only OpenRouter the
 // file must be an image and the chosen model must accept images.
 export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
   const p = getProvider();
-  const order: AIProvider[] = [p, 'claude', 'gemini', 'openrouter'];
+  const order: AIProvider[] = [p, 'claude', 'gemini', 'openai', 'openrouter'];
   const usable = order.filter((x, i) => order.indexOf(x) === i && getKey(x));
   const claudeReads = mimeType === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
-  const pick = usable.find(x => (x === 'claude' ? claudeReads : x === 'openrouter' ? mimeType.startsWith('image/') : true));
+  const pick = usable.find(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));
   if (!pick) {
-    if (usable.length) throw new Error('Con OpenRouter l\'AI può leggere le foto ma non i PDF scansionati: aggiungi una chiave Gemini (gratis) o Claude.');
+    if (usable.length) throw new Error('Con ChatGPT o OpenRouter l\'AI può leggere le foto ma non i PDF scansionati: aggiungi una chiave Gemini (gratis) o Claude.');
     throw new NoAIKeyError();
   }
   if (pick === 'gemini') {
@@ -274,5 +351,7 @@ export async function transcribeFile(data: string, mimeType: string, prompt: str
       throw claudeError(SDK, err);
     }
   }
-  return askOpenRouter('Sei un trascrittore preciso.', '', [{ role: 'user', text: prompt, images: [{ mimeType, data }] }], 16000);
+  const turn: ChatTurn = { role: 'user', text: prompt, images: [{ mimeType, data }] };
+  if (pick === 'openai') return askOpenAI('Sei un trascrittore preciso.', '', [turn]);
+  return askOpenRouter('Sei un trascrittore preciso.', '', [turn], 16000);
 }

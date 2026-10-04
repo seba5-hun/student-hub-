@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Sparkles, Crown, Layers, Loader2, Search, ExternalLink } from 'lucide-react';
+import { Check, Sparkles, Crown, Layers, Loader2, Search, ExternalLink, MessageCircle } from 'lucide-react';
 import {
-  AIProvider, CLAUDE_MODELS, OPENROUTER_AUTO, OpenRouterModel, getKey, getModel, getProvider, listOpenRouterModels,
+  AIProvider, CLAUDE_MODELS, OPENROUTER_AUTO, OpenRouterModel, OpenAIModel, getKey, getModel, getProvider, listOpenRouterModels, listOpenAIModels,
   setKey, setModel, setProvider,
 } from '../lib/ai';
 
@@ -19,6 +19,11 @@ const PROVIDERS: { id: AIProvider; name: string; badge: string; badgeClass: stri
     icon: <Sparkles className="w-5 h-5" />, gradient: 'from-blue-500 to-cyan-600',
   },
   {
+    id: 'openai', name: 'ChatGPT (OpenAI)', badge: 'Top', badgeClass: 'bg-fuchsia-500/20 text-fuchsia-400',
+    text: 'I modelli GPT di ChatGPT, i più recenti disponibili per la tua chiave. A consumo con credito prepagato: pochi centesimi a domanda.',
+    icon: <MessageCircle className="w-5 h-5" />, gradient: 'from-emerald-500 to-teal-600',
+  },
+  {
     id: 'claude', name: 'Claude (Anthropic)', badge: 'Qualità migliore', badgeClass: 'bg-amber-500/20 text-amber-400',
     text: 'Il tutor più preciso nelle spiegazioni. Si paga a consumo con credito prepagato: pochi centesimi a domanda.',
     icon: <Crown className="w-5 h-5" />, gradient: 'from-orange-500 to-amber-600',
@@ -34,6 +39,7 @@ const KEY_HINT: Record<AIProvider, { prefix: string; placeholder: string }> = {
   gemini: { prefix: 'AIza', placeholder: 'AIza...' },
   claude: { prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
   openrouter: { prefix: 'sk-or-', placeholder: 'sk-or-...' },
+  openai: { prefix: 'sk-', placeholder: 'sk-proj-...' },
 };
 
 function price(perMillion: number): string {
@@ -43,9 +49,13 @@ function price(perMillion: number): string {
 
 export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: AISettingsProps) {
   const [provider, setProviderState] = useState<AIProvider>(getProvider);
-  const [keys, setKeys] = useState<Record<AIProvider, string>>(() => ({ gemini: getKey('gemini'), claude: getKey('claude'), openrouter: getKey('openrouter') }));
+  const [keys, setKeys] = useState<Record<AIProvider, string>>(() => ({ gemini: getKey('gemini'), claude: getKey('claude'), openrouter: getKey('openrouter'), openai: getKey('openai') }));
   const [claudeModel, setClaudeModel] = useState(() => getModel('claude'));
   const [orModel, setOrModel] = useState(() => getModel('openrouter'));
+  const [oaModel, setOaModel] = useState(() => getModel('openai'));
+  const [oaModels, setOaModels] = useState<OpenAIModel[] | null>(null);
+  const [oaState, setOaState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [oaError, setOaError] = useState('');
   const [orModels, setOrModels] = useState<OpenRouterModel[] | null>(null);
   const [orError, setOrError] = useState('');
   const [orQuery, setOrQuery] = useState('');
@@ -71,6 +81,19 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
       .slice(0, 80);
   }, [orModels, orQuery, onlyFree]);
 
+  // The models of OpenAI depend on the key: they are read as soon as a key is there.
+  const oaKey = keys.openai.trim();
+  useEffect(() => {
+    if (provider !== 'openai' || oaKey.length < 20) { setOaModels(null); setOaState('idle'); return; }
+    setOaState('loading');
+    const id = window.setTimeout(() => {
+      listOpenAIModels(oaKey)
+        .then(list => { setOaModels(list); setOaState('idle'); setOaError(''); })
+        .catch(err => { setOaModels(null); setOaState('error'); setOaError(err instanceof Error ? err.message : String(err)); });
+    }, 500);
+    return () => window.clearTimeout(id);
+  }, [provider, oaKey]);
+
   const key = keys[provider].trim();
   const save = () => {
     if (!key) return;
@@ -78,6 +101,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
     setProvider(provider);
     if (provider === 'claude') setModel('claude', claudeModel);
     if (provider === 'openrouter') setModel('openrouter', orModel);
+    if (provider === 'openai') setModel('openai', oaModel);
     onDone();
   };
 
@@ -93,7 +117,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3" role="radiogroup" aria-label="Fornitore AI">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" role="radiogroup" aria-label="Fornitore AI">
         {PROVIDERS.map(p => {
           const active = provider === p.id;
           return (
@@ -171,6 +195,31 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           </div>
         )}
 
+        {provider === 'openai' && (
+          <div className="space-y-2">
+            <p className={`text-sm font-medium ${textColor}`}>Modello</p>
+            {!oaKey && <p className={`text-xs ${subTextColor}`}>Incolla qui sotto la chiave: comparirà la lista dei modelli GPT che puoi usare.</p>}
+            {oaState === 'loading' && <p className={`text-xs ${subTextColor}`}><Loader2 className="w-3 h-3 inline animate-spin" /> Leggo i modelli disponibili…</p>}
+            {oaState === 'error' && <p className="text-xs text-red-400">{oaError}</p>}
+            {oaModels && (
+              <div className={`max-h-64 overflow-y-auto rounded-xl ${boxClass} p-1`}>
+                <button onClick={() => setOaModel('')}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm ${oaModel === '' ? 'bg-indigo-500/20 text-indigo-300' : textColor}`}>
+                  ⚡ Automatico: il migliore disponibile{oaModels.find(m => !m.small) ? ` (${oaModels.find(m => !m.small)!.id})` : ''}
+                </button>
+                {oaModels.map((m, i) => (
+                  <button key={m.id} onClick={() => setOaModel(m.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex justify-between gap-3 ${oaModel === m.id ? 'bg-indigo-500/20 text-indigo-300' : `${textColor} ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}`}>
+                    <span className="truncate font-mono text-[13px]">{m.id}</span>
+                    <span className={`text-xs whitespace-nowrap ${subTextColor}`}>{i === oaModels.findIndex(x => !x.small) ? '⭐ consigliato' : m.small ? 'più economico' : ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className={`text-xs ${subTextColor}`}>I modelli "mini" e "nano" costano molto meno ma ragionano meno bene.</p>
+          </div>
+        )}
+
         <div>
           <label className={`text-sm font-medium ${textColor}`}>Chiave API</label>
           <input type="password" value={keys[provider]} onChange={e => setKeys(k => ({ ...k, [provider]: e.target.value }))}
@@ -200,6 +249,22 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           <p className={`text-xs ${subTextColor}`}>
             Costo indicativo: con 20 pagine di materiale una domanda costa circa 1–5 centesimi con Opus, meno di 1 centesimo con Haiku.
             Le domande e il materiale scelto vengono inviati ad Anthropic per generare la risposta.
+          </p>
+        </div>
+      )}
+
+      {provider === 'openai' && (
+        <div className={`${cardClass} p-6 space-y-3`}>
+          <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la chiave di ChatGPT (OpenAI)</h3>
+          <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
+            <li>Vai su <a href="https://platform.openai.com/signup" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">platform.openai.com <ExternalLink className="w-3 h-3" /></a> e accedi (puoi usare lo stesso account di ChatGPT; serve avere almeno 18 anni).</li>
+            <li>Vai in <b>Settings → Billing</b> e aggiungi un piccolo credito (da 5 $). L'abbonamento ChatGPT Plus <b>non</b> vale per le API: è un credito separato.</li>
+            <li>Vai in <b>API keys</b>, premi <b>Create new secret key</b>, dai un nome (es. "Student Hub") e copia la chiave: inizia con <b>sk-</b>.</li>
+            <li>Incollala qui sopra: comparirà la lista dei modelli, lascia <b>Automatico</b> o scegline uno, poi premi <b>Salva</b>.</li>
+          </ol>
+          <p className={`text-xs ${subTextColor}`}>
+            Paghi solo quello che usi: in genere pochi centesimi a domanda con i modelli migliori, meno con i "mini".
+            Le domande e il materiale scelto vengono inviati a OpenAI per generare la risposta.
           </p>
         </div>
       )}
