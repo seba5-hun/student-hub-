@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Sparkles, Crown, Layers, Loader2, Search, ExternalLink, MessageCircle } from 'lucide-react';
+import { Check, Sparkles, Crown, Layers, Loader2, Search, ExternalLink, MessageCircle, Zap, Gift } from 'lucide-react';
 import {
-  AIProvider, CLAUDE_MODELS, OPENROUTER_AUTO, OpenRouterModel, OpenAIModel, getKey, getModel, getProvider, listOpenRouterModels, listOpenAIModels,
+  AIProvider, KeyProvider, FREE_CHAIN, CLAUDE_MODELS, OPENROUTER_AUTO, OpenRouterModel, OpenAIModel, getKey, getModel, getProvider, listOpenRouterModels, listOpenAIModels,
   setKey, setModel, setProvider,
 } from '../lib/ai';
 
@@ -14,9 +14,19 @@ interface AISettingsProps {
 
 const PROVIDERS: { id: AIProvider; name: string; badge: string; badgeClass: string; text: string; icon: React.ReactNode; gradient: string }[] = [
   {
+    id: 'free', name: 'Gratis automatico', badge: 'Consigliato · Gratis', badgeClass: 'bg-emerald-500/20 text-emerald-400',
+    text: 'Usa insieme più AI gratuite (Gemini, Groq, OpenRouter): quando una finisce le domande gratuite risponde la successiva.',
+    icon: <Gift className="w-5 h-5" />, gradient: 'from-emerald-500 to-lime-500',
+  },
+  {
     id: 'gemini', name: 'Google Gemini', badge: 'Gratis', badgeClass: 'bg-emerald-500/20 text-emerald-400',
     text: 'Gratuito con limiti giornalieri. Ora usa i modelli migliori disponibili (Pro, poi Flash).',
     icon: <Sparkles className="w-5 h-5" />, gradient: 'from-blue-500 to-cyan-600',
+  },
+  {
+    id: 'groq', name: 'Groq', badge: 'Gratis · Velocissimo', badgeClass: 'bg-emerald-500/20 text-emerald-400',
+    text: 'Grandi modelli "open" (gpt-oss, Llama, Qwen) gratis con limiti giornalieri. Risposte quasi istantanee.',
+    icon: <Zap className="w-5 h-5" />, gradient: 'from-orange-500 to-red-500',
   },
   {
     id: 'openai', name: 'ChatGPT (OpenAI)', badge: 'Top', badgeClass: 'bg-fuchsia-500/20 text-fuchsia-400',
@@ -35,8 +45,9 @@ const PROVIDERS: { id: AIProvider; name: string; badge: string; badgeClass: stri
   },
 ];
 
-const KEY_HINT: Record<AIProvider, { prefix: string; placeholder: string }> = {
+const KEY_HINT: Record<KeyProvider, { prefix: string; placeholder: string }> = {
   gemini: { prefix: 'AIza', placeholder: 'AIza...' },
+  groq: { prefix: 'gsk_', placeholder: 'gsk_...' },
   claude: { prefix: 'sk-ant-', placeholder: 'sk-ant-...' },
   openrouter: { prefix: 'sk-or-', placeholder: 'sk-or-...' },
   openai: { prefix: 'sk-', placeholder: 'sk-proj-...' },
@@ -49,7 +60,7 @@ function price(perMillion: number): string {
 
 export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: AISettingsProps) {
   const [provider, setProviderState] = useState<AIProvider>(getProvider);
-  const [keys, setKeys] = useState<Record<AIProvider, string>>(() => ({ gemini: getKey('gemini'), claude: getKey('claude'), openrouter: getKey('openrouter'), openai: getKey('openai') }));
+  const [keys, setKeys] = useState<Record<KeyProvider, string>>(() => ({ gemini: getKey('gemini'), groq: getKey('groq'), claude: getKey('claude'), openrouter: getKey('openrouter'), openai: getKey('openai') }));
   const [claudeModel, setClaudeModel] = useState(() => getModel('claude'));
   const [orModel, setOrModel] = useState(() => getModel('openrouter'));
   const [oaModel, setOaModel] = useState(() => getModel('openai'));
@@ -94,10 +105,12 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
     return () => window.clearTimeout(id);
   }, [provider, oaKey]);
 
-  const key = keys[provider].trim();
+  const freeKeys = FREE_CHAIN.filter(x => keys[x].trim());
+  const key = provider === 'free' ? freeKeys.join(',') : keys[provider].trim();
   const save = () => {
     if (!key) return;
-    setKey(provider, key);
+    if (provider === 'free') FREE_CHAIN.forEach(x => setKey(x, keys[x].trim()));
+    else setKey(provider, key);
     setProvider(provider);
     if (provider === 'claude') setModel('claude', claudeModel);
     if (provider === 'openrouter') setModel('openrouter', orModel);
@@ -117,7 +130,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" role="radiogroup" aria-label="Fornitore AI">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" role="radiogroup" aria-label="Fornitore AI">
         {PROVIDERS.map(p => {
           const active = provider === p.id;
           return (
@@ -132,7 +145,9 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
                 </div>
               </div>
               <p className={`text-xs ${subTextColor}`}>{p.text}</p>
-              {getKey(p.id) && <p className="text-[11px] text-emerald-400 mt-2">✓ chiave salvata</p>}
+              {p.id === 'free'
+                ? FREE_CHAIN.some(x => getKey(x)) && <p className="text-[11px] text-emerald-400 mt-2">✓ {FREE_CHAIN.filter(x => getKey(x)).length} chiavi gratuite su 3</p>
+                : getKey(p.id) && <p className="text-[11px] text-emerald-400 mt-2">✓ chiave salvata</p>}
             </button>
           );
         })}
@@ -220,14 +235,40 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           </div>
         )}
 
-        <div>
-          <label className={`text-sm font-medium ${textColor}`}>Chiave API</label>
-          <input type="password" value={keys[provider]} onChange={e => setKeys(k => ({ ...k, [provider]: e.target.value }))}
-            className={`${inputClass} w-full mt-1`} placeholder={KEY_HINT[provider].placeholder} autoComplete="off" />
-          {key && !key.startsWith(KEY_HINT[provider].prefix) && (
-            <p className="text-xs text-amber-400 mt-1">Di solito questa chiave inizia con "{KEY_HINT[provider].prefix}". Controlla di averla copiata tutta.</p>
-          )}
-        </div>
+        {provider === 'free' ? (
+          <div className="space-y-4">
+            <div>
+              <p className={`text-sm font-medium ${textColor}`}>Le tue chiavi gratuite</p>
+              <p className={`text-xs ${subTextColor}`}>Ne basta una, ma più ne metti più domande gratuite hai ogni giorno. Nessuna richiede la carta di credito.</p>
+            </div>
+            {([
+              { id: 'gemini' as const, name: '1. Google Gemini', url: 'https://aistudio.google.com/app/apikey', site: 'aistudio.google.com', note: 'il più intelligente dei tre, legge anche foto e PDF' },
+              { id: 'groq' as const, name: '2. Groq', url: 'https://console.groq.com/keys', site: 'console.groq.com/keys', note: 'velocissimo, risponde quando Gemini ha finito' },
+              { id: 'openrouter' as const, name: '3. OpenRouter', url: 'https://openrouter.ai/keys', site: 'openrouter.ai/keys', note: 'modelli gratuiti come DeepSeek e Qwen, ultima riserva' },
+            ]).map(f => (
+              <div key={f.id} className={`rounded-xl p-3 ${boxClass}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <p className={`text-sm font-semibold ${textColor}`}>{f.name} {keys[f.id].trim() && <span className="text-emerald-400 font-normal">✓</span>}</p>
+                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline inline-flex items-center gap-1">Crea la chiave su {f.site} <ExternalLink className="w-3 h-3" /></a>
+                </div>
+                <input type="password" value={keys[f.id]} onChange={e => setKeys(k => ({ ...k, [f.id]: e.target.value }))}
+                  className={`${inputClass} w-full`} placeholder={KEY_HINT[f.id].placeholder} autoComplete="off" />
+                <p className={`text-xs mt-1 ${keys[f.id].trim() && !keys[f.id].trim().startsWith(KEY_HINT[f.id].prefix) ? 'text-amber-400' : subTextColor}`}>
+                  {keys[f.id].trim() && !keys[f.id].trim().startsWith(KEY_HINT[f.id].prefix) ? `Di solito questa chiave inizia con "${KEY_HINT[f.id].prefix}": controlla di averla copiata tutta.` : f.note}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <label className={`text-sm font-medium ${textColor}`}>Chiave API</label>
+            <input type="password" value={keys[provider]} onChange={e => setKeys(k => ({ ...k, [provider]: e.target.value }))}
+              className={`${inputClass} w-full mt-1`} placeholder={KEY_HINT[provider].placeholder} autoComplete="off" />
+            {key && !key.startsWith(KEY_HINT[provider].prefix) && (
+              <p className="text-xs text-amber-400 mt-1">Di solito questa chiave inizia con "{KEY_HINT[provider].prefix}". Controlla di averla copiata tutta.</p>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={save} disabled={!key} className="btn-primary disabled:opacity-50">Salva e usa {PROVIDERS.find(p => p.id === provider)!.name}</button>
@@ -235,7 +276,32 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
         </div>
       </div>
 
-      {provider === 'gemini' && geminiGuide}
+      {(provider === 'gemini' || provider === 'free') && geminiGuide}
+
+      {(provider === 'groq' || provider === 'free') && (
+        <div className={`${cardClass} p-6 space-y-3`}>
+          <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la chiave gratuita di Groq</h3>
+          <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
+            <li>Vai su <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">console.groq.com/keys <ExternalLink className="w-3 h-3" /></a> e accedi (anche con Google). Non serve la carta di credito.</li>
+            <li>Premi <b>Create API Key</b>, scrivi un nome (es. "Student Hub") e premi <b>Submit</b>.</li>
+            <li>Copia la chiave che compare: inizia con <b>gsk_</b>. Si vede una volta sola, quindi copiala subito.</li>
+            <li>Incollala qui sopra e premi <b>Salva</b>.</li>
+          </ol>
+          <p className={`text-xs ${subTextColor}`}>Groq legge solo testo (non le foto) e accetta materiali più corti: l'app gli manda solo le parti più utili per ogni domanda.</p>
+        </div>
+      )}
+
+      {provider === 'free' && (
+        <div className={`${cardClass} p-6 space-y-3`}>
+          <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la chiave gratuita di OpenRouter</h3>
+          <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
+            <li>Vai su <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">openrouter.ai/keys <ExternalLink className="w-3 h-3" /></a> e accedi (anche con Google).</li>
+            <li>Premi <b>Create API Key</b>, dai un nome e copia la chiave: inizia con <b>sk-or-</b>. Non serve aggiungere credito: l'app usa solo i modelli gratuiti.</li>
+            <li>Incollala qui sopra e premi <b>Salva</b>.</li>
+          </ol>
+          <p className={`text-xs ${subTextColor}`}>Con i modelli gratuiti le domande possono essere usate dai fornitori per migliorare i loro modelli: evita di scrivere dati personali.</p>
+        </div>
+      )}
 
       {provider === 'claude' && (
         <div className={`${cardClass} p-6 space-y-3`}>

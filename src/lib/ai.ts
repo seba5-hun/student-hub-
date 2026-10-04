@@ -3,12 +3,17 @@
 //  - Google Gemini: free, with daily limits;
 //  - Claude (Anthropic): the best quality, paid per use with prepaid credit;
 //  - OpenRouter: one key for many models, including free and very cheap ones;
-//  - OpenAI: the ChatGPT models (GPT), paid per use with prepaid credit.
+//  - OpenAI: the ChatGPT models (GPT), paid per use with prepaid credit;
+//  - Groq: big open models (gpt-oss, Llama, Qwen…), free with daily limits;
+//  - "Gratis automatico": Gemini → Groq → OpenRouter free models, each one answers when the
+//    previous has used up its free quota.
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from './gemini';
 
-export type AIProvider = 'gemini' | 'claude' | 'openrouter' | 'openai';
+export type AIProvider = 'free' | 'gemini' | 'groq' | 'claude' | 'openrouter' | 'openai';
+export type KeyProvider = Exclude<AIProvider, 'free'>;
+export const FREE_CHAIN: KeyProvider[] = ['gemini', 'groq', 'openrouter'];
 
 export interface ChatImage { mimeType: string; data: string } // base64, without the data: prefix
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; images?: ChatImage[] }
@@ -22,8 +27,9 @@ export const CLAUDE_MODELS = [
 export const OPENROUTER_AUTO = 'openrouter/auto';
 
 const PROVIDER_KEY = 'studenthub_ai_provider';
-const KEY_STORAGE: Record<AIProvider, string> = {
+const KEY_STORAGE: Record<KeyProvider, string> = {
   gemini: 'gemini_api_key',
+  groq: 'studenthub_groq_key',
   claude: 'studenthub_claude_key',
   openrouter: 'studenthub_openrouter_key',
   openai: 'studenthub_openai_key',
@@ -44,14 +50,17 @@ function write(key: string, value: string) {
 
 export function getProvider(): AIProvider {
   const saved = read(PROVIDER_KEY) as AIProvider;
-  return saved === 'claude' || saved === 'openrouter' || saved === 'openai' ? saved : 'gemini';
+  if ((['free', 'gemini', 'groq', 'claude', 'openrouter', 'openai'] as AIProvider[]).includes(saved)) return saved;
+  // Who already had a Gemini key keeps using it; everyone else starts from the free mode.
+  return getGeminiKey() ? 'gemini' : 'free';
 }
 export function setProvider(p: AIProvider) { write(PROVIDER_KEY, p); }
 
 export function getKey(p: AIProvider): string {
+  if (p === 'free') return '';
   return p === 'gemini' ? getGeminiKey() : read(KEY_STORAGE[p]);
 }
-export function setKey(p: AIProvider, key: string) {
+export function setKey(p: KeyProvider, key: string) {
   if (p === 'gemini') setGeminiKey(key);
   else write(KEY_STORAGE[p], key.trim());
 }
@@ -65,14 +74,21 @@ export function getModel(p: ModelProvider): string {
 export function setModel(p: ModelProvider, model: string) { write(MODEL_STORAGE[p], model); }
 
 export function isReady(): boolean {
-  return !!getKey(getProvider());
+  const p = getProvider();
+  return p === 'free' ? FREE_CHAIN.some(x => getKey(x)) : !!getKey(p);
 }
+
+// Who answered the last question (shown in the chat in "Gratis automatico").
+let lastAnsweredBy = '';
+const PROVIDER_NAMES: Record<KeyProvider, string> = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', claude: 'Claude', openai: 'ChatGPT' };
 
 export function providerLabel(): string {
   const p = getProvider();
   if (p === 'claude') return CLAUDE_MODELS.find(m => m.id === getModel('claude'))?.label || 'Claude';
   if (p === 'openrouter') return `OpenRouter · ${getModel('openrouter').replace(/^[^/]+\//, '')}`;
   if (p === 'openai') return `ChatGPT${getModel('openai') ? ` · ${getModel('openai')}` : ''}`;
+  if (p === 'groq') return 'Groq';
+  if (p === 'free') return `Gratis automatico${lastAnsweredBy ? ` · ha risposto ${lastAnsweredBy}` : ''}`;
   return 'Google Gemini';
 }
 
@@ -173,7 +189,25 @@ export async function listOpenRouterModels(): Promise<OpenRouterModel[]> {
   return openRouterModels!;
 }
 
-async function askOpenRouter(system: string, context: string, turns: ChatTurn[], maxTokens = 8192): Promise<string> {
+// Best free model for studying (big, recent, good at Italian), read from the public list.
+const FREE_PREFERENCE = [/deepseek.*(v3|r1|chat)/i, /qwen.?3.*(235|max|coder)/i, /gpt-oss-120b/i, /kimi/i, /llama-4-maverick/i, /gemini/i, /qwen/i, /llama-3\.3-70b/i, /mistral/i, /llama/i];
+let freeOpenRouterModel: string | null = null;
+async function bestFreeOpenRouterModel(): Promise<string> {
+  const saved = getModel('openrouter');
+  if (saved.endsWith(':free')) return saved;
+  if (freeOpenRouterModel) return freeOpenRouterModel;
+  const free = (await listOpenRouterModels()).filter(m => m.prompt === 0 && m.completion === 0 && m.id.endsWith(':free'));
+  const ranked = [...free].sort((a, b) => {
+    const ra = FREE_PREFERENCE.findIndex(r => r.test(a.id));
+    const rb = FREE_PREFERENCE.findIndex(r => r.test(b.id));
+    return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb) || b.context - a.context;
+  });
+  if (!ranked.length) throw new Error('OpenRouter non ha modelli gratuiti disponibili in questo momento.');
+  freeOpenRouterModel = ranked[0].id;
+  return freeOpenRouterModel;
+}
+
+async function askOpenRouter(system: string, context: string, turns: ChatTurn[], maxTokens = 8192, model = getModel('openrouter')): Promise<string> {
   const messages = compatMessages(system, context, turns);
   let res: Response;
   try {
@@ -185,7 +219,7 @@ async function askOpenRouter(system: string, context: string, turns: ChatTurn[],
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Student Hub',
       },
-      body: JSON.stringify({ model: getModel('openrouter'), messages, max_tokens: maxTokens }),
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
     });
   } catch {
     throw new Error('Errore di connessione con OpenRouter. Controlla la rete e riprova.');
@@ -279,6 +313,54 @@ async function askOpenAI(system: string, context: string, turns: ChatTurn[]): Pr
   return String(body.choices?.[0]?.message?.content || '').trim();
 }
 
+// ---------------------------------------------------------------- Groq (free)
+
+const GROQ_API = 'https://api.groq.com/openai/v1';
+const GROQ_SKIP = /whisper|guard|tts|playai|distil|compound|orpheus|safeguard/i;
+const GROQ_PREFERENCE = [/gpt-oss-120b/i, /kimi/i, /qwen.?3.*(235|32b)/i, /llama-4-maverick/i, /deepseek/i, /llama-3\.3-70b/i, /qwen/i, /llama-4-scout/i, /gpt-oss/i, /llama/i];
+let groqModel: string | null = null;
+
+async function bestGroqModel(key: string): Promise<string> {
+  if (groqModel) return groqModel;
+  try {
+    const res = await fetch(`${GROQ_API}/models`, { headers: { Authorization: `Bearer ${key}` } });
+    if (res.status === 401) throw new Error('Chiave di Groq non valida: controlla di averla copiata tutta.');
+    const ids: string[] = ((await res.json()).data || []).map((m: { id: string }) => m.id).filter((id: string) => !GROQ_SKIP.test(id));
+    const rank = (id: string) => { const i = GROQ_PREFERENCE.findIndex(r => r.test(id)); return i < 0 ? 99 : i; };
+    groqModel = ids.sort((a, b) => rank(a) - rank(b))[0] || 'llama-3.3-70b-versatile';
+  } catch (err) {
+    if (err instanceof Error && /non valida/.test(err.message)) throw err;
+    groqModel = 'llama-3.3-70b-versatile';
+  }
+  return groqModel;
+}
+
+async function askGroq(system: string, context: string, turns: ChatTurn[]): Promise<string> {
+  const key = getKey('groq');
+  const model = await bestGroqModel(key);
+  let res: Response;
+  try {
+    res = await fetch(`${GROQ_API}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      // Groq's free models read only text: photos are left to Gemini.
+      body: JSON.stringify({ model, messages: compatMessages(system, context, turns.map(t => ({ role: t.role, text: t.text || '(foto)' }))), max_completion_tokens: 8192 }),
+    });
+  } catch {
+    throw new Error('Errore di connessione con Groq. Controlla la rete e riprova.');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg: string = body.error?.message || `Errore ${res.status}`;
+    if (res.status === 401) throw new Error('Chiave di Groq non valida. Controllala nelle impostazioni AI.');
+    if (res.status === 413 || /too large|context|tokens per minute|TPM/i.test(msg)) throw new Error('Per Groq il materiale è troppo lungo: scegli una materia o un argomento più piccolo.');
+    if (res.status === 429) throw new Error('Hai finito le domande gratuite di Groq per ora. Riprova più tardi.');
+    if (res.status === 404 || /model/i.test(msg) && res.status === 400) groqModel = null;
+    throw new Error(`Groq: ${msg}`);
+  }
+  return String(body.choices?.[0]?.message?.content || '').trim();
+}
+
 // ---------------------------------------------------------------- Gemini
 
 function askGemini(system: string, context: string, turns: ChatTurn[]): Promise<string> {
@@ -304,24 +386,66 @@ export class NoAIKeyError extends Error {
   }
 }
 
-export async function askTutor(system: string, context: string, turns: ChatTurn[]): Promise<string> {
-  const p = getProvider();
-  if (!getKey(p)) throw new Error('Configura prima la chiave AI nelle impostazioni della Guida Studio AI.');
+// How much study material (in characters) each AI can take in one question. Free models have
+// small limits: for them only the most relevant parts of the material are sent.
+export function materialBudget(p: KeyProvider): number {
+  if (p === 'groq') return 20_000;
+  if (p === 'openrouter') return getModel('openrouter').endsWith(':free') || getProvider() === 'free' ? 60_000 : 150_000;
+  if (p === 'openai') return 250_000;
+  return 350_000;
+}
+
+async function askOne(p: KeyProvider, system: string, context: string, turns: ChatTurn[]): Promise<string> {
   if (p === 'claude') return askClaude(system, context, turns);
-  if (p === 'openrouter') return askOpenRouter(system, context, turns);
   if (p === 'openai') return askOpenAI(system, context, turns);
+  if (p === 'groq') return askGroq(system, context, turns);
+  if (p === 'openrouter') {
+    return getProvider() === 'free'
+      ? askOpenRouter(system, context, turns, 8192, await bestFreeOpenRouterModel())
+      : askOpenRouter(system, context, turns);
+  }
   return askGemini(system, context, turns);
+}
+
+// `buildContext` receives how many characters of material the chosen AI can take.
+export async function askTutor(system: string, buildContext: (budget: number) => Promise<string>, turns: ChatTurn[]): Promise<string> {
+  const p = getProvider();
+  if (p !== 'free') {
+    if (!getKey(p)) throw new Error('Configura prima la chiave AI nelle impostazioni della Guida Studio AI.');
+    const answer = await askOne(p, system, await buildContext(materialBudget(p)), turns);
+    lastAnsweredBy = PROVIDER_NAMES[p];
+    return answer;
+  }
+  // Free mode: the first AI that answers wins; the others are tried only if it fails
+  // (daily quota used up, servers busy, material too long…).
+  const chain = FREE_CHAIN.filter(x => getKey(x));
+  if (!chain.length) throw new Error('Inserisci almeno una chiave gratuita nelle impostazioni AI.');
+  const hasImages = turns.some(t => t.images?.length);
+  const errors: string[] = [];
+  for (const x of chain) {
+    if (hasImages && x === 'groq') continue;
+    try {
+      const answer = await askOne(x, system, await buildContext(materialBudget(x)), turns);
+      if (!answer) throw new Error('risposta vuota');
+      lastAnsweredBy = PROVIDER_NAMES[x];
+      return answer;
+    } catch (err) {
+      errors.push(`${PROVIDER_NAMES[x]}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error(`Nessuna AI gratuita ha risposto in questo momento. Riprova tra qualche minuto.\n${errors.join('\n')}`);
 }
 
 export function canTranscribe(): boolean {
   return !!(getKey('gemini') || getKey('claude') || getKey('openrouter') || getKey('openai'));
+
 }
 
 // Reads photos and scanned PDFs. Claude and Gemini read PDFs directly; with only OpenRouter the
 // file must be an image and the chosen model must accept images.
 export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
   const p = getProvider();
-  const order: AIProvider[] = [p, 'claude', 'gemini', 'openai', 'openrouter'];
+  const order: AIProvider[] = [p, 'claude', 'gemini', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];
   const usable = order.filter((x, i) => order.indexOf(x) === i && getKey(x));
   const claudeReads = mimeType === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
   const pick = usable.find(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));

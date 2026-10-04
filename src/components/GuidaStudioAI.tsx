@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import { Grade, Task, UserData, createId } from '../lib/store';
 import { askTutor, isReady, providerLabel, ChatTurn } from '../lib/ai';
+import { selectMaterial, MaterialDoc } from '../lib/retrieval';
 import AISettings from './AISettings';
 import { loadTranscript } from '../lib/archiveText';
 import { useDialog } from './Dialog';
@@ -41,15 +42,24 @@ interface ChatMeta {
   title: string;
 }
 
-// Keeps each request well inside Gemini's limits (and the free tier's tokens per minute).
-const MAX_MATERIAL_CHARS = 350_000;
+// Exercises (maths, physics, chemistry…) get a second pass in which the AI checks its own steps.
+function looksLikeExercise(text: string, hasImages: boolean): boolean {
+  const t = text.toLowerCase();
+  if (/(risolv|calcol|esercizi|equazion|disequazion|derivat|integral|dimostr|semplific|problema|limite|funzione|probabilit|percentual|frazion)/.test(t)) return true;
+  if (/\d/.test(t) && /[=+*/^√∫<>]|\d\s*[-x×]\s*\d/.test(t)) return true;
+  return hasImages && /(fai|svolg|correggi|aiut|soluzion|risultat)/.test(t);
+}
+
+const CHECK_PROMPT = 'Prima di rispondere allo studente, ricontrolla con attenzione la tua risposta precedente: rifai ogni calcolo e verifica ogni passaggio e ogni affermazione. ' +
+  'Se trovi errori, scrivi la soluzione corretta completa. Se è tutto giusto, riscrivi la soluzione completa così com\'è. ' +
+  'Rispondi direttamente allo studente con la versione finale, senza parlare di questo controllo.';
 
 const QUICK_ACTIONS = [
-  { label: '📝 Riassumi', prompt: 'Fammi un riassunto chiaro e ordinato del materiale selezionato, con titoli, elenchi e i concetti chiave in grassetto.' },
+  { label: '📝 Riassumi', prompt: 'Fammi un riassunto chiaro e ordinato del materiale selezionato: un titolo per ogni argomento, elenchi puntati, i concetti chiave in grassetto e alla fine 3 punti da ricordare assolutamente.' },
   { label: '❓ Interrogami', prompt: 'Interrogami sul materiale selezionato come farebbe un professore: fammi una domanda alla volta, aspetta la mia risposta, poi correggimi, spiegami cosa manca e dammi un voto.' },
   { label: '🧠 Schema', prompt: 'Crea uno schema (mappa concettuale in forma di elenco) del materiale selezionato, con i concetti principali e i collegamenti tra loro.' },
   { label: '💡 Spiegamelo semplice', prompt: 'Spiegami il materiale selezionato in modo semplice, con parole facili ed esempi concreti.' },
-  { label: '🗂️ Flashcard', prompt: 'Crea 10 flashcard domanda/risposta sui punti più importanti del materiale selezionato.' },
+  { label: '🗂️ Flashcard', prompt: 'Crea 10 flashcard sui punti più importanti del materiale selezionato, nel formato "**D:** domanda" e sotto "**R:** risposta breve", dalle più facili alle più difficili.' },
 ];
 
 function studentContext(data: UserData): string {
@@ -110,6 +120,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [aiReady, setAiReady] = useState(isReady);
   const [showSettings, setShowSettings] = useState(() => !isReady());
   const [aiName, setAiName] = useState(providerLabel);
+  const [loadingStep, setLoadingStep] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -163,22 +174,21 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const unread = inScope.filter(a => a.file && (a.file.textStatus === 'pending' || a.file.textStatus === 'error') && !analyzing.includes(a.id));
   const reading = inScope.filter(a => analyzing.includes(a.id));
 
-  // Transcriptions of the selected files, grouped by subject and topic.
-  const buildMaterial = async (): Promise<string> => {
-    let material = '';
-    let used = 0;
-    for (const item of readable) {
-      const text = await loadTranscript(item.file!.textPath!);
-      const block = `\n\n===== FILE: "${item.name}" (Materia: ${item.subject} > Argomento: ${item.topic}) =====\n${text}`;
-      if (material.length + block.length > MAX_MATERIAL_CHARS) {
-        setNotice(`Il materiale selezionato è molto lungo: ho usato ${used} file su ${readable.length}. Scegli una materia o un argomento qui sopra per concentrarti su una parte.`);
-        return material;
-      }
-      material += block;
-      used++;
-    }
-    setNotice('');
-    return material;
+  // Transcriptions of the selected files. When they don't fit in what the chosen AI can read,
+  // only the parts that best match the question are sent.
+  const materialBuilder = (question: string) => {
+    let docs: MaterialDoc[] | null = null;
+    return async (budget: number): Promise<string> => {
+      docs ??= await Promise.all(readable.map(async item => ({
+        name: item.name, subject: item.subject, topic: item.topic, text: await loadTranscript(item.file!.textPath!),
+      })));
+      if (!docs.length) return '';
+      const picked = selectMaterial(docs, question, budget);
+      setNotice(picked.partial
+        ? `Il materiale è lungo: per questa domanda ho usato le parti più utili di ${picked.filesUsed} file su ${picked.filesTotal}. Per risposte più complete scegli una materia o un argomento qui sopra.`
+        : '');
+      return picked.text;
+    };
   };
 
   const onSettingsDone = () => {
@@ -351,19 +361,33 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     setError('');
 
     try {
-      const material = await buildMaterial();
       const scope = scopeSubject ? `${scopeSubject}${scopeTopic ? ` > ${scopeTopic}` : ''}` : 'tutto l\'archivio';
       const otherItems = inScope.filter(a => !(a.file?.textStatus === 'done'));
-      let context = `${studentContext(data)}\nMATERIALE SELEZIONATO DALLO STUDENTE: ${scope}.`;
-      context += material
-        ? `\n${material}`
-        : '\n(Nessun file letto dall\'AI in questa selezione: rispondi con le tue conoscenze e suggerisci di caricare il materiale nell\'Archivio.)';
-      if (otherItems.length > 0) {
-        context += `\n\nALTRI ELEMENTI DELL'ARCHIVIO (solo il nome, contenuto non disponibile): ${otherItems.map(a => `"${a.name}"`).join(', ')}`;
-      }
+      // The question (and the previous one, for follow-ups like "spiegami meglio") picks the material.
+      const question = history.filter(m => m.role === 'user').slice(-2).map(m => m.content).join('\n');
+      const material = materialBuilder(question);
+      const buildContext = async (budget: number) => {
+        const text = await material(budget);
+        let context = `${studentContext(data)}\nMATERIALE SELEZIONATO DALLO STUDENTE: ${scope}.`;
+        context += text
+          ? `\n${text}`
+          : '\n(Nessun file letto dall\'AI in questa selezione: rispondi con le tue conoscenze e suggerisci di caricare il materiale nell\'Archivio.)';
+        if (otherItems.length > 0) {
+          context += `\n\nALTRI ELEMENTI DELL'ARCHIVIO (solo il nome, contenuto non disponibile): ${otherItems.map(a => `"${a.name}"`).join(', ')}`;
+        }
+        return context;
+      };
 
       const turns = history.map(toTurn).filter(t => t.text || t.images?.length);
-      const reply = await askTutor(SYSTEM_PROMPT, context, turns);
+      setLoadingStep('Sto pensando…');
+      let reply = await askTutor(SYSTEM_PROMPT, buildContext, turns);
+      if (reply && looksLikeExercise(userMessage.content, !!userMessage.images?.length)) {
+        setLoadingStep('Ricontrollo i passaggi…');
+        try {
+          const checked = await askTutor(SYSTEM_PROMPT, buildContext, [...turns, { role: 'assistant', text: reply }, { role: 'user', text: CHECK_PROMPT }]);
+          if (checked) reply = checked;
+        } catch { /* the first answer is still good to show */ }
+      }
       setAiName(providerLabel()); // the model may have been chosen automatically
       const answer: Message = {
         id: (Date.now() + 1).toString(),
@@ -590,7 +614,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               )
             ))}
 
-            {isLoading && <Loader2 className="w-5 h-5 animate-spin text-blue-400" />}
+            {isLoading && <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-5 h-5 animate-spin text-blue-400" />{loadingStep}</span>}
             {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
             {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
             <div ref={messagesEndRef} />
@@ -708,7 +732,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               <Bot className="w-4 h-4 text-white" />
             </div>
             <div className={`rounded-2xl px-4 py-3 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}>
-              <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+              <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-4 h-4 animate-spin text-blue-400" />{loadingStep}</span>
             </div>
           </div>
         )}
