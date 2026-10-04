@@ -3,6 +3,8 @@ import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus } fro
 import { useDialog } from './Dialog';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import SubjectManager from './SubjectManager';
+import StudyStats from './StudyStats';
+import { periodOf, sessionsIn } from '../lib/studyPeriods';
 import { StudySession, Grade, SubjectDef, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
 
 interface TimerProps {
@@ -200,15 +202,31 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
 
   // The chart and the list don't depend on the running time: memoized so the timer ticking
   // every second doesn't redraw them.
+  // The pie shows one week at a time (it starts again every Monday); the two previous weeks stay visible.
+  const [pieWeek, setPieWeek] = useState(0);
   const distribution = useMemo(() => {
-    const pieData = Object.entries(getSubjectStudyTime(sessions))
+    const week = periodOf('week', pieWeek);
+    const pieData = Object.entries(getSubjectStudyTime(sessionsIn(sessions, week)))
       .map(([name, minutes]) => ({ name, value: minutes }))
       .sort((a, b) => b.value - a.value);
     const total = pieData.reduce((sum, d) => sum + d.value, 0);
     const surface = darkMode ? '#241d4a' : '#ffffff';
     return (
       <div className={`${cardClass} p-6`}>
-        <h3 className={`font-semibold mb-4 ${textColor}`}>Distribuzione tempo</h3>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className={`font-semibold ${textColor}`}>Distribuzione tempo</h3>
+            <p className={`text-xs ${subTextColor}`}>{week.label} · si azzera ogni lunedì</p>
+          </div>
+          <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist" aria-label="Settimana">
+            {[{ v: 0, l: 'Questa settimana' }, { v: -1, l: 'Scorsa' }, { v: -2, l: '2 sett. fa' }].map(o => (
+              <button key={o.v} role="tab" aria-selected={pieWeek === o.v} onClick={() => setPieWeek(o.v)}
+                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm transition-all ${pieWeek === o.v ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+        </div>
         {pieData.length > 0 ? (
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="relative w-56 h-56 flex-shrink-0">
@@ -217,7 +235,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={100} dataKey="value"
                     stroke={surface} strokeWidth={2} paddingAngle={pieData.length > 1 ? 1 : 0} labelLine={false}
                     label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                      if (percent < 0.05) return null;
+                      if (percent < 0.05 || percent > 0.999) return null;
                       const r = (innerRadius + outerRadius) / 2;
                       const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
                       const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
@@ -255,10 +273,10 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
               ))}
             </ul>
           </div>
-        ) : <p className={`text-sm ${subTextColor} text-center py-8`}>Nessuna sessione</p>}
+        ) : <p className={`text-sm ${subTextColor} text-center py-8`}>{pieWeek === 0 ? 'Nessuna sessione questa settimana: avvia il timer per iniziare!' : 'Nessuna sessione in questa settimana.'}</p>}
       </div>
     );
-  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor]);
+  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor, pieWeek]);
 
   const recentList = useMemo(() => (
         sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
@@ -404,6 +422,8 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
       </div>
 
       {distribution}
+
+      <StudyStats sessions={sessions} subjectDefs={subjectDefs} darkMode={darkMode} />
 
       <div className={`${cardClass} p-6`}>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
