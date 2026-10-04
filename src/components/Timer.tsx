@@ -19,6 +19,15 @@ interface TimerProps {
 
 const TIMER_KEY = 'studenthub_timer';
 
+// 45 → "45 min", 90 → "1 h 30 min", 120 → "2 h"
+export function formatMinutes(total: number): string {
+  const m = Math.round(total);
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (h === 0) return `${rest} min`;
+  return rest ? `${h} h ${rest} min` : `${h} h`;
+}
+
 // Time of the running session, per subject ('' = not assigned yet, split when saving).
 interface TimerState {
   subject: string;
@@ -192,19 +201,57 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   // The chart and the list don't depend on the running time: memoized so the timer ticking
   // every second doesn't redraw them.
   const distribution = useMemo(() => {
-    const pieData = Object.entries(getSubjectStudyTime(sessions)).map(([name, minutes]) => ({ name, value: minutes }));
+    const pieData = Object.entries(getSubjectStudyTime(sessions))
+      .map(([name, minutes]) => ({ name, value: minutes }))
+      .sort((a, b) => b.value - a.value);
+    const total = pieData.reduce((sum, d) => sum + d.value, 0);
+    const surface = darkMode ? '#241d4a' : '#ffffff';
     return (
       <div className={`${cardClass} p-6`}>
         <h3 className={`font-semibold mb-4 ${textColor}`}>Distribuzione tempo</h3>
         {pieData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                {pieData.map(d => <Cell key={d.name} fill={subjectColor(d.name, subjectDefs)} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: darkMode ? '#1f2937' : '#fff', border: 'none', borderRadius: '8px' }} formatter={(val: number) => `${Math.round(val)}min`} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="relative w-56 h-56 flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={100} dataKey="value"
+                    stroke={surface} strokeWidth={2} paddingAngle={pieData.length > 1 ? 1 : 0} labelLine={false}
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                      if (percent < 0.07) return null;
+                      const r = (innerRadius + outerRadius) / 2;
+                      const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
+                      const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
+                      return (
+                        <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={13} fontWeight={700}
+                          style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.35)', strokeWidth: 3 }}>
+                          {`${Math.round(percent * 100)}%`}
+                        </text>
+                      );
+                    }}>
+                    {pieData.map(d => <Cell key={d.name} fill={subjectColor(d.name, subjectDefs)} />)}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{ background: darkMode ? '#1f2937' : '#fff', border: darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.08)', borderRadius: '10px', fontSize: 13 }}
+                    itemStyle={{ color: darkMode ? '#fff' : '#1f2937' }}
+                    formatter={(val: number, name: string) => [`${formatMinutes(val)} · ${Math.round((val / total) * 100)}%`, name]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className={`text-2xl font-bold tabular-nums ${textColor}`}>{(total / 60).toFixed(1)} h</span>
+                <span className={`text-xs ${subTextColor}`}>in totale</span>
+              </div>
+            </div>
+            <ul className="flex-1 w-full space-y-2" aria-label="Tempo per materia">
+              {pieData.map(d => (
+                <li key={d.name} className="flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(d.name, subjectDefs) }} />
+                  <span className={`flex-1 text-sm font-medium truncate ${textColor}`}>{d.name}</span>
+                  <span className={`text-sm tabular-nums ${textColor}`}>{formatMinutes(d.value)}</span>
+                  <span className={`text-xs tabular-nums w-10 text-right ${subTextColor}`}>{Math.round((d.value / total) * 100)}%</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : <p className={`text-sm ${subTextColor} text-center py-8`}>Nessuna sessione</p>}
       </div>
     );
@@ -221,7 +268,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
                   </div>
                   <div>
                     <p className={`text-sm font-medium ${textColor}`}>{session.subject}</p>
-                    <p className={`text-xs ${subTextColor}`}>{formatDate(session.date)} • {session.duration}min</p>
+                    <p className={`text-xs ${subTextColor}`}>{formatDate(session.date)} • {formatMinutes(session.duration)}</p>
                   </div>
                 </div>
                 <button onClick={() => onUpdate(sessions.filter(s => s.id !== session.id))} className="p-2 text-red-400">
@@ -275,8 +322,20 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
           />
         )}
 
-        <div className={`text-6xl md:text-7xl font-mono font-bold ${textColor} pt-8 pb-4`}>
-          {formatTime(seconds)}
+        <div className={`flex items-start justify-center gap-1 sm:gap-2 font-mono font-bold ${textColor} pt-8 pb-4`} aria-label={`${Math.floor(seconds / 3600)} ore, ${Math.floor((seconds % 3600) / 60)} minuti, ${seconds % 60} secondi`}>
+          {[
+            { value: Math.floor(seconds / 3600), unit: 'ore' },
+            { value: Math.floor((seconds % 3600) / 60), unit: 'min' },
+            { value: seconds % 60, unit: 'sec' },
+          ].map((part, i) => (
+            <React.Fragment key={part.unit}>
+              {i > 0 && <span className="text-5xl sm:text-6xl md:text-7xl opacity-40">:</span>}
+              <div className="flex flex-col items-center">
+                <span className="text-5xl sm:text-6xl md:text-7xl tabular-nums">{part.value.toString().padStart(2, '0')}</span>
+                <span className={`text-xs font-sans font-medium uppercase tracking-widest mt-1 ${subTextColor}`}>{part.unit}</span>
+              </div>
+            </React.Fragment>
+          ))}
         </div>
 
         {totalMs > 0 && (() => {
