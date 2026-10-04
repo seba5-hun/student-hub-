@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus, BarChart3, ChevronDown } from 'lucide-react';
+import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus } from 'lucide-react';
 import { useDialog } from './Dialog';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import SubjectManager from './SubjectManager';
 import StudyStats from './StudyStats';
-import { periodOf, sessionsIn } from '../lib/studyPeriods';
-import { StudySession, Grade, SubjectDef, subjectColor, getSubjectStudyTime, createId, formatDate } from '../lib/store';
+import WeekDistribution from './WeekDistribution';
+import { StudySession, Grade, SubjectDef, subjectColor, createId, formatDate } from '../lib/store';
 
 interface TimerProps {
   sessions: StudySession[];
@@ -203,88 +202,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
   // The chart and the list don't depend on the running time: memoized so the timer ticking
   // every second doesn't redraw them.
   // The pie shows one week at a time (it starts again every Monday); the two previous weeks stay visible.
-  const [pieWeek, setPieWeek] = useState(0);
   const [showStats, setShowStats] = useState(false);
-  const distribution = useMemo(() => {
-    const week = periodOf('week', pieWeek);
-    const pieData = Object.entries(getSubjectStudyTime(sessionsIn(sessions, week)))
-      .map(([name, minutes]) => ({ name, value: minutes }))
-      .sort((a, b) => b.value - a.value);
-    const total = pieData.reduce((sum, d) => sum + d.value, 0);
-    const surface = darkMode ? '#241d4a' : '#ffffff';
-    return (
-      <div className={`${cardClass} p-6`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className={`font-semibold ${textColor}`}>Distribuzione tempo</h3>
-            <p className={`text-xs ${subTextColor}`}>{week.label} · si azzera ogni lunedì</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-          <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist" aria-label="Settimana">
-            {[{ v: 0, l: 'Questa settimana' }, { v: -1, l: 'Scorsa' }, { v: -2, l: '2 sett. fa' }].map(o => (
-              <button key={o.v} role="tab" aria-selected={pieWeek === o.v} onClick={() => setPieWeek(o.v)}
-                className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm transition-all ${pieWeek === o.v ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
-                {o.l}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setShowStats(v => !v)} aria-expanded={showStats}
-            className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-all ${showStats ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : darkMode ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10'}`}>
-            <BarChart3 className="w-4 h-4" /> Statistiche
-            <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showStats ? 'rotate-180' : ''}`} />
-          </button>
-          </div>
-        </div>
-        {pieData.length > 0 ? (
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            <div className="relative w-56 h-56 flex-shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={100} dataKey="value"
-                    stroke={surface} strokeWidth={2} paddingAngle={pieData.length > 1 ? 1 : 0} labelLine={false}
-                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                      if (percent < 0.05 || percent > 0.999) return null;
-                      const r = (innerRadius + outerRadius) / 2;
-                      const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
-                      const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
-                      return (
-                        <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={800}
-                          style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.55)', strokeWidth: 4, strokeLinejoin: 'round' }}>
-                          {`${Math.round(percent * 100)}%`}
-                        </text>
-                      );
-                    }}>
-                    {pieData.map(d => <Cell key={d.name} fill={subjectColor(d.name, subjectDefs)} />)}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ background: darkMode ? '#1f2937' : '#fff', border: darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.08)', borderRadius: '10px', fontSize: 13 }}
-                    itemStyle={{ color: darkMode ? '#fff' : '#1f2937' }}
-                    formatter={(val: number, name: string) => [`${formatMinutes(val)} · ${Math.round((val / total) * 100)}%`, name]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className={`text-3xl font-extrabold tabular-nums ${textColor}`}>{(total / 60).toFixed(1)} h</span>
-                <span className={`text-sm font-medium ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>in totale</span>
-              </div>
-            </div>
-            <ul className="flex-1 w-full space-y-2" aria-label="Tempo per materia">
-              {pieData.map(d => (
-                <li key={d.name} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-l-4 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}
-                  style={{ borderLeftColor: subjectColor(d.name, subjectDefs) }}>
-                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(d.name, subjectDefs) }} />
-                  <span className={`flex-1 text-base font-semibold truncate ${textColor}`}>{d.name}</span>
-                  <span className={`text-base font-semibold tabular-nums ${textColor}`}>{formatMinutes(d.value)}</span>
-                  <span className={`text-sm font-bold tabular-nums w-12 text-right px-2 py-0.5 rounded-lg ${darkMode ? 'bg-white/15 text-white' : 'bg-black/10 text-gray-800'}`}>
-                    {Math.round((d.value / total) * 100)}%
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : <p className={`text-sm ${subTextColor} text-center py-8`}>{pieWeek === 0 ? 'Nessuna sessione questa settimana: avvia il timer per iniziare!' : 'Nessuna sessione in questa settimana.'}</p>}
-      </div>
-    );
-  }, [sessions, subjectDefs, darkMode, cardClass, textColor, subTextColor, pieWeek, showStats]);
 
   const recentList = useMemo(() => (
         sessions.length === 0 ? <p className={`text-sm ${subTextColor}`}>Nessuna sessione</p> : (
@@ -429,7 +347,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
         )}
       </div>
 
-      {distribution}
+      <WeekDistribution sessions={sessions} subjectDefs={subjectDefs} darkMode={darkMode} showStats={showStats} onToggleStats={() => setShowStats(v => !v)} />
 
       {showStats && (
         <div className="animate-section-in">
