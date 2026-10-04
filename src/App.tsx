@@ -253,8 +253,20 @@ function App() {
   const analyzeQueue = useRef<string[]>([]);
   const analyzeRunning = useRef(false);
 
+  // After reading, a photo of a book page is renamed "<title chosen by the student> – pag. N".
   const setArchiveFile = useCallback((id: string, file: ArchiveFile) => {
-    updateData(prev => ({ ...prev, archive: prev.archive.map(a => (a.id === id ? { ...a, file } : a)) }));
+    updateData(prev => ({
+      ...prev,
+      archive: prev.archive.map(a => {
+        if (a.id !== id) return a;
+        if (!file.pageLabel || !a.baseTitle) return { ...a, file };
+        const base = `${a.baseTitle} – pag. ${file.pageLabel}`;
+        const taken = new Set(prev.archive.filter(o => o.id !== id && o.subject === a.subject && o.topic === a.topic).map(o => o.name));
+        let name = base;
+        for (let n = 2; taken.has(name); n++) name = `${base} (${n})`;
+        return { ...a, file, name };
+      }),
+    }));
   }, [updateData]);
 
   const analyzeFiles = useCallback(async (ids: string[]) => {

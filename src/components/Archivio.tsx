@@ -245,6 +245,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           topic: top,
           name: itemName,
           link: files.length === 1 ? link.trim() || undefined : undefined,
+          baseTitle: readKind({ mimeType: file.type, originalName: file.name }) === 'image' ? (name.trim() || top) : undefined,
           file: { path, drive, mimeType: file.type || 'application/octet-stream', size: file.size, originalName: file.name, textStatus: 'pending' },
         };
         onUpdate(prev => [...prev, item]);
@@ -322,7 +323,8 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   const saveName = (id: string) => {
     const newName = editingName.trim();
-    if (newName) onUpdate(prev => prev.map(a => (a.id === id ? { ...a, name: newName } : a)));
+    // A name chosen by hand is kept: no more automatic renaming for that file.
+    if (newName) onUpdate(prev => prev.map(a => (a.id === id ? { ...a, name: newName, baseTitle: undefined } : a)));
     setEditingId(null);
   };
 
@@ -335,6 +337,9 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       if (!map[item.subject][item.topic]) map[item.subject][item.topic] = [];
       map[item.subject][item.topic].push(item);
     });
+    // Within a topic, files in name order with numbers in order ("pag. 9" before "pag. 10").
+    Object.values(map).forEach(topics => Object.values(topics).forEach(list =>
+      list.sort((a, b) => a.name.localeCompare(b.name, 'it', { numeric: true, sensitivity: 'base' }))));
     return map;
   }, [archive, search]);
 

@@ -67,19 +67,32 @@ const TRANSCRIBE_PROMPT =
   'Se il testo è scritto a mano fai del tuo meglio. Se ci sono più pagine, separale con "--- Pagina N ---". ' +
   'Non aggiungere commenti o introduzioni: solo la trascrizione.';
 
-async function transcribeWithAI(blob: Blob, mimeType: string): Promise<string> {
+// For photos: the page number printed on the page (top or bottom corner), on a first line of its own.
+const PAGE_PROMPT = 'Nella PRIMA riga scrivi soltanto "PAGINA: " seguito dal numero di pagina stampato sul foglio ' +
+  '(di solito in un angolo in alto o in basso; se si vedono due pagine scrivi entrambe, es. "PAGINA: 24-25"). ' +
+  'Se il numero non si vede scrivi "PAGINA: -". Poi, dalla riga successiva, la trascrizione. ';
+
+function splitPage(text: string): { text: string; page?: string } {
+  const match = /^\s*\**PAGINA\**\s*:\s*([^\n]*)\n?/i.exec(text);
+  if (!match) return { text };
+  const value = match[1].replace(/[*_`]/g, '').trim();
+  const page = /^\d{1,4}(\s*[-–]\s*\d{1,4})?$/.test(value) ? value.replace(/\s*[-–]\s*/, '-') : undefined;
+  return { text: text.slice(match[0].length).trim(), page };
+}
+
+async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false): Promise<string> {
   if (!canTranscribe()) throw new MissingApiKeyError();
   if (blob.size > AI_INLINE_LIMIT) {
     throw new Error('File troppo grande perché l\'AI lo legga (massimo 14 MB). Dividilo in parti più piccole, ad esempio un capitolo per file.');
   }
   const data = await blobToBase64(blob);
-  return transcribeFile(data, mimeType, TRANSCRIBE_PROMPT);
+  return transcribeFile(data, mimeType, withPage ? PAGE_PROMPT + TRANSCRIBE_PROMPT : TRANSCRIBE_PROMPT);
 }
 
 async function extractText(blob: Blob, file: ArchiveFile): Promise<string> {
   const kind = readKind(file);
   if (kind === 'text') return (await blob.text()).trim();
-  if (kind === 'image') return transcribeWithAI(blob, imageMime(file));
+  if (kind === 'image') return transcribeWithAI(blob, imageMime(file), true);
   if (kind === 'pdf') {
     const { text, pages } = await pdfTextLayer(blob);
     const letters = text.replace(/--- Pagina \d+ ---|\s/g, '').length;
@@ -100,12 +113,13 @@ export async function analyzeArchiveFile(item: ArchiveItem, userId: string): Pro
     return { ...file, textStatus: 'unsupported', textError: undefined };
   }
   const blob = file.drive ? await downloadFromDrive(file.drive.id) : await downloadArchiveFile(file.path);
-  const text = await extractText(blob, file);
+  const raw = await extractText(blob, file);
+  const { text, page } = readKind(file) === 'image' ? splitPage(raw) : { text: raw, page: undefined };
   if (!text) throw new Error('Non ho trovato testo in questo file.');
   const textPath = file.drive ? `${userId}/drive-${file.drive.id}.txt` : `${file.path}.txt`;
   await uploadArchiveText(textPath, text);
   transcriptCache.set(textPath, text);
-  return { ...file, textPath, textStatus: 'done', textError: undefined };
+  return { ...file, textPath, textStatus: 'done', textError: undefined, pageLabel: page };
 }
 
 export async function loadTranscript(textPath: string): Promise<string> {

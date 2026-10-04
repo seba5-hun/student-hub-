@@ -43,6 +43,7 @@ export interface ArchiveFile {
   originalName: string;
   textPath?: string;
   textStatus?: 'pending' | 'done' | 'unsupported' | 'error';
+  pageLabel?: string;    // page number printed on a photographed book page, found by the AI
   textError?: string;
 }
 
@@ -53,6 +54,7 @@ export interface ArchiveItem {
   name: string;
   link?: string;
   file?: ArchiveFile;
+  baseTitle?: string;    // title chosen at upload: after reading, photos become "<title> – pag. N"
 }
 
 // A school subject chosen by the student, with the color used for it in the app.
