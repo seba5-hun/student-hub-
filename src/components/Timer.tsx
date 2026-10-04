@@ -217,13 +217,13 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={62} outerRadius={100} dataKey="value"
                     stroke={surface} strokeWidth={2} paddingAngle={pieData.length > 1 ? 1 : 0} labelLine={false}
                     label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-                      if (percent < 0.07) return null;
+                      if (percent < 0.05) return null;
                       const r = (innerRadius + outerRadius) / 2;
                       const x = cx + r * Math.cos(-midAngle * Math.PI / 180);
                       const y = cy + r * Math.sin(-midAngle * Math.PI / 180);
                       return (
-                        <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={13} fontWeight={700}
-                          style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.35)', strokeWidth: 3 }}>
+                        <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={16} fontWeight={800}
+                          style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.55)', strokeWidth: 4, strokeLinejoin: 'round' }}>
                           {`${Math.round(percent * 100)}%`}
                         </text>
                       );
@@ -237,17 +237,20 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className={`text-2xl font-bold tabular-nums ${textColor}`}>{(total / 60).toFixed(1)} h</span>
-                <span className={`text-xs ${subTextColor}`}>in totale</span>
+                <span className={`text-3xl font-extrabold tabular-nums ${textColor}`}>{(total / 60).toFixed(1)} h</span>
+                <span className={`text-sm font-medium ${darkMode ? 'text-white/80' : 'text-gray-600'}`}>in totale</span>
               </div>
             </div>
             <ul className="flex-1 w-full space-y-2" aria-label="Tempo per materia">
               {pieData.map(d => (
-                <li key={d.name} className="flex items-center gap-3">
-                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(d.name, subjectDefs) }} />
-                  <span className={`flex-1 text-sm font-medium truncate ${textColor}`}>{d.name}</span>
-                  <span className={`text-sm tabular-nums ${textColor}`}>{formatMinutes(d.value)}</span>
-                  <span className={`text-xs tabular-nums w-10 text-right ${subTextColor}`}>{Math.round((d.value / total) * 100)}%</span>
+                <li key={d.name} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-l-4 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}
+                  style={{ borderLeftColor: subjectColor(d.name, subjectDefs) }}>
+                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: subjectColor(d.name, subjectDefs) }} />
+                  <span className={`flex-1 text-base font-semibold truncate ${textColor}`}>{d.name}</span>
+                  <span className={`text-base font-semibold tabular-nums ${textColor}`}>{formatMinutes(d.value)}</span>
+                  <span className={`text-sm font-bold tabular-nums w-12 text-right px-2 py-0.5 rounded-lg ${darkMode ? 'bg-white/15 text-white' : 'bg-black/10 text-gray-800'}`}>
+                    {Math.round((d.value / total) * 100)}%
+                  </span>
                 </li>
               ))}
             </ul>
