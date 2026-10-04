@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
 import { Grade, Task, UserData, createId } from '../lib/store';
-import { askTutor, isReady, providerLabel, ChatTurn } from '../lib/ai';
+import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
 import { selectMaterial, MaterialDoc } from '../lib/retrieval';
 import AISettings from './AISettings';
 import { loadTranscript } from '../lib/archiveText';
@@ -121,6 +121,9 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [showSettings, setShowSettings] = useState(() => !isReady());
   const [aiName, setAiName] = useState(providerLabel);
   const [loadingStep, setLoadingStep] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -337,8 +340,11 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     images: m.images?.map(img => ({ mimeType: img.mimeType, data: img.imageData.split(',')[1] })),
   });
 
-  const sendMessage = async (text = input, title?: string) => {
-    if ((!text.trim() && uploadedImages.length === 0) || isLoading) return;
+  // `editIndex`: a message already sent and edited by the student; the chat restarts from there.
+  const sendMessage = async (text = input, title?: string, editIndex?: number) => {
+    const editing = editIndex !== undefined;
+    const images = editing ? messages[editIndex].images : (uploadedImages.length > 0 ? [...uploadedImages] : undefined);
+    if ((!text.trim() && !images?.length) || isLoading) return;
 
     const meta: ChatMeta = currentChat ?? {
       id: createId(),
@@ -346,6 +352,11 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       topic: scopeTopic,
       title: title || titleFrom(text || 'Foto'),
     };
+    // Editing the first question of a chat also renames the chat, if it still had the automatic title.
+    if (editIndex === 0 && currentChat && currentChat.title === titleFrom(messages[0].content || 'Foto')) {
+      meta.title = titleFrom(text || 'Foto');
+      setCurrentChat({ ...meta });
+    }
     if (!currentChat) {
       setCurrentChat(meta);
       activeChatId.current = meta.id;
@@ -356,18 +367,24 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       id: Date.now().toString(),
       role: 'user',
       content: text.trim(),
-      images: uploadedImages.length > 0 ? [...uploadedImages] : undefined,
+      images,
       timestamp: new Date(),
     };
 
     track('ai_message', 'guida-ai');
-    const history = [...messages, userMessage];
+    const history = [...(editing ? messages.slice(0, editIndex) : messages), userMessage];
     setMessages(history);
     persistChat(meta, history);
-    setInput('');
-    setUploadedImages([]);
+    if (!editing) {
+      setInput('');
+      setUploadedImages([]);
+    }
+    setEditingId(null);
     setIsLoading(true);
     setError('');
+    setNotice('');
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const scope = scopeSubject ? `${scopeSubject}${scopeTopic ? ` > ${scopeTopic}` : ''}` : 'tutto l\'archivio';
@@ -389,14 +406,18 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
       const turns = history.map(toTurn).filter(t => t.text || t.images?.length);
       setLoadingStep('Sto pensando…');
-      let reply = await askTutor(SYSTEM_PROMPT, buildContext, turns);
+      let reply = await askTutor(SYSTEM_PROMPT, buildContext, turns, controller.signal);
       if (reply && looksLikeExercise(userMessage.content, !!userMessage.images?.length)) {
         setLoadingStep('Ricontrollo i passaggi…');
         try {
-          const checked = await askTutor(SYSTEM_PROMPT, buildContext, [...turns, { role: 'assistant', text: reply }, { role: 'user', text: CHECK_PROMPT }]);
+          const checked = await askTutor(SYSTEM_PROMPT, buildContext, [...turns, { role: 'assistant', text: reply }, { role: 'user', text: CHECK_PROMPT }], controller.signal);
           if (checked) reply = checked;
-        } catch { /* the first answer is still good to show */ }
+        } catch (err) {
+          if (err instanceof StoppedError) throw err;
+          /* otherwise the first answer is still good to show */
+        }
       }
+      if (controller.signal.aborted) throw new StoppedError();
       setAiName(providerLabel()); // the model may have been chosen automatically
       const answer: Message = {
         id: (Date.now() + 1).toString(),
@@ -408,10 +429,34 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       persistChat(meta, [...history, answer]);
       if (activeChatId.current === meta.id) setMessages(prev => [...prev, answer]);
     } catch (err) {
+      if (err instanceof StoppedError || controller.signal.aborted) return;
       if (activeChatId.current === meta.id) setError(err instanceof Error ? err.message : 'Errore di connessione.');
     } finally {
-      setIsLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setIsLoading(false);
+      }
     }
+  };
+
+  // "Stop": the answer being written is dropped and the request cancelled (it isn't paid for).
+  const stopResponse = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsLoading(false);
+    setNotice('⏹ Risposta interrotta. Puoi modificare la domanda con la matita ✏️ o scriverne una nuova.');
+  };
+
+  const startEdit = (msg: Message) => {
+    setEditingId(msg.id);
+    setEditText(msg.content);
+  };
+
+  const submitEdit = (msg: Message) => {
+    const index = messages.findIndex(m => m.id === msg.id);
+    if (index < 0 || (!editText.trim() && !msg.images?.length)) return;
+    if (isLoading) stopResponse();
+    sendMessage(editText, undefined, index);
   };
 
   if (showSettings || !aiReady) {
@@ -426,6 +471,51 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   }
 
   const hoverBg = darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5';
+
+  // A message of the student: pencil to edit it and send it again (the answers after it are replaced).
+  const userBubble = (msg: Message, bubbleClass: string, textClass: string) => editingId === msg.id ? (
+    <div className={`w-full max-w-[85%] rounded-2xl p-3 animate-scale-in ${darkMode ? 'bg-white/10 ring-1 ring-blue-400/50' : 'bg-white ring-1 ring-blue-400/60 shadow'}`}>
+      {messageImages(msg)}
+      <textarea value={editText} onChange={e => setEditText(e.target.value)} autoFocus rows={Math.min(8, Math.max(2, editText.split('\n').length))}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitEdit(msg); }
+          if (e.key === 'Escape') setEditingId(null);
+        }}
+        className={`w-full resize-none bg-transparent outline-none text-base ${darkMode ? 'text-white' : 'text-gray-800'}`} />
+      <div className="flex justify-end gap-2 mt-2">
+        <button onClick={() => setEditingId(null)} className={`px-3 py-1.5 rounded-lg text-sm ${subTextColor} ${hoverBg}`}>Annulla</button>
+        <button onClick={() => submitEdit(msg)} disabled={!editText.trim() && !msg.images?.length}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-blue-500 to-cyan-600 text-white flex items-center gap-1 disabled:opacity-50">
+          <CheckIcon className="w-4 h-4" /> Invia
+        </button>
+      </div>
+      <p className={`text-xs mt-1 ${subTextColor}`}>Le risposte dopo questo messaggio verranno sostituite.</p>
+    </div>
+  ) : (
+    <div className="group flex items-center gap-1 justify-end max-w-[80%]">
+      {!isLoading && (
+        <button onClick={() => startEdit(msg)} title="Modifica il messaggio" aria-label="Modifica il messaggio"
+          className={`p-1.5 rounded-lg opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity ${subTextColor} ${hoverBg}`}>
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <div className={bubbleClass}>
+        {messageImages(msg)}
+        <p className={`${textClass} whitespace-pre-wrap`}>{msg.content}</p>
+      </div>
+    </div>
+  );
+
+  // Send, or Stop while the answer is being written.
+  const sendButton = (className: string) => isLoading ? (
+    <button onClick={stopResponse} className={`${className} animate-scale-in`} aria-label="Ferma la risposta" title="Ferma la risposta">
+      <Square className="w-3.5 h-3.5 fill-current" />
+    </button>
+  ) : (
+    <button onClick={() => sendMessage()} disabled={!input.trim() && uploadedImages.length === 0} className={className} aria-label="Invia">
+      <Send className="w-4 h-4" />
+    </button>
+  );
 
   const iconButton = (label: string, icon: React.ReactNode, onClick: () => void) => (
     <button onClick={onClick} title={label} aria-label={label} className={`p-2 rounded-lg ${hoverBg}`}>{icon}</button>
@@ -611,10 +701,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
             {messages.map(msg => (
               msg.role === 'user' ? (
                 <div key={msg.id} className="flex justify-end">
-                  <div className={`max-w-[75%] rounded-3xl px-5 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
-                    {messageImages(msg)}
-                    <p className="text-base whitespace-pre-wrap">{msg.content}</p>
-                  </div>
+                  {userBubble(msg, `rounded-3xl px-5 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`, 'text-base')}
                 </div>
               ) : (
                 <div key={msg.id} className={textColor}>
@@ -624,6 +711,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
             ))}
 
             {isLoading && <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-5 h-5 animate-spin text-blue-400" />{loadingStep} {elapsed > 2 && <span className="tabular-nums opacity-70">{elapsed}s</span>}</span>}
+            {notice && !isLoading && <p className="text-xs text-amber-400">{notice}</p>}
             {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
             {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
             <div ref={messagesEndRef} />
@@ -638,10 +726,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               placeholder="Chiedi qualcosa sul tuo materiale..." rows={1}
               className={`flex-1 resize-none bg-transparent outline-none py-2 text-base max-h-40 ${darkMode ? 'text-white placeholder-white/40' : 'text-gray-800 placeholder-gray-400'}`}
               disabled={isLoading} />
-            <button onClick={() => sendMessage()} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
-              className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30 ${darkMode ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`} aria-label="Invia">
-              <Send className="w-4 h-4" />
-            </button>
+            {sendButton(`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30 ${darkMode ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`)}
           </div>
           <p className={`text-xs text-center mt-2 ${subTextColor}`}>L'AI può sbagliare: controlla le informazioni importanti sul libro.</p>
         </div>
@@ -723,10 +808,14 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
                 <Bot className="w-4 h-4 text-white" />
               </div>
             )}
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white' : darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
-              {messageImages(msg)}
-              {msg.role === 'assistant' ? <FormattedText text={msg.content} /> : <p className="text-sm whitespace-pre-wrap">{msg.content}</p>}
-            </div>
+            {msg.role === 'user'
+              ? userBubble(msg, 'rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white', 'text-sm')
+              : (
+                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
+                  {messageImages(msg)}
+                  <FormattedText text={msg.content} />
+                </div>
+              )}
             {msg.role === 'user' && (
               <div className={`w-8 h-8 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/10'} flex items-center justify-center flex-shrink-0`}>
                 <User className={`w-4 h-4 ${textColor}`} />
@@ -759,10 +848,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           {imagePicker(`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'}`)}
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey}
             placeholder="Chiedi aiuto..." rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
-          <button onClick={() => sendMessage()} disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white disabled:opacity-50">
-            <Send className="w-4 h-4" />
-          </button>
+          {sendButton('w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0')}
         </div>
       </div>
     </div>

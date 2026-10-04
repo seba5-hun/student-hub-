@@ -93,16 +93,30 @@ export function providerLabel(): string {
 }
 
 // A request that never answers becomes a clear error instead of an endless wait.
+// Thrown when the student presses "Stop": not an error to show.
+export class StoppedError extends Error {
+  constructor() { super('Risposta interrotta'); }
+}
+
+// The "Stop" button of the chat: the request in progress is cancelled, so it isn't paid for.
+let stopSignal: AbortSignal | undefined;
+
 async function fetchWithTimeout(url: string, init: RequestInit, seconds: number, who: string): Promise<Response> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), seconds * 1000);
+  const external = stopSignal;
+  const onStop = () => controller.abort();
+  external?.addEventListener('abort', onStop);
   try {
+    if (external?.aborted) throw new StoppedError();
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (err) {
+    if (external?.aborted || err instanceof StoppedError) throw new StoppedError();
     if (controller.signal.aborted) throw new Error(`${who} non ha risposto entro ${seconds} secondi. Riprova, magari scegliendo una materia o un argomento più piccolo.`);
     throw new Error(`Impossibile contattare ${who}: controlla la connessione. (${err instanceof Error ? err.message : String(err)})`);
   } finally {
     window.clearTimeout(timer);
+    external?.removeEventListener('abort', onStop);
   }
 }
 
@@ -165,13 +179,14 @@ async function askClaude(system: string, context: string, turns: ChatTurn[], max
       ...(model === 'claude-haiku-4-5' ? {} : { output_config: { effort: 'medium' as const } }),
       // If a safety filter wrongly declines, the same request is answered by another Claude model.
       ...(usesFallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-    });
+    }, { signal: stopSignal });
     const message = await stream.finalMessage();
     if (message.stop_reason === 'refusal') {
       throw new Error('Claude non può rispondere a questa richiesta. Prova a riformularla.');
     }
     return message.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim();
   } catch (err) {
+    if (stopSignal?.aborted) throw new StoppedError();
     throw claudeError(SDK, err);
   }
 }
@@ -396,7 +411,8 @@ function askGemini(system: string, context: string, turns: ChatTurn[]): Promise<
     t.images?.forEach(img => parts.push({ inline_data: { mime_type: img.mimeType, data: img.data } }));
     if (parts.length) contents.push({ role: t.role === 'assistant' ? 'model' : 'user', parts });
   });
-  return generateContent(getKey('gemini'), contents, { systemInstruction: system, maxOutputTokens: 32768 });
+  return generateContent(getKey('gemini'), contents, { systemInstruction: system, maxOutputTokens: 32768, signal: stopSignal })
+    .catch(err => { throw stopSignal?.aborted ? new StoppedError() : err; });
 }
 
 // ---------------------------------------------------------------- Public API
@@ -458,7 +474,8 @@ async function photosToText(turns: ChatTurn[]): Promise<ChatTurn[]> {
   }));
 }
 
-export async function askTutor(system: string, buildContext: (budget: number) => Promise<string>, turns: ChatTurn[]): Promise<string> {
+export async function askTutor(system: string, buildContext: (budget: number) => Promise<string>, turns: ChatTurn[], signal?: AbortSignal): Promise<string> {
+  stopSignal = signal;
   const p = getProvider();
   if (p !== 'free') {
     if (!getKey(p)) throw new Error('Configura prima la chiave AI nelle impostazioni della Guida Studio AI.');
@@ -481,6 +498,7 @@ export async function askTutor(system: string, buildContext: (budget: number) =>
       lastAnsweredBy = PROVIDER_NAMES[x];
       return answer;
     } catch (err) {
+      if (err instanceof StoppedError || signal?.aborted) throw new StoppedError();
       errors.push(`${PROVIDER_NAMES[x]}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -495,6 +513,7 @@ export function canTranscribe(): boolean {
 // Reads photos and scanned PDFs. Claude and Gemini read PDFs directly; with only OpenRouter the
 // file must be an image and the chosen model must accept images.
 export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
+  stopSignal = undefined; // reading archive files is never stopped by the chat's Stop button
   const p = getProvider();
   // Gemini first: it reads photos and PDFs well and for free, so the paid AIs only ever get text.
   const order: AIProvider[] = ['gemini', p, 'claude', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];

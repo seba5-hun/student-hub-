@@ -70,7 +70,7 @@ async function availableModels(apiKey: string): Promise<string[]> {
 export async function generateContent(
   apiKey: string,
   contents: GeminiContent[],
-  options: { temperature?: number; maxOutputTokens?: number; systemInstruction?: string } = {},
+  options: { temperature?: number; maxOutputTokens?: number; systemInstruction?: string; signal?: AbortSignal } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
   const now = Date.now();
@@ -83,6 +83,7 @@ export async function generateContent(
   // three times, waiting a little longer each round.
   for (let round = 0; round < 3; round++) {
     if (round > 0) await new Promise(resolve => setTimeout(resolve, round * 3000));
+    if (options.signal?.aborted) throw new DOMException('Interrotta', 'AbortError');
     let overloaded = false;
     for (const model of ordered) {
       if (retired.has(model)) continue;
@@ -90,6 +91,7 @@ export async function generateContent(
       let response: Response;
       try {
         response = await fetch(`${API}/models/${model}:generateContent`, {
+          signal: options.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify({
@@ -99,7 +101,8 @@ export async function generateContent(
             generationConfig: { ...(options.temperature !== undefined ? { temperature: options.temperature } : {}), maxOutputTokens: options.maxOutputTokens ?? 16384 },
           }),
         });
-      } catch {
+      } catch (err) {
+        if (options.signal?.aborted) throw err;
         throw new Error('Errore di connessione. Controlla la rete e riprova.');
       }
 
