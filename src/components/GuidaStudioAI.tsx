@@ -121,6 +121,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [showSettings, setShowSettings] = useState(() => !isReady());
   const [aiName, setAiName] = useState(providerLabel);
   const [loadingStep, setLoadingStep] = useState('');
+  const [elapsed, setElapsed] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -162,6 +163,14 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // Seconds since the question was sent: long answers don't look like a frozen page.
+  useEffect(() => {
+    if (!isLoading) { setElapsed(0); return; }
+    const started = Date.now();
+    const id = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [isLoading]);
 
   const { archive } = data;
   const subjects = useMemo(() => [...new Set(archive.map(a => a.subject))].sort(), [archive]);
@@ -614,7 +623,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               )
             ))}
 
-            {isLoading && <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-5 h-5 animate-spin text-blue-400" />{loadingStep}</span>}
+            {isLoading && <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-5 h-5 animate-spin text-blue-400" />{loadingStep} {elapsed > 2 && <span className="tabular-nums opacity-70">{elapsed}s</span>}</span>}
             {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
             {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
             <div ref={messagesEndRef} />
@@ -732,7 +741,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               <Bot className="w-4 h-4 text-white" />
             </div>
             <div className={`rounded-2xl px-4 py-3 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}>
-              <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-4 h-4 animate-spin text-blue-400" />{loadingStep}</span>
+              <span className={`flex items-center gap-2 text-sm ${subTextColor}`}><Loader2 className="w-4 h-4 animate-spin text-blue-400" />{loadingStep} {elapsed > 2 && <span className="tabular-nums opacity-70">{elapsed}s</span>}</span>
             </div>
           </div>
         )}

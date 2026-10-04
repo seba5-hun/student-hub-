@@ -92,6 +92,20 @@ export function providerLabel(): string {
   return 'Google Gemini';
 }
 
+// A request that never answers becomes a clear error instead of an endless wait.
+async function fetchWithTimeout(url: string, init: RequestInit, seconds: number, who: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), seconds * 1000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error(`${who} non ha risposto entro ${seconds} secondi. Riprova, magari scegliendo una materia o un argomento più piccolo.`);
+    throw new Error(`Impossibile contattare ${who}: controlla la connessione. (${err instanceof Error ? err.message : String(err)})`);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------- Claude
 
 type AnthropicSDK = typeof import('@anthropic-ai/sdk').default;
@@ -211,7 +225,7 @@ async function askOpenRouter(system: string, context: string, turns: ChatTurn[],
   const messages = compatMessages(system, context, turns);
   let res: Response;
   try {
-    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -220,9 +234,9 @@ async function askOpenRouter(system: string, context: string, turns: ChatTurn[],
         'X-Title': 'Student Hub',
       },
       body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
-    });
-  } catch {
-    throw new Error('Errore di connessione con OpenRouter. Controlla la rete e riprova.');
+    }, 180, 'OpenRouter');
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Errore di connessione con OpenRouter. Controlla la rete e riprova.');
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body.error) {
@@ -254,7 +268,7 @@ function openAIRank(id: string): number {
 }
 
 export async function listOpenAIModels(key: string): Promise<OpenAIModel[]> {
-  const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } });
+  const res = await fetchWithTimeout('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` } }, 30, 'OpenAI');
   if (res.status === 401) throw new Error('Chiave di OpenAI non valida: controlla di averla copiata tutta.');
   if (!res.ok) throw new Error('Impossibile leggere i modelli di OpenAI. Riprova tra poco.');
   const body = await res.json();
@@ -288,14 +302,14 @@ async function askOpenAI(system: string, context: string, turns: ChatTurn[]): Pr
   }
   let res: Response;
   try {
-    res = await fetch('https://api.openai.com/v1/chat/completions', {
+    res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       // Reasoning models think inside this limit too: keep it generous.
       body: JSON.stringify({ model, messages: compatMessages(system, context, turns), max_completion_tokens: 32000 }),
-    });
-  } catch {
-    throw new Error('Errore di connessione con OpenAI. Controlla la rete e riprova.');
+    }, 240, 'ChatGPT');
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Errore di connessione con OpenAI. Controlla la rete e riprova.');
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -310,7 +324,14 @@ async function askOpenAI(system: string, context: string, turns: ChatTurn[]): Pr
     }
     throw new Error(`OpenAI: ${msg}`);
   }
-  return String(body.choices?.[0]?.message?.content || '').trim();
+  const text = String(body.choices?.[0]?.message?.content || '').trim();
+  if (!text) {
+    const reason = body.choices?.[0]?.finish_reason;
+    throw new Error(reason === 'length'
+      ? 'ChatGPT ha usato tutto lo spazio per ragionare senza scrivere la risposta: riprova con una domanda più precisa o un argomento più piccolo.'
+      : 'ChatGPT ha restituito una risposta vuota. Riprova.');
+  }
+  return text;
 }
 
 // ---------------------------------------------------------------- Groq (free)
@@ -340,14 +361,14 @@ async function askGroq(system: string, context: string, turns: ChatTurn[]): Prom
   const model = await bestGroqModel(key);
   let res: Response;
   try {
-    res = await fetch(`${GROQ_API}/chat/completions`, {
+    res = await fetchWithTimeout(`${GROQ_API}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       // Groq's free models read only text: photos are left to Gemini.
       body: JSON.stringify({ model, messages: compatMessages(system, context, turns.map(t => ({ role: t.role, text: t.text || '(foto)' }))), max_completion_tokens: 8192 }),
-    });
-  } catch {
-    throw new Error('Errore di connessione con Groq. Controlla la rete e riprova.');
+    }, 120, 'Groq');
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Errore di connessione con Groq. Controlla la rete e riprova.');
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
