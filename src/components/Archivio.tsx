@@ -853,7 +853,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         <div className={`${cardClass} p-4 flex flex-wrap items-center justify-between gap-3`}>
           <p className={`text-sm ${subTextColor}`}>
             {needsKey
-              ? <>Per far leggere <b>foto e PDF scansionati</b> all'AI serve una chiave AI. <button onClick={onOpenGuide} className="text-blue-400 underline">Configurala nella Guida Studio AI</button>, poi torna qui.</>
+              ? <>Per far leggere <b>foto e PDF scansionati</b> all'AI serve la chiave <b>Gemini</b> (gratis): le AI a pagamento non vengono usate per leggere i file. <button onClick={onOpenGuide} className="text-blue-400 underline">Configurala nella Guida Studio AI</button>, poi torna qui.</>
               : <>{waitingItems.length} file non ancora letti dall'AI.</>}
           </p>
           {waitingItems.length > 0 && (

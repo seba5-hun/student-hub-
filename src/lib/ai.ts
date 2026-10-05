@@ -525,63 +525,20 @@ export async function askTutor(system: string, buildContext: (budget: number) =>
   throw new Error(`Nessuna AI gratuita ha risposto in questo momento. Riprova tra qualche minuto.\n${errors.join('\n')}`);
 }
 
+// Photos and scanned PDFs are read ONLY by Gemini's free tier: a long book would cost a lot of
+// credits with the paid AIs (ChatGPT, Claude, OpenRouter), which only ever receive the text.
 export function canTranscribe(): boolean {
-  return !!(getKey('gemini') || getKey('claude') || getKey('openrouter') || getKey('openai'));
-
+  return !!getKey('gemini');
 }
 
-// Reads photos and scanned PDFs. Claude and Gemini read PDFs directly; with only OpenRouter the
-// file must be an image and the chosen model must accept images.
 export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
   stopSignal = undefined; // reading archive files is never stopped by the chat's Stop button
-  const p = getProvider();
-  // Gemini first: it reads photos and PDFs well and for free, so the paid AIs only ever get text.
-  const order: AIProvider[] = ['gemini', p, 'claude', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];
-  const usable = order.filter((x, i) => order.indexOf(x) === i && getKey(x));
-  const claudeReads = mimeType === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
-  const readers = usable.filter(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));
-  if (!readers.length) {
-    if (usable.length) throw new Error('Con ChatGPT o OpenRouter l\'AI può leggere le foto ma non i PDF scansionati: aggiungi una chiave Gemini (gratis) o Claude.');
-    throw new NoAIKeyError();
+  if (!getKey('gemini')) {
+    throw new Error('Per leggere foto e PDF serve la chiave Gemini (gratis). Le AI a pagamento non vengono usate per leggere i file, così non consumi crediti.');
   }
-  // If one AI fails (limit reached, busy servers…) the next one with a key tries.
-  let lastError: unknown;
-  for (const pick of readers) {
-    try {
-      const text = await transcribeWith(pick, data, mimeType, prompt);
-      if (text.trim()) return text;
-      lastError = new Error('Risposta vuota.');
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
-}
-
-async function transcribeWith(pick: AIProvider, data: string, mimeType: string, prompt: string): Promise<string> {
-  if (pick === 'gemini') {
-    return generateContent(getKey('gemini'), [
-      { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
-    ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 90_000 });
-  }
-  if (pick === 'claude') {
-    const block: ClaudeContent = mimeType === 'application/pdf'
-      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
-      : { type: 'image', source: { type: 'base64', media_type: mimeType as 'image/png', data } };
-    const SDK = await loadSDK();
-    try {
-      const message = await claudeClient(SDK).beta.messages.stream({
-        model: getModel('claude'),
-        max_tokens: 32000,
-        messages: [{ role: 'user', content: [block, { type: 'text', text: prompt }] }],
-        ...(getModel('claude') === 'claude-haiku-4-5' ? {} : { output_config: { effort: 'low' as const } }),
-      }).finalMessage();
-      return message.content.map(b => (b.type === 'text' ? b.text : '')).join('').trim();
-    } catch (err) {
-      throw claudeError(SDK, err);
-    }
-  }
-  const turn: ChatTurn = { role: 'user', text: prompt, images: [{ mimeType, data }] };
-  if (pick === 'openai') return askOpenAI('Sei un trascrittore preciso.', '', [turn]);
-  return askOpenRouter('Sei un trascrittore preciso.', '', [turn], 16000);
+  const text = await generateContent(getKey('gemini'), [
+    { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
+  ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 90_000 });
+  if (!text.trim()) throw new Error('Gemini ha dato una risposta vuota.');
+  return text;
 }

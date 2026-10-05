@@ -17,7 +17,7 @@ const AI_INLINE_LIMIT = 14 * 1024 * 1024;
 
 export class MissingApiKeyError extends Error {
   constructor() {
-    super('Per leggere foto e PDF scansionati serve una chiave AI (Gemini, Claude o OpenRouter): configurala nella Guida Studio AI.');
+    super('Per leggere foto e PDF scansionati serve la chiave Gemini (gratis): configurala nella Guida Studio AI. Le AI a pagamento non vengono usate per leggere i file.');
   }
 }
 
