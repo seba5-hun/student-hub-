@@ -531,14 +531,14 @@ export function canTranscribe(): boolean {
   return !!getKey('gemini');
 }
 
-export async function transcribeFile(data: string, mimeType: string, prompt: string): Promise<string> {
+export async function transcribeFile(data: string, mimeType: string, prompt: string, onWait?: (seconds: number) => void): Promise<string> {
   stopSignal = undefined; // reading archive files is never stopped by the chat's Stop button
   if (!getKey('gemini')) {
     throw new Error('Per leggere foto e PDF serve la chiave Gemini (gratis). Le AI a pagamento non vengono usate per leggere i file, così non consumi crediti.');
   }
   const text = await generateContent(getKey('gemini'), [
     { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
-  ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 90_000 });
+  ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 60_000, onWait });
   if (!text.trim()) throw new Error('Gemini ha dato una risposta vuota.');
   return text;
 }

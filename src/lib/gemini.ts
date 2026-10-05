@@ -76,17 +76,29 @@ export async function generateContent(
     fast?: boolean;
     // A model that doesn't answer in time is skipped for the next one.
     timeoutMs?: number;
+    // Called when the free per-minute limit makes it wait (seconds), so the app can say so.
+    onWait?: (seconds: number) => void;
   } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
-  const now = Date.now();
-  const available = models.filter(m => (quotaPausedUntil.get(m) || 0) <= now);
-  let ordered = available.length > 0 ? available : models;
+  let candidates = models;
   if (options.fast) {
-    const speed = (m: string) => (/-pro/.test(m) ? 2 : /-lite/.test(m) ? 1 : 0);
-    ordered = [...ordered].sort((a, b) => speed(a) - speed(b));
-    ordered = ordered.slice(0, 4); // a slow answer is skipped for the next model: don't wait on all of them
+    // Reading pages: flash, then lite. "Pro" models think for minutes and have tiny free limits.
+    const quick = models.filter(m => !/-pro/.test(m));
+    if (quick.length) candidates = [...quick].sort((a, b) => Number(/-lite/.test(a)) - Number(/-lite/.test(b))).slice(0, 4);
   }
+  const free = () => candidates.filter(m => (quotaPausedUntil.get(m) || 0) <= Date.now());
+  let available = free();
+  // All of them hit the per-minute limit: wait for the first one to be free again.
+  if (!available.length && options.fast) {
+    const waitMs = Math.min(...candidates.map(m => quotaPausedUntil.get(m) || 0)) - Date.now();
+    if (waitMs > 0 && waitMs <= 2 * 60_000) {
+      options.onWait?.(Math.ceil(waitMs / 1000));
+      await new Promise(resolve => setTimeout(resolve, waitMs + 250));
+      available = free();
+    }
+  }
+  const ordered = available.length > 0 ? available : candidates;
   let lastError = '';
   const tried = new Set<string>();
   const retired = new Set<string>();
@@ -136,8 +148,11 @@ export async function generateContent(
           throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
         }
         if (response.status === 429 || /quota|rate limit|resource.?exhausted/i.test(errorMsg)) {
-          // The per-minute limit passes in a minute; the daily one needs a longer pause.
-          quotaPausedUntil.set(model, Date.now() + (/per.?minute|PerMinute/i.test(errorMsg) ? 70_000 : QUOTA_PAUSE_MS));
+          // Google says how long to wait ("retryDelay": "37s"); the daily limit needs a longer pause.
+          const details = JSON.stringify(errorData.error?.details || []) + errorMsg;
+          const retry = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(details) || /retry in (\d+(?:\.\d+)?)\s*s/i.exec(details);
+          const perDay = /PerDay|per.?day/i.test(details);
+          quotaPausedUntil.set(model, Date.now() + (perDay ? QUOTA_PAUSE_MS : retry ? parseFloat(retry[1]) * 1000 + 1000 : 65_000));
           lastError = 'Hai raggiunto il limite della versione gratuita di Gemini. Aspetta qualche minuto e riprova.';
           continue;
         }

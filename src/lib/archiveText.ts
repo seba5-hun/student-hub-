@@ -61,7 +61,7 @@ function splitPage(text: string): { text: string; page?: string } {
   return { text: text.slice(match[0].length).trim(), page };
 }
 
-async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false): Promise<string> {
+async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false, onWait?: (seconds: number) => void): Promise<string> {
   if (!canTranscribe()) throw new MissingApiKeyError();
   // No size limit for the student: a photo too heavy for the AI is shrunk first (PDFs are
   // already sent one page at a time, each a light image).
@@ -75,7 +75,7 @@ async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false):
     throw new Error('Questo file è troppo pesante perché l\'AI lo legga così com\'è.');
   }
   const data = await blobToBase64(blob);
-  return transcribeFile(data, mimeType, withPage ? PAGE_PROMPT + TRANSCRIBE_PROMPT : TRANSCRIBE_PROMPT);
+  return transcribeFile(data, mimeType, withPage ? PAGE_PROMPT + TRANSCRIBE_PROMPT : TRANSCRIBE_PROMPT, onWait);
 }
 
 // Progress of the PDFs being read ("3/12" pages), shown next to the file in the archive.
@@ -153,7 +153,9 @@ async function readPdf(blob: Blob, key: string): Promise<string> {
         if (attempt > 0) await wait(attempt * 5000);
         try {
           await pageSlot();
-          const { text, page } = splitPage(await transcribeWithAI(image, 'image/jpeg', true));
+          const onWait = (seconds: number) => setProgress(key, `${done}/${total} · limite gratuito di Gemini, riprendo tra ${seconds} s`);
+          const { text, page } = splitPage(await transcribeWithAI(image, 'image/jpeg', true, onWait));
+          setProgress(key, `${done}/${total}`);
           const pageText = `--- Pagina ${page || i} ---\n${text}`;
           pageCache.set(cacheKey, pageText);
           return pageText;
