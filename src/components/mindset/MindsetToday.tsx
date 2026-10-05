@@ -3,7 +3,7 @@ import {
   Sunrise, Moon, AlertTriangle, Play, Check, Plus, X, Pencil, Trash2, Zap, ChevronDown, RotateCcw, BellRing, BedDouble, Smartphone, Target,
 } from 'lucide-react';
 import {
-  MindsetData, Block, BlockStatus, Priority, PriorityArea, DayLog, AREAS, Area, PRIORITY_AREAS, CAUSES,
+  MindsetData, Block, BlockStatus, DeepWorkLog, DEEP_KINDS, deepWorkTitle, Priority, PriorityArea, DayLog, AREAS, Area, PRIORITY_AREAS, CAUSES,
   blocksOf, blockRange, currentAndNext, effectiveStatus, dayTypeOf, alarmOf, bedtimeFor, suggestAlarm, wakeKeyForBedtime, bedStamp,
   sleepMinutes, scoreDay, weekAverage, sleepWarning, vagueHint, greeting, formatDuration, withDay, addDays, localStamp,
   toMin, fromMin, stampMinutes,
@@ -434,6 +434,50 @@ function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }
 
 // ---------- timeline ----------
 
+// First thing of the day: what the morning deep work was used for (or that it didn't happen).
+function DeepWorkPicker({ today, log, blocks, setLog, t }: {
+  today: string; log: DayLog; blocks: Block[]; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+}) {
+  const deepId = `${today}-deep`;
+  const hasBlock = blocks.some(b => b.id === deepId);
+  const d = log.deepWork;
+  const [note, setNote] = useState(d?.note || '');
+  const choose = (next: DeepWorkLog | undefined) => setLog(today, l => {
+    const status = { ...(l.status || {}) };
+    if (next?.skipped) status[deepId] = 'skipped';
+    else if (status[deepId] === 'skipped') delete status[deepId];
+    // A day edited by hand keeps its own copy of the blocks: update the deep work there too.
+    const blocksCopy = l.blocks?.map(b => (b.id === deepId && next && !next.skipped ? { ...b, title: deepWorkTitle(next), area: next.area } : b));
+    return { ...l, deepWork: next, status, ...(l.blocks ? { blocks: blocksCopy } : {}) };
+  });
+  return (
+    <div className={`mb-3 p-3 rounded-2xl ${t.soft}`}>
+      <p className={`text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5 ${t.sub}`}><Sunrise className="w-3.5 h-3.5 text-amber-400" /> Deep work del mattino</p>
+      <div className="flex flex-wrap gap-1.5">
+        {DEEP_KINDS.map(k => (
+          <Pill key={k.kind} t={t} active={!!d && !d.skipped && d.kind === k.kind}
+            onClick={() => choose(d && !d.skipped && d.kind === k.kind ? undefined : { kind: k.kind, area: k.area, note: note.trim() || undefined, minutes: d?.minutes })}>
+            <AreaDot area={k.area} className="mr-1.5" />{k.kind}
+          </Pill>
+        ))}
+        <Pill t={t} active={!!d?.skipped} onClick={() => choose(d?.skipped ? undefined : { kind: 'Non fatto', area: 'morning', skipped: true })}>Non fatto</Pill>
+      </div>
+      {d && !d.skipped && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 animate-scale-in">
+          <input value={note} onChange={e => setNote(e.target.value)} onBlur={() => choose({ ...d, note: note.trim() || undefined })}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            placeholder="Su cosa? Es. schermata di login" className={`${t.input} flex-1 min-w-[12rem] py-1.5 text-sm`} aria-label="Su cosa hai lavorato" />
+          {!hasBlock && (
+            <div className="flex gap-1">
+              {[15, 30, 45, 60, 90].map(v => <Pill key={v} t={t} active={d.minutes === v} onClick={() => choose({ ...d, minutes: d.minutes === v ? undefined : v })}>{v}m</Pill>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const isFree = (b: Block) => b.area === 'life' && /libero/i.test(b.title);
 
 // Puts a block in the day: free time it overlaps is cut around it (what's left stays free).
@@ -487,6 +531,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
         <button onClick={addBlock} className={`p-1.5 rounded-lg ${t.sub} ${t.hover}`} aria-label="Aggiungi attività"><Plus className="w-4 h-4" /></button>
       </div>
     }>
+      <DeepWorkPicker today={today} log={log} blocks={blocks} setLog={setLog} t={t} />
       <ol className="relative">
         {blocks.map(block => {
           const [s, e] = blockRange(block);

@@ -46,6 +46,21 @@ export interface FocusSession { id: string; start: string; minutes: number; task
 export interface SleepLog { bed?: string; wake?: string; quality?: number } // local "YYYY-MM-DDTHH:MM"
 export interface CheckIn { energy?: number; focus?: number; mood?: number; stress?: number }
 
+export interface DeepWorkLog { kind: string; area: Area; note?: string; minutes?: number; skipped?: boolean }
+
+export const DEEP_KINDS: { kind: string; area: Area }[] = [
+  { kind: 'Progetto', area: 'project' },
+  { kind: 'Studio', area: 'study' },
+  { kind: 'Programmazione', area: 'project' },
+  { kind: 'Business', area: 'project' },
+  { kind: 'Lettura', area: 'recovery' },
+  { kind: 'Creatività', area: 'project' },
+];
+
+export function deepWorkTitle(d: DeepWorkLog): string {
+  return `Deep work · ${d.kind.toLowerCase()}${d.note ? `: ${d.note}` : ''}`;
+}
+
 export interface DayLog {
   dayType?: string;
   blocks?: Block[];           // the day's own copy, once a block has been edited
@@ -59,6 +74,7 @@ export interface DayLog {
   habits?: Record<string, HabitMark>;
   focus?: FocusSession[];
   morning?: string[];         // morning-start checklist items done
+  deepWork?: DeepWorkLog;     // what the morning deep work was used for
 }
 
 export interface MindsetProfile {
@@ -303,7 +319,10 @@ export function blocksOf(m: MindsetData, key: string): Block[] {
   const deepStart = wake + 10;
   const deepEnd = Math.min(toMin(type.morningEnd), deepStart + 90);
   if (deepEnd - deepStart >= 30) {
-    out.push({ id: `${key}-deep`, start: fromMin(deepStart), end: fromMin(deepEnd), title: type.morningArea === 'project' ? 'Deep work · progetto' : 'Deep work · studio', area: type.morningArea, auto: true });
+    const chosen = log?.deepWork && !log.deepWork.skipped ? log.deepWork : null;
+    out.push({ id: `${key}-deep`, start: fromMin(deepStart), end: fromMin(deepEnd),
+      title: chosen ? deepWorkTitle(chosen) : type.morningArea === 'project' ? 'Deep work · progetto' : 'Deep work · studio',
+      area: chosen ? chosen.area : type.morningArea, auto: true });
   }
   for (const block of type.blocks) {
     const s = toMin(block.start);
@@ -557,7 +576,9 @@ export function scoreDay(m: MindsetData, key: string, now: Date = new Date()): {
   const focusMin = (log.focus || []).reduce((s, f) => s + f.minutes, 0);
   const blockMin = blocks.filter(x => (x.area === 'study' || x.area === 'project') && (st(x) === 'done' || st(x) === 'min'))
     .reduce((s, x) => { const [a, c] = blockRange(x); return s + (c - a) * (st(x) === 'min' ? 0.5 : 1); }, 0);
-  const deep = Math.max(focusMin, blockMin);
+  // Deep work logged on a morning without its own block (alarm still late) counts as focus too.
+  const extra = log.deepWork && !log.deepWork.skipped && !blocks.some(b => b.id === `${key}-deep`) ? log.deepWork.minutes || 0 : 0;
+  const deep = Math.max(focusMin, blockMin) + extra;
   const active = !!(pr.length || statuses.length || log.focus?.length);
   parts.push({ key: 'focus', label: 'Focus', weight: 15, value: active ? Math.min(1, deep / p.focusTarget) : null,
     detail: `${formatDuration(deep)} di ${formatDuration(p.focusTarget)}` });
