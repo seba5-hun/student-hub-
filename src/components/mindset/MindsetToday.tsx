@@ -55,6 +55,9 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
   const eveningTime = hour < 4 || nowMin >= Math.min((bedtime < 720 ? bedtime + 1440 : bedtime) - 60, 22 * 60);
   const showEvening = eveningOpen || (eveningTime && !wentToBed);
   const showMorning = hour >= 4 && hour < 12 && !log.sleep?.wake;
+  // From 18:00 the mission is about tomorrow: it's ready before going to bed.
+  const eveningMode = hour >= 18 || hour < 4;
+  const eveningKey = hour < 4 ? addDays(today, -1) : today;
 
   const changeType = (id: string) => {
     setLog(today, l => ({ ...l, dayType: id, blocks: undefined }));
@@ -149,7 +152,18 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
         </div>
       </div>
 
-      <Priorities m={m} dayKey={today} title="Missione di oggi" setLog={setLog} t={t} onStartFocus={onStartFocus} />
+      {eveningMode ? (
+        <div id="missione" className="space-y-3">
+          <Priorities m={m} dayKey={wakeKey} setLog={setLog} t={t}
+            title={`Missione di domani · ${new Date(`${wakeKey}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long' })} ${dayTypeOf(m, wakeKey).emoji}`} />
+          <TodayLeftovers m={m} dayKey={eveningKey} tomorrowKey={wakeKey} setLog={setLog} t={t} />
+        </div>
+      ) : (
+        <div id="missione">
+          <Priorities m={m} dayKey={today} title="Missione di oggi" setLog={setLog} t={t} onStartFocus={onStartFocus}
+            note={(log.priorities || []).length > 0 && !log.status ? 'Preparata ieri sera: sai già cosa fare.' : undefined} />
+        </div>
+      )}
 
       <Timeline m={m} today={today} blocks={blocks} log={log} nowMin={nowMin} currentId={current?.id} setLog={setLog} t={t} />
 
@@ -274,7 +288,17 @@ function EveningCard({ m, now, setLog, update, t, onClose, forced }: {
 
       <div>
         <p className={`text-xs uppercase tracking-wider mb-2 ${t.sub}`}>Domani · {tomorrowType.emoji} {tomorrowType.name}</p>
-        <Priorities m={m} dayKey={tomorrow} title="" setLog={setLog} t={t} compact />
+        {(() => {
+          const ready = (m.days[tomorrow]?.priorities || []).length;
+          return (
+            <button onClick={() => document.getElementById('missione')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm ${t.soft} ${t.hover}`}>
+              {ready === 3 ? <Check className="w-4 h-4 text-emerald-400" /> : <Target className="w-4 h-4 text-amber-400" />}
+              <span className={`flex-1 ${t.text}`}>{ready === 3 ? 'Missione di domani pronta' : `Missione di domani: ${ready} di 3 priorità`}</span>
+              <span className={`text-xs ${t.sub}`}>{ready === 3 ? 'rivedi' : 'completa qui sotto'}</span>
+            </button>
+          );
+        })()}
       </div>
 
       <div className={`rounded-2xl p-4 ${t.soft}`}>
@@ -308,8 +332,8 @@ function EveningCard({ m, now, setLog, update, t, onClose, forced }: {
 
 // ---------- priorities ----------
 
-function Priorities({ m, dayKey, title, setLog, t, compact = false, onStartFocus }: {
-  m: MindsetData; dayKey: string; title: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme; compact?: boolean;
+function Priorities({ m, dayKey, title, setLog, t, compact = false, onStartFocus, note }: {
+  m: MindsetData; dayKey: string; title: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme; compact?: boolean; note?: string;
   onStartFocus?: (task: string, area: PriorityArea | 'other') => void;
 }) {
   const list = m.days[dayKey]?.priorities || [];
@@ -318,7 +342,7 @@ function Priorities({ m, dayKey, title, setLog, t, compact = false, onStartFocus
     <div className="space-y-2">
       {PRIORITY_AREAS.map(area => {
         const item = list.find(p => p.area === area.id);
-        return <PriorityRow key={area.id} area={area} item={item} t={t} onStartFocus={onStartFocus} tomorrow={compact}
+        return <PriorityRow key={`${dayKey}-${area.id}-${item?.id || "nuova"}`} area={area} item={item} t={t} onStartFocus={onStartFocus} tomorrow={compact}
           onSave={text => set(ps => {
             const rest = ps.filter(p => p.area !== area.id);
             return text.trim() ? [...rest, { id: item?.id || createId(), area: area.id, text: text.trim(), done: item?.done || false }] : rest;
@@ -328,7 +352,48 @@ function Priorities({ m, dayKey, title, setLog, t, compact = false, onStartFocus
     </div>
   );
   if (compact) return body;
-  return <Section title={title} icon={<Target className="w-4 h-4" />} t={t}>{body}</Section>;
+  return (
+    <Section title={title} icon={<Target className="w-4 h-4" />} t={t}>
+      {note && <p className="text-xs text-emerald-400 mb-2">{note}</p>}
+      {body}
+    </Section>
+  );
+}
+
+// In the evening: today's priorities, to tick off or carry to tomorrow with one tap.
+function TodayLeftovers({ m, dayKey, tomorrowKey, setLog, t }: {
+  m: MindsetData; dayKey: string; tomorrowKey: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+}) {
+  const list = m.days[dayKey]?.priorities || [];
+  if (!list.length) return null;
+  const tomorrow = m.days[tomorrowKey]?.priorities || [];
+  const carry = (p: Priority) => {
+    setLog(tomorrowKey, l => ({ ...l, priorities: [...(l.priorities || []).filter(x => x.area !== p.area), { id: createId(), area: p.area, text: p.text, done: false }] }));
+  };
+  return (
+    <div className={`${t.card} p-4`}>
+      <p className={`text-xs uppercase tracking-wider mb-2 ${t.sub}`}>Le priorità di oggi</p>
+      <div className="space-y-1.5">
+        {list.map(p => {
+          const slotTaken = tomorrow.some(x => x.area === p.area);
+          const carried = tomorrow.some(x => x.area === p.area && x.text === p.text);
+          return (
+            <div key={p.id} className={`flex items-center gap-3 p-2 rounded-xl ${t.soft}`}>
+              <button onClick={() => setLog(dayKey, l => ({ ...l, priorities: (l.priorities || []).map(x => (x.id === p.id ? { ...x, done: !x.done } : x)) }))}
+                role="checkbox" aria-checked={p.done} aria-label={`Completa: ${p.text}`}
+                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${p.done ? 'bg-emerald-500 border-emerald-500 text-white' : t.dark ? 'border-white/30' : 'border-black/25'}`}>
+                {p.done && <Check className="w-3 h-3" strokeWidth={3} />}
+              </button>
+              <span className={`flex-1 text-sm ${p.done ? `line-through ${t.sub}` : t.text}`}>{p.text}</span>
+              {!p.done && (carried
+                ? <span className="text-xs text-emerald-400">a domani ✓</span>
+                : <button onClick={() => carry(p)} className={`text-xs px-2 py-1 rounded-lg ${t.sub} ${t.hover}`} title={slotTaken ? 'Sostituisce quella di domani' : undefined}>→ domani</button>)}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }: {
