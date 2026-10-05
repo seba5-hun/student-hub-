@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Search, FolderOpen, FileText, ExternalLink, ChevronRight, ChevronDown,
   Upload, Image as ImageIcon, File as FileIcon, Link as LinkIcon, Pencil, Check, X, Loader2, Sparkles, RotateCw,
-  HardDrive, Cloud, ShieldCheck,
+  HardDrive, Cloud, ShieldCheck, CheckSquare, FolderInput, Minus,
 } from 'lucide-react';
 import { ArchiveItem, createId } from '../lib/store';
 import {
@@ -84,6 +84,11 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Selection mode: tick files (or whole topics/subjects) and act on all of them at once.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [moving, setMoving] = useState<{ subject: string; topic: string } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Where new files go: the app's storage or the student's own Google Drive (per device).
   const storageKey = `studenthub_archive_storage_${userId}`;
@@ -286,6 +291,46 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     }
   };
 
+  // Removes the items from the archive, their files from storage and Drive files to Drive's bin.
+  const removeItems = async (items: ArchiveItem[]) => {
+    const driveItems = items.filter(i => i.file?.drive);
+    let leftOnDrive = 0;
+    if (driveItems.length > 0) {
+      try {
+        await ensureDriveToken();
+        markConnected();
+        for (const i of driveItems) {
+          try {
+            await trashOnDrive(i.file!.drive!.id);
+          } catch (err) {
+            console.error('Drive delete error:', err);
+            leftOnDrive++;
+          }
+        }
+      } catch (err) {
+        console.error('Drive delete error:', err);
+        leftOnDrive = driveItems.length;
+      }
+    }
+    const paths = items.flatMap(i => (i.file ? [...(i.file.drive ? [] : [i.file.path]), ...(i.file.textPath ? [i.file.textPath] : [])] : []));
+    if (paths.length > 0) {
+      try {
+        await removeArchiveFiles(paths);
+      } catch (err) {
+        console.error('Delete error:', err);
+      }
+    }
+    const ids = new Set(items.map(i => i.id));
+    onUpdate(prev => prev.filter(a => !ids.has(a.id)));
+    setSelected(prev => new Set([...prev].filter(id => !ids.has(id))));
+    if (leftOnDrive > 0) {
+      dialog.alert({
+        title: leftOnDrive > 1 ? 'File tolti dall\'archivio' : 'File tolto dall\'archivio',
+        message: `Non sono riuscito a raggiungere Google Drive: ${leftOnDrive > 1 ? `${leftOnDrive} file sono rimasti` : 'il file è rimasto'} nella cartella "Student Hub" del tuo Drive, puoi cancellarli da lì.`,
+      });
+    }
+  };
+
   const deleteItem = async (item: ArchiveItem) => {
     if (item.file && !(await dialog.confirm({
       title: `Eliminare "${item.name}"?`,
@@ -295,30 +340,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       confirmLabel: 'Elimina',
       danger: true,
     }))) return;
-    let leftOnDrive = false;
-    if (item.file?.drive) {
-      try {
-        await ensureDriveToken();
-        markConnected();
-        await trashOnDrive(item.file.drive.id);
-      } catch (err) {
-        console.error('Drive delete error:', err);
-        leftOnDrive = true;
-      }
-    }
-    if (item.file) {
-      const paths = item.file.drive ? [] : [item.file.path];
-      if (item.file.textPath) paths.push(item.file.textPath);
-      try {
-        await removeArchiveFiles(paths);
-      } catch (err) {
-        console.error('Delete error:', err);
-      }
-    }
-    onUpdate(prev => prev.filter(a => a.id !== item.id));
-    if (leftOnDrive) {
-      dialog.alert({ title: 'File tolto dall\'archivio', message: 'Non sono riuscito a raggiungere Google Drive: il file è rimasto nella cartella "Student Hub" del tuo Drive, puoi cancellarlo da lì.' });
-    }
+    await removeItems([item]);
   };
 
   const saveName = (id: string) => {
@@ -342,6 +364,112 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       list.sort((a, b) => a.name.localeCompare(b.name, 'it', { numeric: true, sensitivity: 'base' }))));
     return map;
   }, [archive, search]);
+
+  // The files in the order they are shown, used by "select all" and by the numbering of "Rinomina".
+  const shown = useMemo(() => Object.values(hierarchy).flatMap(topics => Object.values(topics).flat()), [hierarchy]);
+  const selectedItems = useMemo(() => {
+    const order = new Map(shown.map((item, i) => [item.id, i]));
+    return archive.filter(a => selected.has(a.id))
+      .sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+  }, [archive, selected, shown]);
+  const readable = selectedItems.filter(a => a.file && a.file.textStatus !== 'unsupported' && !analyzing.includes(a.id));
+
+  const toggleIds = (ids: string[]) => setSelected(prev => {
+    const next = new Set(prev);
+    const all = ids.every(id => next.has(id));
+    ids.forEach(id => (all ? next.delete(id) : next.add(id)));
+    return next;
+  });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); setMoving(null); };
+  const allShownSelected = shown.length > 0 && shown.every(a => selected.has(a.id));
+
+  useEffect(() => {
+    if (!selecting) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !moving) stopSelecting(); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [selecting, moving]);
+
+  const startMove = () => {
+    const subjects = new Set(selectedItems.map(a => a.subject));
+    const topics = new Set(selectedItems.map(a => a.topic));
+    setMoving({
+      subject: subjects.size === 1 ? [...subjects][0] : '',
+      topic: subjects.size === 1 && topics.size === 1 ? [...topics][0] : '',
+    });
+  };
+  const moveTopics = useMemo(
+    () => (moving ? [...new Set(archive.filter(a => a.subject.toLowerCase() === moving.subject.trim().toLowerCase()).map(a => a.topic))].sort() : []),
+    [archive, moving],
+  );
+  const confirmMove = () => {
+    if (!moving) return;
+    const typedSubject = moving.subject.trim();
+    const typedTopic = moving.topic.trim();
+    if (!typedSubject || !typedTopic) return;
+    // Reuse the existing spelling ("storia" goes into "Storia").
+    const subj = subjects.find(x => x.toLowerCase() === typedSubject.toLowerCase()) || typedSubject;
+    const top = archive.find(a => a.subject === subj && a.topic.toLowerCase() === typedTopic.toLowerCase())?.topic || typedTopic;
+    const ids = new Set(selectedItems.map(a => a.id));
+    onUpdate(prev => prev.map(a => (ids.has(a.id) ? { ...a, subject: subj, topic: top } : a)));
+    expand(subj, top);
+    setMoving(null);
+    setSelected(new Set());
+  };
+
+  const renameSelected = async () => {
+    const value = await dialog.prompt({
+      title: selectedItems.length > 1 ? `Rinomina ${selectedItems.length} file` : 'Rinomina',
+      message: selectedItems.length > 1 ? 'Saranno numerati nell\'ordine in cui li vedi: "Nome (1)", "Nome (2)"…' : undefined,
+      defaultValue: selectedItems.length === 1 ? selectedItems[0].name : '',
+      placeholder: 'Es. Capitolo 3',
+      confirmLabel: 'Rinomina',
+    });
+    const base = value?.trim();
+    if (!base) return;
+    const names = new Map(selectedItems.map((a, i) => [a.id, selectedItems.length > 1 ? `${base} (${i + 1})` : base]));
+    onUpdate(prev => prev.map(a => (names.has(a.id) ? { ...a, name: names.get(a.id)!, baseTitle: undefined } : a)));
+  };
+
+  const deleteSelected = async () => {
+    const items = selectedItems;
+    if (!items.length) return;
+    const onDrive = items.filter(a => a.file?.drive).length;
+    const ok = await dialog.confirm({
+      title: items.length > 1 ? `Eliminare ${items.length} elementi?` : `Eliminare "${items[0].name}"?`,
+      message: [
+        'Verranno cancellati definitivamente da tutti i tuoi dispositivi.',
+        onDrive ? `${onDrive > 1 ? `I ${onDrive} file` : 'Il file'} di Google Drive ${onDrive > 1 ? 'finiranno' : 'finirà'} nel cestino del tuo Drive (recuperabili per 30 giorni).` : '',
+      ].filter(Boolean).join(' '),
+      confirmLabel: 'Elimina',
+      danger: true,
+    });
+    if (!ok) return;
+    setBulkBusy(true);
+    try {
+      await removeItems(items);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // A tick box that also shows "some selected" (a dash) for topics and subjects.
+  const tickBox = (ids: string[], label: string) => {
+    const count = ids.filter(id => selected.has(id)).length;
+    const state = count === 0 ? 'none' : count === ids.length ? 'all' : 'some';
+    return (
+      <button type="button" role="checkbox" aria-checked={state === 'all' ? true : state === 'some' ? 'mixed' : false} aria-label={label}
+        onClick={e => { e.stopPropagation(); toggleIds(ids); }}
+        className={`w-5 h-5 flex-shrink-0 rounded-md border-2 flex items-center justify-center transition-all duration-150 ${
+          state === 'none'
+            ? (darkMode ? 'border-white/30 hover:border-white/60' : 'border-black/25 hover:border-black/50')
+            : 'border-transparent bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow shadow-indigo-500/30'
+        }`}>
+        {state === 'all' && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+        {state === 'some' && <Minus className="w-3.5 h-3.5" strokeWidth={3} />}
+      </button>
+    );
+  };
 
   const itemIcon = (item: ArchiveItem) => {
     if (!item.file) return item.link ? <LinkIcon className="w-4 h-4 text-sky-400 flex-shrink-0" /> : <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
@@ -381,9 +509,21 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className={`text-2xl font-bold ${textColor}`}>📁 Archivio</h2>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2 text-sm">
-          <Plus className="w-4 h-4" /> Nuovo
-        </button>
+        <div className="flex items-center gap-2">
+          {archive.length > 0 && (
+            <button onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}
+              className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
+                selecting
+                  ? (darkMode ? 'bg-white/20 text-white ring-1 ring-white/30' : 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200')
+                  : (darkMode ? 'bg-white/10 hover:bg-white/15 text-white' : 'bg-black/5 hover:bg-black/10 text-gray-800')
+              }`}>
+              {selecting ? <><X className="w-4 h-4" /> Fine</> : <><CheckSquare className="w-4 h-4" /> Seleziona</>}
+            </button>
+          )}
+          <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2 text-sm">
+            <Plus className="w-4 h-4" /> Nuovo
+          </button>
+        </div>
       </div>
 
       <div className={`${cardClass} p-4 flex items-start gap-3`}>
@@ -565,37 +705,65 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${subTextColor}`} />
           <input value={search} onChange={e => setSearch(e.target.value)} className={`${inputClass} w-full pl-10`} placeholder="Cerca..." />
         </div>
+        {selecting && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 animate-scale-in">
+            <p className={`text-sm ${subTextColor}`}>Tocca i file da selezionare, oppure la casella di un argomento o di una materia per prenderli tutti.</p>
+            <button onClick={() => (allShownSelected ? setSelected(new Set()) : setSelected(new Set(shown.map(a => a.id))))}
+              className="text-sm font-medium text-indigo-400 hover:text-indigo-300">
+              {allShownSelected ? 'Deseleziona tutto' : search ? `Seleziona i risultati (${shown.length})` : 'Seleziona tutto'}
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="space-y-3">
+      <div className={`space-y-3 ${selecting ? 'pb-24' : ''}`}>
         {Object.keys(hierarchy).length === 0 && <div className={`${cardClass} p-8 text-center`}><p className={subTextColor}>Archivio vuoto</p></div>}
         {Object.entries(hierarchy).map(([subjectName, subjectTopics]) => (
           <div key={subjectName} className={`${cardClass} overflow-hidden`}>
+            <div className={`flex items-center ${selecting ? 'pl-4' : ''}`}>
+            {selecting && tickBox(Object.values(subjectTopics).flat().map(a => a.id), `Seleziona tutto ${subjectName}`)}
             <button onClick={() => { const next = new Set(expandedSubjects); if (next.has(subjectName)) next.delete(subjectName); else next.add(subjectName); setExpandedSubjects(next); }}
-              className={`w-full flex items-center gap-3 p-4 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+              className={`flex-1 min-w-0 flex items-center gap-3 p-4 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
               {expandedSubjects.has(subjectName) ? <ChevronDown className="w-5 h-5 text-indigo-400" /> : <ChevronRight className="w-5 h-5 text-indigo-400" />}
               <FolderOpen className="w-5 h-5 text-amber-400" />
               <span className={`font-semibold ${textColor}`}>{subjectName}</span>
               <span className={`text-xs ${subTextColor}`}>{Object.values(subjectTopics).reduce((n, items) => n + items.length, 0)}</span>
             </button>
+            </div>
             {expandedSubjects.has(subjectName) && (
               <div className={`border-t ${darkMode ? 'border-white/5' : 'border-black/5'}`}>
                 {Object.entries(subjectTopics).map(([topicName, items]) => {
                   const topicKey = `${subjectName}::${topicName}`;
                   return (
                     <div key={topicKey}>
+                      <div className={`flex items-center ${selecting ? 'pl-8' : ''}`}>
+                      {selecting && tickBox(items.map(a => a.id), `Seleziona tutto ${topicName}`)}
                       <button onClick={() => { const next = new Set(expandedTopics); if (next.has(topicKey)) next.delete(topicKey); else next.add(topicKey); setExpandedTopics(next); }}
-                        className={`w-full flex items-center gap-3 px-8 py-3 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                        className={`flex-1 min-w-0 flex items-center gap-3 ${selecting ? 'px-3' : 'px-8'} py-3 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
                         {expandedTopics.has(topicKey) ? <ChevronDown className="w-4 h-4 text-purple-400" /> : <ChevronRight className="w-4 h-4 text-purple-400" />}
                         <span className={`text-sm font-medium ${textColor}`}>{topicName}</span>
                         <span className={`text-xs ${subTextColor}`}>{items.length}</span>
                       </button>
+                      </div>
                       {expandedTopics.has(topicKey) && (
                         <div className="px-4 sm:px-12 pb-2 space-y-1">
                           {items.map(item => (
-                            <div key={item.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded-lg ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                            <div key={item.id}
+                              onClick={selecting ? () => toggleIds([item.id]) : undefined}
+                              className={`flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded-lg transition-colors ${selecting ? 'cursor-pointer select-none' : ''} ${
+                                selecting && selected.has(item.id)
+                                  ? (darkMode ? 'bg-indigo-500/20 ring-1 ring-indigo-400/40' : 'bg-indigo-50 ring-1 ring-indigo-200')
+                                  : (darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5')
+                              }`}>
+                              {selecting && tickBox([item.id], `Seleziona ${item.name}`)}
                               {itemIcon(item)}
-                              {editingId === item.id ? (
+                              {selecting ? (
+                                <span className={`text-sm ${textColor} flex-1 min-w-0 truncate`}>
+                                  {item.name}
+                                  {item.file && <span className={`ml-2 text-xs ${subTextColor}`}>{formatSize(item.file.size)}</span>}
+                                  {item.file?.drive && <span className="ml-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 align-middle">Drive</span>}
+                                </span>
+                              ) : editingId === item.id ? (
                                 <form onSubmit={e => { e.preventDefault(); saveName(item.id); }} className="flex-1 flex items-center gap-2 min-w-[12rem]">
                                   <input value={editingName} onChange={e => setEditingName(e.target.value)} className={`${inputClass} flex-1 py-1 text-sm`} autoFocus />
                                   <button type="submit" className="text-emerald-400" aria-label="Salva nome"><Check className="w-4 h-4" /></button>
@@ -610,12 +778,12 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                               ) : (
                                 <span className={`text-sm ${textColor} flex-1 min-w-0 truncate`}>{item.name}</span>
                               )}
-                              {aiStatus(item)}
-                              {safeLink(item.link) && <a href={safeLink(item.link)!} target="_blank" rel="noopener noreferrer" className="text-indigo-400" aria-label="Apri link"><ExternalLink className="w-3.5 h-3.5" /></a>}
-                              {editingId !== item.id && (
+                              {selecting ? (item.file && <span className="pointer-events-none">{aiStatus(item)}</span>) : aiStatus(item)}
+                              {!selecting && safeLink(item.link) && <a href={safeLink(item.link)!} target="_blank" rel="noopener noreferrer" className="text-indigo-400" aria-label="Apri link"><ExternalLink className="w-3.5 h-3.5" /></a>}
+                              {!selecting && editingId !== item.id && (
                                 <button onClick={() => { setEditingId(item.id); setEditingName(item.name); }} className={subTextColor} aria-label="Rinomina"><Pencil className="w-3.5 h-3.5" /></button>
                               )}
-                              <button onClick={() => deleteItem(item)} className="text-red-400" aria-label="Elimina"><Trash2 className="w-3.5 h-3.5" /></button>
+                              {!selecting && <button onClick={() => deleteItem(item)} className="text-red-400" aria-label="Elimina"><Trash2 className="w-3.5 h-3.5" /></button>}
                             </div>
                           ))}
                         </div>
@@ -628,6 +796,79 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           </div>
         ))}
       </div>
+
+      {selecting && (
+        <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
+          <div role="toolbar" aria-label="Azioni sui file selezionati"
+            className={`pointer-events-auto w-full max-w-2xl rounded-2xl border shadow-2xl p-2 flex flex-wrap items-center gap-1 animate-scale-in ${
+              darkMode ? 'bg-[#1b1640]/95 border-white/10 text-white' : 'bg-white/95 border-black/10 text-gray-800'
+            }`}>
+            <span className="px-3 text-sm font-semibold flex-1 min-w-[7rem]">
+              {selectedItems.length === 0 ? 'Nessuno selezionato' : selectedItems.length === 1 ? '1 selezionato' : `${selectedItems.length} selezionati`}
+            </span>
+            {([
+              { label: 'Sposta', icon: <FolderInput className="w-4 h-4" />, onClick: startMove, disabled: !selectedItems.length },
+              { label: 'Rinomina', icon: <Pencil className="w-4 h-4" />, onClick: renameSelected, disabled: !selectedItems.length },
+              { label: readable.length ? `Leggi con AI (${readable.length})` : 'Leggi con AI', icon: <Sparkles className="w-4 h-4" />, onClick: () => { analyze(readable.map(a => a.id)); setSelected(new Set()); }, disabled: !readable.length },
+            ]).map(a => (
+              <button key={a.label} onClick={a.onClick} disabled={a.disabled || bulkBusy}
+                className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+                {a.icon}<span className="hidden sm:inline">{a.label}</span>
+                <span className="sm:hidden">{a.label.split(' ')[0]}</span>
+              </button>
+            ))}
+            <button onClick={deleteSelected} disabled={!selectedItems.length || bulkBusy}
+              className="px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 text-red-400 hover:bg-red-500/10 disabled:opacity-40">
+              {bulkBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Elimina
+            </button>
+            <button onClick={stopSelecting} aria-label="Esci dalla selezione" title="Esci dalla selezione"
+              className={`p-2 rounded-xl ${darkMode ? 'text-white/60 hover:bg-white/10' : 'text-gray-500 hover:bg-black/5'}`}>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {moving && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setMoving(null)}>
+          <form role="dialog" aria-modal="true" aria-label="Sposta"
+            onClick={e => e.stopPropagation()}
+            onSubmit={e => { e.preventDefault(); confirmMove(); }}
+            onKeyDown={e => { if (e.key === 'Escape') setMoving(null); }}
+            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+            <div>
+              <h2 className={`text-lg font-semibold ${textColor}`}>Sposta {selectedItems.length > 1 ? `${selectedItems.length} elementi` : `"${selectedItems[0]?.name}"`}</h2>
+              <p className={`mt-1 text-sm ${subTextColor}`}>Scegli una materia e un argomento esistenti, oppure scrivine di nuovi.</p>
+            </div>
+            <div>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>Materia</label>
+              <input value={moving.subject} onChange={e => setMoving({ ...moving, subject: e.target.value })} list="archivio-move-subjects" className={`${inputClass} w-full`} placeholder="Es. Storia" autoFocus required />
+              <datalist id="archivio-move-subjects">{subjects.map(x => <option key={x} value={x} />)}</datalist>
+            </div>
+            <div>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>Argomento</label>
+              <input value={moving.topic} onChange={e => setMoving({ ...moving, topic: e.target.value })} list="archivio-move-topics" className={`${inputClass} w-full`} placeholder="Es. Rivoluzione francese" required />
+              <datalist id="archivio-move-topics">{moveTopics.map(x => <option key={x} value={x} />)}</datalist>
+            </div>
+            {moveTopics.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {moveTopics.slice(0, 8).map(x => (
+                  <button key={x} type="button" onClick={() => setMoving({ ...moving, topic: x })}
+                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.topic === x ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
+                    {x}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setMoving(null)} className={`px-4 py-2 rounded-xl text-sm font-medium ${darkMode ? 'text-white/80 bg-white/10 hover:bg-white/15' : 'text-gray-700 bg-black/5 hover:bg-black/10'}`}>Annulla</button>
+              <button type="submit" disabled={!moving.subject.trim() || !moving.topic.trim()} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50">
+                <FolderInput className="w-4 h-4" /> Sposta qui
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
