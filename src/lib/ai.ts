@@ -539,11 +539,26 @@ export async function transcribeFile(data: string, mimeType: string, prompt: str
   const order: AIProvider[] = ['gemini', p, 'claude', 'openai', 'openrouter'].filter(x => x !== 'free' && x !== 'groq') as AIProvider[];
   const usable = order.filter((x, i) => order.indexOf(x) === i && getKey(x));
   const claudeReads = mimeType === 'application/pdf' || ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mimeType);
-  const pick = usable.find(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));
-  if (!pick) {
+  const readers = usable.filter(x => (x === 'claude' ? claudeReads : x === 'openrouter' || x === 'openai' ? mimeType.startsWith('image/') : true));
+  if (!readers.length) {
     if (usable.length) throw new Error('Con ChatGPT o OpenRouter l\'AI può leggere le foto ma non i PDF scansionati: aggiungi una chiave Gemini (gratis) o Claude.');
     throw new NoAIKeyError();
   }
+  // If one AI fails (limit reached, busy servers…) the next one with a key tries.
+  let lastError: unknown;
+  for (const pick of readers) {
+    try {
+      const text = await transcribeWith(pick, data, mimeType, prompt);
+      if (text.trim()) return text;
+      lastError = new Error('Risposta vuota.');
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function transcribeWith(pick: AIProvider, data: string, mimeType: string, prompt: string): Promise<string> {
   if (pick === 'gemini') {
     return generateContent(getKey('gemini'), [
       { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },

@@ -6,6 +6,7 @@ import { downloadArchiveFile, uploadArchiveText } from './supabase';
 import { downloadFromDrive } from './googleDrive';
 import { blobToBase64 } from './gemini';
 import { canTranscribe, transcribeFile } from './ai';
+import type { PDFPageProxy } from 'pdfjs-dist';
 
 type ReadKind = 'text' | 'pdf' | 'image' | 'unsupported';
 
@@ -40,26 +41,6 @@ function imageMime(file: Pick<ArchiveFile, 'mimeType' | 'originalName'>): string
   return ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
 }
 
-async function pdfTextLayer(blob: Blob): Promise<{ text: string; pages: number }> {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map(item => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : ''))
-      .join('')
-      .replace(/[ \t]+\n/g, '\n')
-      .trim();
-    pages.push(`--- Pagina ${i} ---\n${text}`);
-  }
-  await doc.destroy();
-  return { text: pages.join('\n\n'), pages: doc.numPages };
-}
-
 const TRANSCRIBE_PROMPT =
   'Trascrivi fedelmente tutto il testo presente in questo file (appunti, pagine di libro, slide, esercizi). ' +
   'Mantieni titoli, elenchi e struttura. Scrivi le formule in modo leggibile (es. x^2, radice di 2). ' +
@@ -89,17 +70,100 @@ async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false):
   return transcribeFile(data, mimeType, withPage ? PAGE_PROMPT + TRANSCRIBE_PROMPT : TRANSCRIBE_PROMPT);
 }
 
+// Progress of the PDFs being read ("3/12" pages), shown next to the file in the archive.
+export const readingProgress = new Map<string, string>();
+function setProgress(key: string, value: string | null) {
+  if (value === null) readingProgress.delete(key);
+  else readingProgress.set(key, value);
+  window.dispatchEvent(new Event('archive-progress'));
+}
+
+// Pages already transcribed, kept until the whole PDF is done: "riprova" restarts from where it stopped.
+const pageCache = new Map<string, string>();
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function renderPage(page: PDFPageProxy): Promise<Blob> {
+  const base = page.getViewport({ scale: 1 });
+  // About 1700 px on the long side: sharp enough to read, light enough to send.
+  const viewport = page.getViewport({ scale: Math.min(4, 1700 / Math.max(base.width, base.height)) });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const blob = await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Pagina non convertita'))), 'image/jpeg', 0.82));
+  canvas.width = canvas.height = 0;
+  return blob;
+}
+
+// Pages with real text are read directly; scanned pages (photos) are sent to the AI one at a
+// time, so long PDFs never hit the AI's size or answer limits.
+async function readPdf(blob: Blob, key: string): Promise<string> {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+  const total = doc.numPages;
+  const out: string[] = [];
+  const scanned: number[] = [];
+  try {
+    for (let i = 1; i <= total; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map(item => ('str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : ''))
+        .join('')
+        .replace(/[ \t]+\n/g, '\n')
+        .trim();
+      if (text.replace(/\s/g, '').length >= 40) out[i] = `--- Pagina ${i} ---\n${text}`;
+      else scanned.push(i);
+    }
+    if (scanned.length && !canTranscribe()) throw new MissingApiKeyError();
+    let done = total - scanned.length;
+    if (scanned.length) setProgress(key, `${done}/${total}`);
+    for (const i of scanned) {
+      const cacheKey = `${key}#${i}`;
+      let pageText = pageCache.get(cacheKey);
+      if (pageText === undefined) {
+        const image = await renderPage(await doc.getPage(i));
+        let lastError: unknown;
+        // Busy servers and free-tier limits usually pass in a few seconds.
+        for (let attempt = 0; attempt < 3 && pageText === undefined; attempt++) {
+          if (attempt > 0) await wait(attempt * 5000);
+          try {
+            const { text, page } = splitPage(await transcribeWithAI(image, 'image/jpeg', true));
+            pageText = `--- Pagina ${page || i} ---\n${text}`;
+          } catch (err) {
+            if (err instanceof MissingApiKeyError) throw err;
+            lastError = err;
+          }
+        }
+        if (pageText === undefined) {
+          const reason = lastError instanceof Error ? lastError.message : String(lastError);
+          throw new Error(`Non sono riuscito a leggere la pagina ${i} di ${total}: ${reason} Premi "riprova": le pagine già lette non vengono rifatte.`);
+        }
+        pageCache.set(cacheKey, pageText);
+      }
+      out[i] = pageText;
+      setProgress(key, `${++done}/${total}`);
+    }
+  } finally {
+    setProgress(key, null);
+    await doc.destroy();
+  }
+  for (let i = 1; i <= total; i++) pageCache.delete(`${key}#${i}`);
+  return out.filter(Boolean).join('\n\n');
+}
+
 async function extractText(blob: Blob, file: ArchiveFile): Promise<string> {
   const kind = readKind(file);
   if (kind === 'text') return (await blob.text()).trim();
   if (kind === 'image') return transcribeWithAI(blob, imageMime(file), true);
-  if (kind === 'pdf') {
-    const { text, pages } = await pdfTextLayer(blob);
-    const letters = text.replace(/--- Pagina \d+ ---|\s/g, '').length;
-    // A PDF with (almost) no text layer is a scan: let the AI read the images.
-    if (letters >= pages * 40) return text;
-    return transcribeWithAI(blob, 'application/pdf');
-  }
+  if (kind === 'pdf') return readPdf(blob, file.path);
   throw new Error('Formato non leggibile dall\'AI');
 }
 

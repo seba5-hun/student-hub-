@@ -9,7 +9,7 @@ import {
   uploadArchiveFile, archiveFileUrl, removeArchiveFiles, storageErrorMessage, MAX_FILE_SIZE,
   downloadArchiveFile, uploadArchiveText,
 } from '../lib/supabase';
-import { readKind, loadTranscript } from '../lib/archiveText';
+import { readKind, loadTranscript, readingProgress } from '../lib/archiveText';
 import { imagesToPdf, PdfQuality, PDF_QUALITIES } from '../lib/imagesToPdf';
 import {
   driveConfigured, hasDriveToken, ensureDriveToken, loadGoogleIdentity, disconnectDrive, uploadToDrive,
@@ -104,6 +104,13 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number } | null>(null);
   const [pdfDialog, setPdfDialog] = useState<{ name: string; quality: PdfQuality; removeOriginals: boolean } | null>(null);
   const [notice, setNotice] = useState('');
+  const [, setProgressTick] = useState(0);
+
+  useEffect(() => {
+    const update = () => setProgressTick(t => t + 1);
+    window.addEventListener('archive-progress', update);
+    return () => window.removeEventListener('archive-progress', update);
+  }, []);
 
   // Where new files go: the app's storage or the student's own Google Drive (per device).
   const storageKey = `studenthub_archive_storage_${userId}`;
@@ -604,7 +611,8 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     if (!item.file) return null;
     const base = 'text-xs px-2 py-0.5 rounded-full whitespace-nowrap inline-flex items-center gap-1';
     if (analyzing.includes(item.id)) {
-      return <span className={`${base} bg-blue-500/20 text-blue-400`}><Loader2 className="w-3 h-3 animate-spin" /> L'AI sta leggendo…</span>;
+      const pages = readingProgress.get(item.file.path);
+      return <span className={`${base} bg-blue-500/20 text-blue-400`}><Loader2 className="w-3 h-3 animate-spin" /> L'AI sta leggendo…{pages ? ` pag. ${pages}` : ''}</span>;
     }
     switch (item.file.textStatus) {
       case 'done':
@@ -940,6 +948,9 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                                 <button onClick={() => { setEditingId(item.id); setEditingName(item.name); }} className={subTextColor} aria-label="Rinomina"><Pencil className="w-3.5 h-3.5" /></button>
                               )}
                               {!selecting && <button onClick={() => deleteItem(item)} className="text-red-400" aria-label="Elimina"><Trash2 className="w-3.5 h-3.5" /></button>}
+                              {item.file?.textStatus === 'error' && item.file.textError && !analyzing.includes(item.id) && (
+                                <p className="basis-full text-xs text-red-400/90 pl-7 break-words">{item.file.textError}</p>
+                              )}
                             </div>
                           ))}
                         </div>
