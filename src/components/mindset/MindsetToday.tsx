@@ -434,6 +434,32 @@ function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }
 
 // ---------- timeline ----------
 
+const isFree = (b: Block) => b.area === 'life' && /libero/i.test(b.title);
+
+// Puts a block in the day: free time it overlaps is cut around it (what's left stays free).
+function placeBlock(blocks: Block[], nb: Block): Block[] {
+  const [ns, ne] = blockRange(nb);
+  const out: Block[] = [];
+  for (const b of blocks) {
+    if (b.id === nb.id) continue;
+    const [s, e] = blockRange(b);
+    if (!isFree(b) || e <= ns || s >= ne) { out.push(b); continue; }
+    if (ns - s >= 10) out.push({ ...b, end: fromMin(ns), auto: undefined });
+    if (e - ne >= 10) out.push({ ...b, id: createId(), start: fromMin(ne), auto: undefined });
+  }
+  return [...out, nb].sort((a, c) => blockRange(a)[0] - blockRange(c)[0]);
+}
+
+const FREE_USES: { title: string; area: Area }[] = [
+  { title: 'Studio', area: 'study' },
+  { title: 'Progetto', area: 'project' },
+  { title: 'Allenamento', area: 'sport' },
+  { title: 'Lettura', area: 'recovery' },
+  { title: 'Riposo', area: 'recovery' },
+  { title: 'Amici', area: 'life' },
+  { title: 'Famiglia', area: 'life' },
+];
+
 function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: {
   m: MindsetData; today: string; blocks: Block[]; log: DayLog; now: Date; nowMin: number; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
 }) {
@@ -478,6 +504,8 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
                   <span className={`block text-[11px] ${t.sub}`}>{AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
                 </button>
                 {st && st !== 'done' && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_STYLE[st]}`}>{STATUS_LABEL[st]}</span>}
+                <button onClick={() => (isFree(block) ? setOpen(open === block.id ? null : block.id) : setEdit(block))} aria-label={`Modifica: ${block.title}`}
+                  className={`p-1.5 rounded-lg flex-shrink-0 ${t.sub} ${t.hover}`}><Pencil className="w-3.5 h-3.5" /></button>
                 <button onClick={() => setStatus(block.id, st === 'done' ? (past ? 'skipped' : null) : 'done')} role="checkbox" aria-checked={st === 'done'}
                   aria-label={`Fatto: ${block.title}`} title={auto ? 'Fatto in automatico: tocca se non l\'hai fatto' : undefined}
                   className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${st === 'done' ? STATUS_STYLE.done : t.dark ? 'border-white/25 hover:border-white/50' : 'border-black/20 hover:border-black/40'}`}>
@@ -494,6 +522,19 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
                   <Pill t={t} onClick={() => { setEdit(block); setOpen(null); }}><Pencil className="w-3 h-3 inline mr-1" />Modifica</Pill>
                 </div>
               )}
+              {open === block.id && isFree(block) && (
+                <div className="pl-16 pb-3 animate-scale-in">
+                  <p className={`text-xs mb-1.5 ${t.sub}`}>Usa questo tempo per (poi scegli quanto):</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FREE_USES.map(u => (
+                      <Pill key={u.title} t={t} onClick={() => { setEdit({ id: createId(), start: block.start, end: block.end, title: u.title, area: u.area }); setOpen(null); }}>
+                        <AreaDot area={u.area} className="mr-1.5" />{u.title}
+                      </Pill>
+                    ))}
+                    <Pill t={t} onClick={() => { setEdit({ id: createId(), start: block.start, end: block.end, title: '', area: 'study' }); setOpen(null); }}>Altro…</Pill>
+                  </div>
+                </div>
+              )}
             </li>
           );
         })}
@@ -501,7 +542,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
       {edit && (
         <BlockEditor block={edit} t={t} isNew={!blocks.some(x => x.id === edit.id)} onClose={() => setEdit(null)}
           onDelete={() => { saveBlocks(bs => bs.filter(x => x.id !== edit.id)); setEdit(null); }}
-          onSave={nb => { saveBlocks(bs => (bs.some(x => x.id === nb.id) ? bs.map(x => (x.id === nb.id ? nb : x)) : [...bs, nb])); setEdit(null); }} />
+          onSave={nb => { saveBlocks(bs => placeBlock(bs, nb)); setEdit(null); }} />
       )}
     </Section>
   );
