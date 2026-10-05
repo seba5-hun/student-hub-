@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Sun, Timer as TimerIcon, CalendarRange, LineChart, Compass } from 'lucide-react';
+import { Sun, Timer as TimerIcon, CalendarRange, LineChart, Compass, Bot } from 'lucide-react';
 import { MindsetData, PriorityArea, defaultMindset, normalizeMindset, formatDuration } from '../../lib/mindset';
 import { toDateKey } from '../../lib/store';
 import { themeOf } from './ui';
@@ -7,13 +7,16 @@ import MindsetToday from './MindsetToday';
 import MindsetFocus from './MindsetFocus';
 import MindsetPlan from './MindsetPlan';
 import MindsetProgress from './MindsetProgress';
+import MindsetCoach from './MindsetCoach';
+import type { StudyInfo } from '../../lib/mindsetCoach';
 
-type Tab = 'oggi' | 'focus' | 'piano' | 'progressi';
+type Tab = 'oggi' | 'focus' | 'piano' | 'progressi' | 'coach';
 const TABS: { id: Tab; label: string; icon: typeof Sun }[] = [
   { id: 'oggi', label: 'Oggi', icon: Sun },
   { id: 'focus', label: 'Focus', icon: TimerIcon },
   { id: 'piano', label: 'Piano', icon: CalendarRange },
   { id: 'progressi', label: 'Progressi', icon: LineChart },
+  { id: 'coach', label: 'Coach', icon: Bot },
 ];
 
 interface Props {
@@ -23,14 +26,15 @@ interface Props {
   onUpdate: (fn: (prev?: MindsetData) => MindsetData) => void;
   subjects: string[];
   onStudySession: (subject: string, minutes: number) => void;
+  study: StudyInfo;
   // Opened from an iPhone automation: "sera" shows the evening reset.
   initialView?: string | null;
 }
 
-export default function Mindset({ mindset, darkMode, onUpdate, subjects, onStudySession, initialView }: Props) {
+export default function Mindset({ mindset, darkMode, onUpdate, subjects, onStudySession, initialView, study }: Props) {
   const m = useMemo(() => normalizeMindset(mindset) || defaultMindset(), [mindset]);
   const t = themeOf(darkMode);
-  const [tab, setTab] = useState<Tab>(initialView === 'focus' ? 'focus' : initialView === 'piano' ? 'piano' : 'oggi');
+  const [tab, setTab] = useState<Tab>(initialView === 'focus' ? 'focus' : initialView === 'piano' ? 'piano' : initialView === 'coach' ? 'coach' : 'oggi');
   const [eveningOpen, setEveningOpen] = useState(initialView === 'sera');
   const [focusPreset, setFocusPreset] = useState<{ task: string; area: PriorityArea | 'other' } | null>(null);
 
@@ -80,6 +84,7 @@ export default function Mindset({ mindset, darkMode, onUpdate, subjects, onStudy
         {tab === 'focus' && <MindsetFocus m={m} update={update} t={t} subjects={subjects} preset={focusPreset} onPresetUsed={usePreset} onStudySession={onStudySession} />}
         {tab === 'piano' && <MindsetPlan m={m} update={update} t={t} />}
         {tab === 'progressi' && <MindsetProgress m={m} t={t} />}
+        {tab === 'coach' && <MindsetCoach m={m} update={update} t={t} study={study} />}
       </div>
     </div>
   );

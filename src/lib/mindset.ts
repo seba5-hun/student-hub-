@@ -78,6 +78,21 @@ export interface MindsetProfile {
 
 export interface ActiveFocus { start: string; planned: number; pause: number; task: string; area: PriorityArea | 'other'; subject?: string; interruptions: number }
 
+export interface CoachPlan {
+  day: string;
+  blocks: Block[];
+  priorities: Partial<Record<PriorityArea, string>>;
+}
+export interface CoachMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  at: string;
+  plan?: CoachPlan;
+  applied?: boolean;
+  previous?: { blocks?: Block[]; priorities?: Priority[] }; // to undo an applied plan
+}
+
 export interface MindsetData {
   v: 1;
   profile: MindsetProfile;
@@ -86,6 +101,7 @@ export interface MindsetData {
   habits: Habit[];
   days: Record<string, DayLog>;
   activeFocus?: ActiveFocus | null;
+  coach?: CoachMessage[];
 }
 
 // ---------- time helpers ----------

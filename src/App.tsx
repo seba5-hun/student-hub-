@@ -686,6 +686,7 @@ function App() {
             initialView={mindsetView}
             subjects={(data.settings.subjects || []).map(d => d.name)}
             onUpdate={fn => updateData(prev => ({ ...prev, mindset: fn(prev.mindset) }))}
+            study={{ tasks: data.tasks, grades: data.grades, sessions: data.sessions, subjects: (data.settings.subjects || []).map(d => d.name), weeklyGoal: data.settings.weeklyGoal }}
             onStudySession={(subject, minutes) => updateData(prev => ({ ...prev, sessions: [...prev.sessions, { id: createId(), subject, duration: minutes, date: new Date().toISOString() }] }))}
           />
         )}
