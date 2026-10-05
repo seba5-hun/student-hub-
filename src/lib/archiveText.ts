@@ -12,7 +12,7 @@ type ReadKind = 'text' | 'pdf' | 'image' | 'unsupported';
 
 // Image formats the AI can read.
 const GEMINI_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'];
-// Requests are limited to ~20 MB and base64 adds a third.
+// Requests to the AI are limited to ~20 MB and base64 adds a third: heavier photos are shrunk.
 const AI_INLINE_LIMIT = 14 * 1024 * 1024;
 
 export class MissingApiKeyError extends Error {
@@ -63,8 +63,16 @@ function splitPage(text: string): { text: string; page?: string } {
 
 async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false): Promise<string> {
   if (!canTranscribe()) throw new MissingApiKeyError();
+  // No size limit for the student: a photo too heavy for the AI is shrunk first (PDFs are
+  // already sent one page at a time, each a light image).
+  if (blob.size > AI_INLINE_LIMIT && mimeType.startsWith('image/')) {
+    const { shrinkImage } = await import('./imagesToPdf');
+    blob = await shrinkImage(blob);
+    mimeType = 'image/jpeg';
+    if (blob.size > AI_INLINE_LIMIT) blob = await shrinkImage(blob, 1600, 0.7);
+  }
   if (blob.size > AI_INLINE_LIMIT) {
-    throw new Error('File troppo grande perché l\'AI lo legga (massimo 14 MB). Dividilo in parti più piccole, ad esempio un capitolo per file.');
+    throw new Error('Questo file è troppo pesante perché l\'AI lo legga così com\'è.');
   }
   const data = await blobToBase64(blob);
   return transcribeFile(data, mimeType, withPage ? PAGE_PROMPT + TRANSCRIBE_PROMPT : TRANSCRIBE_PROMPT);

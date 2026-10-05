@@ -50,6 +50,12 @@ async function compress(blob: Blob, maxSide: number, quality: number): Promise<P
   return { bytes: new Uint8Array(await jpeg.arrayBuffer()), width, height };
 }
 
+// A photo too heavy to send to the AI, shrunk to a light JPEG that is still sharp to read.
+export async function shrinkImage(blob: Blob, maxSide = 2400, quality = 0.82): Promise<Blob> {
+  const page = await compress(blob, maxSide, quality);
+  return new Blob([page.bytes as BlobPart], { type: 'image/jpeg' });
+}
+
 function buildPdf(pages: Page[]): Blob {
   const enc = new TextEncoder();
   const parts: Uint8Array[] = [];
