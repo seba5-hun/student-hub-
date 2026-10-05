@@ -489,13 +489,24 @@ export function disruptionPatterns(m: MindsetData, today: string) {
 }
 
 // How much of the plan is really done, per day type: the base for realistic plans.
+// A block whose time has passed counts as done, unless the student said otherwise (only on
+// days the app was used: a day never opened stays without data).
+export function effectiveStatus(m: MindsetData, key: string, block: Block, now: Date = new Date()): BlockStatus | undefined {
+  const log = m.days[key];
+  const explicit = log?.status?.[block.id];
+  if (explicit) return explicit;
+  if (!log && key !== toDateKey(now)) return undefined;
+  const end = new Date(`${key}T00:00:00`).getTime() + blockRange(block)[1] * 60000;
+  return now.getTime() >= end ? 'done' : undefined;
+}
+
 export function completionByType(m: MindsetData, today: string) {
   const out = new Map<string, { done: number; total: number }>();
   for (const k of lastKeys(today, 28, 1)) {
-    const log = m.days[k];
-    if (!log?.status) continue;
+    if (!m.days[k]) continue;
     const type = dayTypeOf(m, k).id;
-    const values = Object.values(log.status).filter(s => s !== 'excused');
+    const values = blocksOf(m, k).filter(x => COUNTED.includes(x.area)).map(x => effectiveStatus(m, k, x))
+      .filter((s): s is BlockStatus => !!s && s !== 'excused');
     if (!values.length) continue;
     const cur = out.get(type) || { done: 0, total: 0 };
     cur.done += values.reduce((s, v) => s + (v === 'done' ? 1 : v === 'min' ? 0.6 : 0), 0);
@@ -511,7 +522,7 @@ const COUNTED: Area[] = ['school', 'study', 'sport', 'project', 'recovery', 'mor
 
 export interface ScorePart { key: string; label: string; weight: number; value: number | null; detail: string }
 
-export function scoreDay(m: MindsetData, key: string): { score: number | null; parts: ScorePart[] } {
+export function scoreDay(m: MindsetData, key: string, now: Date = new Date()): { score: number | null; parts: ScorePart[] } {
   const log = m.days[key] || {};
   const p = m.profile;
   const blocks = blocksOf(m, key);
@@ -521,14 +532,15 @@ export function scoreDay(m: MindsetData, key: string): { score: number | null; p
   parts.push({ key: 'priorities', label: 'Priorità', weight: 25, value: pr.length ? pr.filter(x => x.done).length / pr.length : null,
     detail: pr.length ? `${pr.filter(x => x.done).length} di ${pr.length} completate` : 'nessuna priorità' });
 
-  const statuses = blocks.filter(x => COUNTED.includes(x.area)).map(x => log.status?.[x.id]).filter((s): s is BlockStatus => !!s && s !== 'excused');
+  const st = (x: Block) => effectiveStatus(m, key, x, now);
+  const statuses = blocks.filter(x => COUNTED.includes(x.area)).map(st).filter((s): s is BlockStatus => !!s && s !== 'excused');
   parts.push({ key: 'plan', label: 'Piano', weight: 20,
     value: statuses.length ? statuses.reduce((s, v) => s + (v === 'done' ? 1 : v === 'min' ? 0.6 : 0), 0) / statuses.length : null,
     detail: statuses.length ? `${statuses.filter(s => s === 'done').length} attività fatte, ${statuses.filter(s => s === 'min').length} al minimo` : 'nessuna attività segnata' });
 
   const focusMin = (log.focus || []).reduce((s, f) => s + f.minutes, 0);
-  const blockMin = blocks.filter(x => (x.area === 'study' || x.area === 'project') && (log.status?.[x.id] === 'done' || log.status?.[x.id] === 'min'))
-    .reduce((s, x) => { const [a, c] = blockRange(x); return s + (c - a) * (log.status?.[x.id] === 'min' ? 0.5 : 1); }, 0);
+  const blockMin = blocks.filter(x => (x.area === 'study' || x.area === 'project') && (st(x) === 'done' || st(x) === 'min'))
+    .reduce((s, x) => { const [a, c] = blockRange(x); return s + (c - a) * (st(x) === 'min' ? 0.5 : 1); }, 0);
   const deep = Math.max(focusMin, blockMin);
   const active = !!(pr.length || statuses.length || log.focus?.length);
   parts.push({ key: 'focus', label: 'Focus', weight: 15, value: active ? Math.min(1, deep / p.focusTarget) : null,

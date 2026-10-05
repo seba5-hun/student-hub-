@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import {
   MindsetData, Block, BlockStatus, Priority, PriorityArea, DayLog, AREAS, Area, PRIORITY_AREAS, CAUSES,
-  blocksOf, blockRange, currentAndNext, dayTypeOf, alarmOf, bedtimeFor, suggestAlarm, wakeKeyForBedtime, bedStamp,
+  blocksOf, blockRange, currentAndNext, effectiveStatus, dayTypeOf, alarmOf, bedtimeFor, suggestAlarm, wakeKeyForBedtime, bedStamp,
   sleepMinutes, scoreDay, weekAverage, sleepWarning, vagueHint, greeting, formatDuration, withDay, addDays, localStamp,
   toMin, fromMin, stampMinutes,
 } from '../../lib/mindset';
@@ -165,7 +165,7 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
         </div>
       )}
 
-      <Timeline m={m} today={today} blocks={blocks} log={log} nowMin={nowMin} currentId={current?.id} setLog={setLog} t={t} />
+      <Timeline m={m} today={today} blocks={blocks} log={log} now={now} nowMin={nowMin} currentId={current?.id} setLog={setLog} t={t} />
 
       <Habits m={m} today={today} log={log} setLog={setLog} t={t} />
 
@@ -434,8 +434,8 @@ function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }
 
 // ---------- timeline ----------
 
-function Timeline({ m, today, blocks, log, nowMin, currentId, setLog, t }: {
-  m: MindsetData; today: string; blocks: Block[]; log: DayLog; nowMin: number; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: {
+  m: MindsetData; today: string; blocks: Block[]; log: DayLog; now: Date; nowMin: number; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [edit, setEdit] = useState<Block | null>(null);
@@ -464,7 +464,8 @@ function Timeline({ m, today, blocks, log, nowMin, currentId, setLog, t }: {
       <ol className="relative">
         {blocks.map(block => {
           const [s, e] = blockRange(block);
-          const st = log.status?.[block.id];
+          const st = effectiveStatus(m, today, block, now);
+          const auto = st === 'done' && !log.status?.[block.id];
           const past = e <= nowMin;
           const isNow = block.id === currentId;
           return (
@@ -474,10 +475,11 @@ function Timeline({ m, today, blocks, log, nowMin, currentId, setLog, t }: {
                 <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: AREAS[block.area].color, opacity: 0.85 }} />
                 <button onClick={() => setOpen(open === block.id ? null : block.id)} className="flex-1 min-w-0 text-left">
                   <span className={`block text-sm truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
-                  <span className={`block text-[11px] ${t.sub}`}>{AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}</span>
+                  <span className={`block text-[11px] ${t.sub}`}>{AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
                 </button>
                 {st && st !== 'done' && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_STYLE[st]}`}>{STATUS_LABEL[st]}</span>}
-                <button onClick={() => setStatus(block.id, st === 'done' ? null : 'done')} role="checkbox" aria-checked={st === 'done'} aria-label={`Fatto: ${block.title}`}
+                <button onClick={() => setStatus(block.id, st === 'done' ? (past ? 'skipped' : null) : 'done')} role="checkbox" aria-checked={st === 'done'}
+                  aria-label={`Fatto: ${block.title}`} title={auto ? 'Fatto in automatico: tocca se non l\'hai fatto' : undefined}
                   className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${st === 'done' ? STATUS_STYLE.done : t.dark ? 'border-white/25 hover:border-white/50' : 'border-black/20 hover:border-black/40'}`}>
                   {st === 'done' && <Check className="w-4 h-4" strokeWidth={3} />}
                 </button>
