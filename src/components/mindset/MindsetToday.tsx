@@ -4,11 +4,12 @@ import {
 } from 'lucide-react';
 import {
   MindsetData, Block, BlockStatus, DeepWorkLog, DEEP_KINDS, deepWorkTitle, Priority, PriorityArea, DayLog, AREAS, Area, PRIORITY_AREAS, CAUSES,
-  blocksOf, blockRange, currentAndNext, effectiveStatus, dayTypeOf, alarmOf, bedtimeFor, suggestAlarm, wakeKeyForBedtime, bedStamp,
+  blocksOf, blockRange, currentAndNext, effectiveStatus, dayWithTasks, isFree, placeBlock, dayTypeOf, alarmOf, bedtimeFor, suggestAlarm, wakeKeyForBedtime, bedStamp,
   sleepMinutes, scoreDay, weekAverage, sleepWarning, vagueHint, greeting, formatDuration, withDay, addDays, localStamp,
   toMin, fromMin, stampMinutes,
 } from '../../lib/mindset';
 import { createId, toDateKey } from '../../lib/store';
+import type { Task } from '../../lib/store';
 import { Theme, AreaDot, Section, Scale, ScoreRing, Pill, useNow } from './ui';
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
   onEveningOpen: (open: boolean) => void;
   onStartFocus: (task: string, area: PriorityArea | 'other') => void;
   subjects: string[];
+  tasks: Task[];
 }
 
 const STATUS_LABEL: Record<BlockStatus, string> = { done: 'Fatto', min: 'Minimo', skipped: 'Saltato', excused: 'Imprevisto' };
@@ -30,11 +32,11 @@ const STATUS_STYLE: Record<BlockStatus, string> = {
 };
 const SHORTCUT_NAME = 'Sveglia Mindset';
 
-export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen, onStartFocus, subjects }: Props) {
+export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen, onStartFocus, subjects, tasks }: Props) {
   const now = useNow(30_000);
   const today = toDateKey(now);
   const log: DayLog = m.days[today] || {};
-  const blocks = useMemo(() => blocksOf(m, today), [m, today]);
+  const blocks = useMemo(() => dayWithTasks(m, today, tasks).blocks, [m, today, tasks]);
   const { current, next } = currentAndNext(blocks, now);
   const type = dayTypeOf(m, today);
   const { score, parts } = useMemo(() => scoreDay(m, today), [m, today]);
@@ -166,7 +168,7 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
         </div>
       )}
 
-      <Timeline m={m} today={today} blocks={blocks} log={log} now={now} nowMin={nowMin} subjects={subjects} currentId={current?.id} setLog={setLog} t={t} />
+      <DayView m={m} today={today} now={now} nowMin={nowMin} subjects={subjects} tasks={tasks} currentId={current?.id} setLog={setLog} t={t} />
 
       <Habits m={m} today={today} log={log} setLog={setLog} t={t} />
 
@@ -485,22 +487,6 @@ function DeepWorkPicker({ today, log, blocks, setLog, t, subjects }: {
   );
 }
 
-const isFree = (b: Block) => b.area === 'life' && /libero/i.test(b.title);
-
-// Puts a block in the day: free time it overlaps is cut around it (what's left stays free).
-function placeBlock(blocks: Block[], nb: Block): Block[] {
-  const [ns, ne] = blockRange(nb);
-  const out: Block[] = [];
-  for (const b of blocks) {
-    if (b.id === nb.id) continue;
-    const [s, e] = blockRange(b);
-    if (!isFree(b) || e <= ns || s >= ne) { out.push(b); continue; }
-    if (ns - s >= 10) out.push({ ...b, end: fromMin(ns), auto: undefined });
-    if (e - ne >= 10) out.push({ ...b, id: createId(), start: fromMin(ne), auto: undefined });
-  }
-  return [...out, nb].sort((a, c) => blockRange(a)[0] - blockRange(c)[0]);
-}
-
 const FREE_USES: { title: string; area: Area }[] = [
   { title: 'Studio', area: 'study' },
   { title: 'Progetto', area: 'project' },
@@ -511,8 +497,58 @@ const FREE_USES: { title: string; area: Area }[] = [
   { title: 'Famiglia', area: 'life' },
 ];
 
-function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, subjects }: {
+// "La giornata" with two views: today (what has been done) and tomorrow (to prepare it).
+function DayView({ m, today, now, nowMin, currentId, setLog, t, subjects, tasks }: {
+  m: MindsetData; today: string; now: Date; nowMin: number; subjects: string[]; tasks: Task[]; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+}) {
+  const [which, setWhich] = useState<'oggi' | 'domani'>(() => (now.getHours() >= 18 ? 'domani' : 'oggi'));
+  const isToday = which === 'oggi';
+  const key = isToday ? today : addDays(today, 1);
+  const day = useMemo(() => dayWithTasks(m, key, tasks), [m, key, tasks]);
+  const type = dayTypeOf(m, key);
+  const whenLabel = (date: string) => {
+    const diff = Math.round((new Date(`${date}T12:00:00`).getTime() - new Date(`${key}T12:00:00`).getTime()) / 86400000);
+    return diff === 1 ? (isToday ? 'domani' : 'dopodomani') : new Date(`${date}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long' });
+  };
+  const header = (
+    <div className="space-y-3 mb-3">
+      <div className={`grid grid-cols-2 gap-1 p-1 rounded-xl ${t.soft}`} role="tablist">
+        {(['oggi', 'domani'] as const).map(w => (
+          <button key={w} role="tab" aria-selected={which === w} onClick={() => setWhich(w)}
+            className={`py-1.5 rounded-lg text-sm font-medium transition-all ${which === w ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : t.sub}`}>
+            {w === 'oggi' ? 'Oggi · cosa ho fatto' : `Domani · ${dayTypeOf(m, addDays(today, 1)).emoji} ${dayTypeOf(m, addDays(today, 1)).name}`}
+          </button>
+        ))}
+      </div>
+      {(day.reminders.length > 0 || day.exam) && (
+        <div className="space-y-1.5">
+          {day.reminders.map(r => (
+            <div key={r.id} className={`flex items-center gap-2 p-2.5 rounded-xl text-sm ${t.soft} ${r.done ? t.sub : t.text}`}>
+              <span>{r.type === 'personale' ? '📌' : '📚'}</span>
+              <span className={`flex-1 ${r.done ? 'line-through' : ''}`}>{r.title}</span>
+              <span className={`text-xs ${t.sub}`}>{r.type === 'personale' ? 'impegno' : r.subject || 'scuola'}</span>
+            </div>
+          ))}
+          {day.exam && (
+            <div className="flex items-start gap-2 p-2.5 rounded-xl text-sm bg-amber-500/10 ring-1 ring-amber-400/30">
+              <span>📝</span>
+              <span className={t.text}><b>{day.exam.title}</b> {whenLabel(day.exam.date)}: lo studio di {isToday ? 'oggi' : 'domani'} è dedicato a <b>{day.exam.subject}</b>.</span>
+            </div>
+          )}
+        </div>
+      )}
+      {!isToday && <p className={`text-xs ${t.sub}`}>{type.emoji} Giornata {type.name}: modifica le attività di domani adesso, così domattina sai già cosa fare.</p>}
+    </div>
+  );
+  return (
+    <Timeline m={m} today={key} blocks={day.blocks} log={m.days[key] || {}} now={isToday ? now : new Date(0)} nowMin={isToday ? nowMin : -1}
+      currentId={isToday ? currentId : undefined} setLog={setLog} t={t} subjects={subjects} isToday={isToday} header={header} exam={day.exam} />
+  );
+}
+
+function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, subjects, isToday, header, exam }: {
   m: MindsetData; today: string; blocks: Block[]; log: DayLog; now: Date; nowMin: number; subjects: string[]; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+  isToday: boolean; header: React.ReactNode; exam: Task | null;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [edit, setEdit] = useState<Block | null>(null);
@@ -532,7 +568,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
     saveBlocks(bs => bs.map(x => (x.id === block.id ? { ...x, subject } : x)));
   };
   const addBlock = () => {
-    const start = fromMin(Math.ceil((nowMin + 5) / 15) * 15);
+    const start = isToday ? fromMin(Math.ceil((nowMin + 5) / 15) * 15) : '15:00';
     setEdit({ id: createId(), start, end: fromMin(toMin(start) + 60), title: '', area: 'study' });
     setOpen(null);
   };
@@ -546,7 +582,8 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
         <button onClick={addBlock} className={`p-1.5 rounded-lg ${t.sub} ${t.hover}`} aria-label="Aggiungi attività"><Plus className="w-4 h-4" /></button>
       </div>
     }>
-      <DeepWorkPicker today={today} log={log} blocks={blocks} setLog={setLog} t={t} subjects={subjects} />
+      {header}
+      {isToday && <DeepWorkPicker today={today} log={log} blocks={blocks} setLog={setLog} t={t} subjects={subjects} />}
       <ol className="relative">
         {blocks.map(block => {
           const [s, e] = blockRange(block);
@@ -559,22 +596,27 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
               <div className={`flex items-center gap-3 py-2 pl-1 pr-1 rounded-xl transition-colors ${isNow ? (t.dark ? 'bg-indigo-500/15 ring-1 ring-indigo-400/40' : 'bg-indigo-50 ring-1 ring-indigo-200') : ''} ${past && !st ? 'opacity-60' : ''}`}>
                 <span className={`w-12 text-xs tabular-nums text-right flex-shrink-0 ${t.sub}`}>{block.start}</span>
                 <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: AREAS[block.area].color, opacity: 0.85 }} />
-                <button onClick={() => setOpen(open === block.id ? null : block.id)} className="flex-1 min-w-0 text-left">
+                <button onClick={() => !block.taskId && setOpen(open === block.id ? null : block.id)} className="flex-1 min-w-0 text-left">
                   <span className={`block text-sm truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
-                  <span className={`block text-[11px] ${t.sub}`}>{block.subject ? block.subject : AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
+                  <span className={`block text-[11px] ${t.sub}`}>{block.taskId ? (() => {
+                    const clash = blocks.find(o => o.id !== block.id && !o.taskId && !isFree(o) && ['school', 'study', 'sport', 'project'].includes(o.area) && blockRange(o)[0] < e && blockRange(o)[1] > s);
+                    return clash ? <span className="text-amber-400">⚠ si sovrappone a {clash.title}: spostalo o chiedi al Coach</span> : 'Impegno';
+                  })() : block.subject ? `${block.subject}${block.suggested && exam ? ` · per ${exam.title.toLowerCase()}` : ''}` : AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
                 </button>
                 {st && st !== 'done' && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_STYLE[st]}`}>{STATUS_LABEL[st]}</span>}
+                {!block.taskId && (
                 <button onClick={() => (isFree(block) ? setOpen(open === block.id ? null : block.id) : setEdit(block))} aria-label={`Modifica: ${block.title}`}
                   className={`p-1.5 rounded-lg flex-shrink-0 ${t.sub} ${t.hover}`}><Pencil className="w-3.5 h-3.5" /></button>
-                <button onClick={() => setStatus(block.id, st === 'done' ? (past ? 'skipped' : null) : 'done')} role="checkbox" aria-checked={st === 'done'}
+                )}
+                {block.taskId ? <span className="text-base flex-shrink-0" title="Impegno: si modifica nella sezione Impegni">📌</span> : isToday && <button onClick={() => setStatus(block.id, st === 'done' ? (past ? 'skipped' : null) : 'done')} role="checkbox" aria-checked={st === 'done'}
                   aria-label={`Fatto: ${block.title}`} title={auto ? 'Fatto in automatico: tocca se non l\'hai fatto' : undefined}
                   className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${st === 'done' ? STATUS_STYLE.done : t.dark ? 'border-white/25 hover:border-white/50' : 'border-black/20 hover:border-black/40'}`}>
                   {st === 'done' && <Check className="w-4 h-4" strokeWidth={3} />}
-                </button>
+                </button>}
               </div>
               {open === block.id && (
                 <div className="flex flex-wrap gap-1.5 pl-16 pb-2 animate-scale-in">
-                  {(['min', 'skipped'] as const).map(sv => (
+                  {isToday && (['min', 'skipped'] as const).map(sv => (
                     <Pill key={sv} t={t} active={st === sv} onClick={() => setStatus(block.id, st === sv ? null : sv)}>
                       {sv === 'min' ? 'Fatto il minimo' : 'Saltato'}
                     </Pill>

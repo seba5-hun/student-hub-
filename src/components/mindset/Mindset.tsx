@@ -78,7 +78,7 @@ export default function Mindset({ mindset, darkMode, onUpdate, subjects, onStudy
 
       <div key={tab} className="animate-section-in">
         {tab === 'oggi' && (
-          <MindsetToday m={m} update={update} t={t} subjects={subjects} eveningOpen={eveningOpen} onEveningOpen={setEveningOpen}
+          <MindsetToday m={m} update={update} t={t} subjects={subjects} tasks={study.tasks} eveningOpen={eveningOpen} onEveningOpen={setEveningOpen}
             onStartFocus={(task, area) => { setFocusPreset({ task, area }); setTab('focus'); }} />
         )}
         {tab === 'focus' && <MindsetFocus m={m} update={update} t={t} subjects={subjects} preset={focusPreset} onPresetUsed={usePreset} onStudySession={onStudySession} />}

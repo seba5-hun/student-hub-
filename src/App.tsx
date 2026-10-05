@@ -244,7 +244,7 @@ function App() {
       const current = dataRef.current;
       const mm = current && normalizeMindset(current.mindset);
       if (!alive || !current || !mm) return;
-      const desired = mindsetStudySessions(mm, new Date(), current.settings.sessionsResetAt);
+      const desired = mindsetStudySessions(mm, new Date(), current.settings.sessionsResetAt, current.tasks);
       const synced = current.sessions.filter(s => s.id.startsWith('mindset-'));
       const same = desired.length === synced.length && desired.every(d => synced.some(c => c.id === d.id && c.duration === d.duration && c.subject === d.subject));
       if (same) return;
@@ -253,7 +253,7 @@ function App() {
     run();
     const id = window.setInterval(run, 60_000);
     return () => { alive = false; window.clearInterval(id); };
-  }, [isDev, mindsetData, updateData]);
+  }, [isDev, mindsetData, data?.tasks, updateData]);
 
   // Tasks whose date has passed are completed automatically (checked every minute).
   const hasData = !!data;

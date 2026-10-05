@@ -2,6 +2,7 @@
 // one-tap logs (blocks done, sleep, phone, check-in, disruptions); nothing is ever forced.
 
 import { createId, toDateKey } from './store';
+import type { Task } from './store';
 
 export type Area = 'school' | 'study' | 'sport' | 'project' | 'recovery' | 'life' | 'travel' | 'meal' | 'sleep' | 'morning';
 export type PriorityArea = 'school' | 'sport' | 'project';
@@ -27,7 +28,11 @@ export const PRIORITY_AREAS: { id: PriorityArea; label: string; example: string 
   { id: 'project', label: 'Progetto', example: 'Es. finisco la schermata di login' },
 ];
 
-export interface Block { id: string; start: string; end: string; title: string; area: Area; auto?: boolean; subject?: string }
+export interface Block {
+  id: string; start: string; end: string; title: string; area: Area; auto?: boolean; subject?: string;
+  taskId?: string;        // an Impegno shown in the day (edited in Impegni, not here)
+  suggested?: boolean;    // subject chosen by the app for an upcoming test
+}
 export interface DayType {
   id: string;
   name: string;
@@ -540,7 +545,7 @@ export function completionByType(m: MindsetData, today: string) {
   for (const k of lastKeys(today, 28, 1)) {
     if (!m.days[k]) continue;
     const type = dayTypeOf(m, k).id;
-    const values = blocksOf(m, k).filter(x => COUNTED.includes(x.area)).map(x => effectiveStatus(m, k, x))
+    const values = blocksOf(m, k).filter(x => COUNTED.includes(x.area) && !x.taskId).map(x => effectiveStatus(m, k, x))
       .filter((s): s is BlockStatus => !!s && s !== 'excused');
     if (!values.length) continue;
     const cur = out.get(type) || { done: 0, total: 0 };
@@ -568,7 +573,7 @@ export function scoreDay(m: MindsetData, key: string, now: Date = new Date()): {
     detail: pr.length ? `${pr.filter(x => x.done).length} di ${pr.length} completate` : 'nessuna priorità' });
 
   const st = (x: Block) => effectiveStatus(m, key, x, now);
-  const statuses = blocks.filter(x => COUNTED.includes(x.area)).map(st).filter((s): s is BlockStatus => !!s && s !== 'excused');
+  const statuses = blocks.filter(x => COUNTED.includes(x.area) && !x.taskId).map(st).filter((s): s is BlockStatus => !!s && s !== 'excused');
   parts.push({ key: 'plan', label: 'Piano', weight: 20,
     value: statuses.length ? statuses.reduce((s, v) => s + (v === 'done' ? 1 : v === 'min' ? 0.6 : 0), 0) / statuses.length : null,
     detail: statuses.length ? `${statuses.filter(s => s === 'done').length} attività fatte, ${statuses.filter(s => s === 'min').length} al minimo` : 'nessuna attività segnata' });
@@ -624,6 +629,53 @@ export function greeting(now: Date): string {
   return h < 5 ? 'Buonanotte' : h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : 'Buonasera';
 }
 
+// ---------- Impegni in the day ----------
+
+export const isFree = (b: Block) => b.area === 'life' && /libero/i.test(b.title);
+
+// Puts a block in the day: free time it overlaps is cut around it (what's left stays free).
+export function placeBlock(blocks: Block[], nb: Block): Block[] {
+  const [ns, ne] = blockRange(nb);
+  const out: Block[] = [];
+  for (const b of blocks) {
+    if (b.id === nb.id) continue;
+    const [s, e] = blockRange(b);
+    if (!isFree(b) || e <= ns || s >= ne) { out.push(b); continue; }
+    if (ns - s >= 10) out.push({ ...b, end: fromMin(ns), auto: undefined });
+    if (e - ne >= 10) out.push({ ...b, id: `${b.id}~${fromMin(ne)}`, start: fromMin(ne), auto: undefined });
+  }
+  return [...out, nb].sort((a, c) => blockRange(a)[0] - blockRange(c)[0]);
+}
+
+const EXAM = /verific|compito in classe|interrogaz|esame|test|prova/i;
+const onDay = (t: Task, key: string) => t.date === key || (!!t.endDate && t.date <= key && t.endDate >= key);
+
+// The next test (in the following 3 days): the day's study goes to its subject.
+export function upcomingExam(tasks: Task[], key: string): Task | null {
+  const until = addDays(key, 3);
+  const list = tasks.filter(t => !t.done && t.type === 'scolastico' && t.subject && t.date > key && t.date <= until && (EXAM.test(t.title) || t.importance >= 4))
+    .sort((a, b) => a.date.localeCompare(b.date) || b.importance - a.importance);
+  return list[0] || null;
+}
+
+// The day as shown: the Mindset plan + the Impegni of that day (timed ones in the timeline,
+// the others as reminders) + study blocks without a subject pointed at the next test.
+export function dayWithTasks(m: MindsetData, key: string, tasks: Task[] = []): { blocks: Block[]; reminders: Task[]; exam: Task | null } {
+  let blocks = blocksOf(m, key);
+  const dayTasks = tasks.filter(t => onDay(t, key));
+  const reminders: Task[] = [];
+  for (const t of dayTasks) {
+    if (!t.time || (t.endDate && t.date !== key)) { reminders.push(t); continue; }
+    const id = `task-${t.id}`;
+    if (blocks.some(b => b.id === id)) continue;
+    const end = t.endTime && toMin(t.endTime) > toMin(t.time) ? t.endTime : fromMin(toMin(t.time) + Math.max(30, Math.min(t.estimatedTime || 60, 240)));
+    blocks = placeBlock(blocks, { id, start: t.time, end, title: t.title, area: t.type === 'personale' ? 'life' : 'school', taskId: t.id });
+  }
+  const exam = upcomingExam(tasks, key);
+  if (exam?.subject) blocks = blocks.map(b => (b.area === 'study' && !b.subject && !b.taskId ? { ...b, subject: exam.subject, suggested: true } : b));
+  return { blocks, reminders, exam };
+}
+
 // ---------- sync with the Study Timer ----------
 
 export interface SyncedSession { id: string; subject: string; duration: number; date: string }
@@ -632,13 +684,16 @@ export interface SyncedSession { id: string; subject: string; duration: number; 
 // Study Timer, so it shows in its charts. Ids start with "mindset-": they are recomputed every time,
 // so a block marked as skipped later disappears from the Timer too. Focus sessions already save
 // their own session: a block they overlap is not counted twice.
-export function mindsetStudySessions(m: MindsetData, now: Date = new Date(), since?: string): SyncedSession[] {
+export function mindsetStudySessions(m: MindsetData, now: Date = new Date(), since?: string, tasks: Task[] = []): SyncedSession[] {
   const out: SyncedSession[] = [];
-  for (const key of Object.keys(m.days).sort()) {
-    if (key > toDateKey(now)) continue;
-    const log = m.days[key];
+  const today = toDateKey(now);
+  const keys = new Set(Object.keys(m.days));
+  if (m.profile.setupDone) keys.add(today); // today counts even before anything is tapped
+  for (const key of [...keys].sort()) {
+    if (key > today) continue;
+    const log = m.days[key] || {};
     const focusStarts = (log.focus || []).filter(f => f.subject).map(f => toMin(f.start.slice(11)));
-    for (const b of blocksOf(m, key)) {
+    for (const b of dayWithTasks(m, key, tasks).blocks) {
       if (b.area !== 'study' || !b.subject) continue;
       const st = effectiveStatus(m, key, b, now);
       if (st !== 'done' && st !== 'min') continue;

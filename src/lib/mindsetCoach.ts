@@ -1,7 +1,7 @@
 // Mindset Coach: what the AI knows (Mindset + study data) and how its day plans are read back.
 
 import {
-  MindsetData, Block, Area, AREAS, CoachPlan, blocksOf, dayTypeOf, alarmOf, bedtimeFor, addDays, effectiveStatus,
+  MindsetData, Block, Area, AREAS, CoachPlan, dayWithTasks, dayTypeOf, alarmOf, bedtimeFor, addDays, effectiveStatus,
   sleepMinutes, scoreDay, phoneStats, sleepStats, formatDuration, CAUSES, toMin, fromMin,
 } from './mindset';
 import { Task, Grade, StudySession, getSubjectAverages, createId, toDateKey } from './store';
@@ -74,12 +74,12 @@ export function parsePlan(reply: string, today: string): { text: string; plan?: 
 
 const dayName = (key: string) => new Date(`${key}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
 
-function describeDay(m: MindsetData, key: string, now: Date): string {
+function describeDay(m: MindsetData, key: string, now: Date, tasks: Task[]): string {
   const type = dayTypeOf(m, key);
   const log = m.days[key] || {};
-  const lines = blocksOf(m, key).map(b => {
+  const lines = dayWithTasks(m, key, tasks).blocks.map(b => {
     const st = effectiveStatus(m, key, b, now);
-    return `  ${b.start}-${b.end} ${b.title} [${b.area}]${st ? ` (${{ done: 'fatto', min: 'minimo', skipped: 'saltato', excused: 'saltato per imprevisto' }[st]})` : ''}`;
+    return `  ${b.start}-${b.end} ${b.title} [${b.taskId ? 'impegno' : b.area}${b.subject ? `, ${b.subject}` : ''}]${st ? ` (${{ done: 'fatto', min: 'minimo', skipped: 'saltato', excused: 'saltato per imprevisto' }[st]})` : ''}`;
   });
   const pr = (log.priorities || []).map(p => `  - ${p.area}: ${p.text}${p.done ? ' (fatta)' : ''}`);
   const dis = (log.disruptions || []).map(d => `  - imprevisto: ${CAUSES.find(c => c.id === d.cause)?.label || d.cause}, ${formatDuration(d.minutes)}${d.external ? ' (non dipendeva da lui)' : ''}`);
@@ -95,8 +95,8 @@ export function buildCoachContext(m: MindsetData, study: StudyInfo, now: Date = 
   out.push(`PROFILO: sonno desiderato ${formatDuration(p.sleepNeed)}; sveglia progressiva al gradino ${p.stage.wake} (obiettivo ${p.targetWake}); stasera a letto alle ${bedtimeFor(m, tomorrow)} per la sveglia delle ${alarmOf(m, tomorrow)}; obiettivo telefono ${formatDuration(p.phoneGoal)}/giorno; focus/studio ${formatDuration(p.focusTarget)}/giorno.`);
   const week = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'].map((d, i) => `${d}: ${m.dayTypes.find(t => t.id === m.week[i])?.name || '?'}`).join(', ');
   out.push(`SETTIMANA TIPO: ${week}.`);
-  out.push(`\nOGGI:\n${describeDay(m, today, now)}`);
-  out.push(`\nDOMANI:\n${describeDay(m, tomorrow, now)}`);
+  out.push(`\nOGGI:\n${describeDay(m, today, now, study.tasks)}`);
+  out.push(`\nDOMANI:\n${describeDay(m, tomorrow, now, study.tasks)}`);
 
   // Last 7 days.
   const recent: string[] = [];
