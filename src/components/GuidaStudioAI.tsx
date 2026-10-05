@@ -4,6 +4,7 @@ import { Grade, Task, UserData, createId } from '../lib/store';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
 import { selectMaterial, MaterialDoc } from '../lib/retrieval';
 import AISettings from './AISettings';
+import ModelPicker from './ModelPicker';
 import { loadTranscript } from '../lib/archiveText';
 import { useDialog } from './Dialog';
 import { track } from '../lib/analytics';
@@ -683,6 +684,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
             <span className={`text-sm truncate ${subTextColor}`}>· {currentChat ? currentChat.title : scopeLabel}</span>
           </div>
           <div className="flex items-center gap-1">
+            <ModelPicker darkMode={darkMode} compact onChange={() => setAiName(providerLabel())} onOpenSettings={() => { setFullscreen(false); setShowSettings(true); }} />
             {iconButton('Nuova chat', <Plus className={`w-4 h-4 ${textColor}`} />, clearChat)}
             {iconButton('Esci da schermo intero (Esc)', <Minimize2 className={`w-4 h-4 ${textColor}`} />, () => setFullscreen(false))}
           </div>
@@ -753,6 +755,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <ModelPicker darkMode={darkMode} onChange={() => setAiName(providerLabel())} onOpenSettings={() => setShowSettings(true)} />
           <span className="lg:hidden">{iconButton('Le tue chat', <MessageSquare className={`w-4 h-4 ${textColor}`} />, () => setSidebarOpen(true))}</span>
           {iconButton('Schermo intero', <Maximize2 className={`w-4 h-4 ${textColor}`} />, () => setFullscreen(true))}
           {iconButton('Impostazioni AI', <Key className={`w-4 h-4 ${textColor}`} />, () => setShowSettings(true))}
