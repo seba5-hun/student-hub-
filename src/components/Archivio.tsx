@@ -2,16 +2,18 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Search, FolderOpen, FileText, ExternalLink, ChevronRight, ChevronDown,
   Upload, Image as ImageIcon, File as FileIcon, Link as LinkIcon, Pencil, Check, X, Loader2, Sparkles, RotateCw,
-  HardDrive, Cloud, ShieldCheck, CheckSquare, FolderInput, Minus,
+  HardDrive, Cloud, ShieldCheck, CheckSquare, FolderInput, Minus, FileStack,
 } from 'lucide-react';
 import { ArchiveItem, createId } from '../lib/store';
 import {
   uploadArchiveFile, archiveFileUrl, removeArchiveFiles, storageErrorMessage, MAX_FILE_SIZE,
+  downloadArchiveFile, uploadArchiveText,
 } from '../lib/supabase';
-import { readKind } from '../lib/archiveText';
+import { readKind, loadTranscript } from '../lib/archiveText';
+import { imagesToPdf, PdfQuality, PDF_QUALITIES } from '../lib/imagesToPdf';
 import {
   driveConfigured, hasDriveToken, ensureDriveToken, loadGoogleIdentity, disconnectDrive, uploadToDrive,
-  trashOnDrive, driveInfo, driveViewUrl, DriveInfo, DRIVE_MAX_FILE_SIZE,
+  trashOnDrive, driveInfo, driveViewUrl, DriveInfo, DRIVE_MAX_FILE_SIZE, downloadFromDrive,
 } from '../lib/googleDrive';
 import { canTranscribe } from '../lib/ai';
 import { useDialog } from './Dialog';
@@ -67,6 +69,13 @@ function formatGB(bytes: number): string {
 // Photos of book pages are usually named IMG_0001, IMG_0002…: keep them in page order.
 const byName = (a: File, b: File) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
+const isImageFile = (f: File) => readKind({ mimeType: f.type, originalName: f.name }) === 'image';
+const isImageItem = (a: ArchiveItem) => !!a.file && readKind(a.file) === 'image';
+
+function pdfFileName(title: string): string {
+  return `${title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Foto'}.pdf`;
+}
+
 export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide }: ArchivioProps) {
   const dialog = useDialog();
   const [subject, setSubject] = useState('');
@@ -89,6 +98,12 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [moving, setMoving] = useState<{ subject: string; topic: string } | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Photos joined into one light PDF: while uploading, and from photos already in the archive.
+  const [mergePdf, setMergePdf] = useState(true);
+  const [pdfQuality, setPdfQuality] = useState<PdfQuality>('media');
+  const [pdfProgress, setPdfProgress] = useState<{ done: number; total: number } | null>(null);
+  const [pdfDialog, setPdfDialog] = useState<{ name: string; quality: PdfQuality; removeOriginals: boolean } | null>(null);
+  const [notice, setNotice] = useState('');
 
   // Where new files go: the app's storage or the student's own Google Drive (per device).
   const storageKey = `studenthub_archive_storage_${userId}`;
@@ -229,11 +244,32 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         return;
       }
     }
-    setUploading({ done: 0, total: files.length });
+    // Two or more photos can become one light PDF (other files are uploaded as they are).
+    let toUpload = files;
+    let pdfName = '';
+    const photos = files.filter(isImageFile);
+    if (mergePdf && photos.length >= 2) {
+      setPdfProgress({ done: 0, total: photos.length });
+      try {
+        const { pdf, skipped } = await imagesToPdf(photos, pdfQuality, (done, total) => setPdfProgress({ done, total }));
+        pdfName = pdfFileName(name.trim() || top);
+        const pdfFile = new File([pdf], pdfName, { type: 'application/pdf' });
+        const before = photos.filter((_, i) => !skipped.includes(i)).reduce((n, f) => n + f.size, 0);
+        toUpload = [pdfFile, ...files.filter(f => !isImageFile(f)), ...photos.filter((_, i) => skipped.includes(i))];
+        setNotice(`${photos.length - skipped.length} foto unite in un PDF: da ${formatSize(before)} a ${formatSize(pdf.size)}.`
+          + (skipped.length ? ` ${skipped.length} foto non si aprivano e sono state caricate a parte.` : ''));
+      } catch (err) {
+        setFormError(err instanceof Error ? err.message : String(err));
+        setPdfProgress(null);
+        return;
+      }
+      setPdfProgress(null);
+    }
+    setUploading({ done: 0, total: toUpload.length });
     const newIds: string[] = [];
     const failed: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < toUpload.length; i++) {
+      const file = toUpload[i];
       try {
         let path: string;
         let drive: { id: string; webViewLink?: string } | undefined;
@@ -243,13 +279,15 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         } else {
           path = await uploadArchiveFile(userId, file);
         }
-        const itemName = name.trim() ? (files.length > 1 ? `${name.trim()} (${i + 1})` : name.trim()) : baseName(file.name);
+        const itemName = pdfName && i === 0
+          ? name.trim() || top
+          : name.trim() ? (toUpload.length > 1 ? `${name.trim()} (${i + 1})` : name.trim()) : baseName(file.name);
         const item: ArchiveItem = {
           id: createId(),
           subject: subj,
           topic: top,
           name: itemName,
-          link: files.length === 1 ? link.trim() || undefined : undefined,
+          link: toUpload.length === 1 ? link.trim() || undefined : undefined,
           baseTitle: readKind({ mimeType: file.type, originalName: file.name }) === 'image' ? (name.trim() || top) : undefined,
           file: { path, drive, mimeType: file.type || 'application/octet-stream', size: file.size, originalName: file.name, textStatus: 'pending' },
         };
@@ -260,14 +298,16 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         console.error('Upload error:', err);
         failed.push(`${file.name}: ${useDrive ? (err instanceof Error ? err.message : String(err)) : storageErrorMessage(err)}`);
       }
-      setUploading({ done: i + 1, total: files.length });
+      setUploading({ done: i + 1, total: toUpload.length });
     }
     setUploading(null);
     expand(subj, top);
     if (newIds.length > 0) onAnalyze(newIds);
     if (failed.length > 0) {
       setFormError(`Non caricati:\n${failed.join('\n')}`);
-      setFiles(prev => prev.filter(f => failed.some(msg => msg.startsWith(`${f.name}:`))));
+      const pdfFailed = !!pdfName && failed.some(msg => msg.startsWith(`${pdfName}:`));
+      if (pdfFailed) setNotice('');
+      setFiles(prev => prev.filter(f => failed.some(msg => msg.startsWith(`${f.name}:`)) || (pdfFailed && isImageFile(f))));
     } else {
       resetForm();
     }
@@ -452,6 +492,87 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       setBulkBusy(false);
     }
   };
+
+  const selectedPhotos = selectedItems.filter(isImageItem);
+  const openPdfDialog = () => {
+    const titles = new Set(selectedPhotos.map(a => a.baseTitle || a.topic));
+    setPdfDialog({ name: titles.size === 1 ? [...titles][0] : selectedPhotos[0]?.topic || 'Foto', quality: 'media', removeOriginals: true });
+  };
+
+  const createPdfFromSelected = async () => {
+    if (!pdfDialog || !selectedPhotos.length) return;
+    const { name: title, quality, removeOriginals } = pdfDialog;
+    const photos = selectedPhotos;
+    const toDrive = useDrive;
+    setPdfDialog(null);
+    setPdfProgress({ done: 0, total: photos.length });
+    try {
+      // Asked first, still inside the click, so Google's window isn't blocked.
+      if (toDrive || photos.some(a => a.file?.drive)) {
+        await ensureDriveToken();
+        markConnected();
+      }
+      const { pdf, skipped } = await imagesToPdf(
+        photos.map(a => () => (a.file!.drive ? downloadFromDrive(a.file!.drive.id) : downloadArchiveFile(a.file!.path))),
+        quality,
+        (done, total) => setPdfProgress({ done, total }),
+      );
+      const used = photos.filter((_, i) => !skipped.includes(i));
+      const subj = used[0].subject;
+      const top = used[0].topic;
+      const file = new File([pdf], pdfFileName(title), { type: 'application/pdf' });
+      let path: string;
+      let drive: { id: string; webViewLink?: string } | undefined;
+      if (toDrive) {
+        drive = await uploadToDrive(file, subj, top);
+        path = `drive:${drive.id}`;
+      } else {
+        path = await uploadArchiveFile(userId, file);
+      }
+      // The photos were already read by the AI: their text is reused, page by page.
+      let textPath: string | undefined;
+      if (used.every(a => a.file?.textStatus === 'done' && a.file.textPath)) {
+        try {
+          const texts = await Promise.all(used.map(a => loadTranscript(a.file!.textPath!)));
+          const joined = used.map((a, i) => `--- Pagina ${a.file!.pageLabel || i + 1} ---\n${texts[i]}`).join('\n\n');
+          textPath = drive ? `${userId}/drive-${drive.id}.txt` : `${path}.txt`;
+          await uploadArchiveText(textPath, joined);
+        } catch (err) {
+          console.error('PDF text error:', err);
+          textPath = undefined;
+        }
+      }
+      const item: ArchiveItem = {
+        id: createId(), subject: subj, topic: top, name: title.trim() || 'Foto',
+        file: { path, drive, mimeType: 'application/pdf', size: pdf.size, originalName: file.name, textPath, textStatus: textPath ? 'done' : 'pending' },
+      };
+      onUpdate(prev => [...prev, item]);
+      expand(subj, top);
+      if (!textPath) onAnalyze([item.id]);
+      const before = used.reduce((n, a) => n + (a.file?.size || 0), 0);
+      if (removeOriginals) await removeItems(used);
+      setSelected(new Set());
+      setNotice(`${used.length} foto unite in "${item.name}": da ${formatSize(before)} a ${formatSize(pdf.size)}.`
+        + (skipped.length ? ` ${skipped.length} foto non si aprivano e sono rimaste come prima.` : ''));
+    } catch (err) {
+      console.error('PDF error:', err);
+      dialog.alert({ title: 'PDF non creato', message: err instanceof Error ? err.message : storageErrorMessage(err) });
+    } finally {
+      setPdfProgress(null);
+    }
+  };
+
+  const qualityPicker = (value: PdfQuality, onPick: (q: PdfQuality) => void) => (
+    <div className={`grid grid-cols-3 gap-1 rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="radiogroup" aria-label="Qualità del PDF">
+      {PDF_QUALITIES.map(q => (
+        <button key={q.id} type="button" role="radio" aria-checked={value === q.id} onClick={() => onPick(q.id)}
+          className={`px-2 py-1.5 rounded-lg text-center transition-all ${value === q.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+          <span className="block text-sm font-medium">{q.label}</span>
+          <span className={`block text-[10px] ${value === q.id ? 'text-white/80' : ''}`}>{q.note}</span>
+        </button>
+      ))}
+    </div>
+  );
 
   // A tick box that also shows "some selected" (a dash) for topics and subjects.
   const tickBox = (ids: string[], label: string) => {
@@ -672,17 +793,52 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             </ul>
           )}
 
+          {files.filter(isImageFile).length >= 2 && (
+            <div className={`rounded-xl p-3 space-y-3 ${darkMode ? 'bg-white/5 ring-1 ring-white/10' : 'bg-black/[0.03] ring-1 ring-black/5'}`}>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={mergePdf} onChange={e => setMergePdf(e.target.checked)} className="mt-1 w-4 h-4 accent-indigo-500" />
+                <span>
+                  <span className={`block text-sm font-medium ${textColor}`}>Unisci le {files.filter(isImageFile).length} foto in un unico PDF leggero</span>
+                  <span className={`block text-xs ${subTextColor}`}>Le foto vengono rimpicciolite e messe una per pagina: occupano molto meno spazio e l'AI le legge tutte insieme.</span>
+                </span>
+              </label>
+              {mergePdf && qualityPicker(pdfQuality, setPdfQuality)}
+            </div>
+          )}
+
           {formError && <p className="text-red-400 text-sm whitespace-pre-line">{formError}</p>}
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={!!uploading} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-60">
-              {uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Caricamento {uploading.done}/{uploading.total}…</> : files.length > 0 ? `Carica ${files.length} file` : 'Aggiungi'}
+            <button type="submit" disabled={!!uploading || !!pdfProgress} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-60">
+              {pdfProgress ? <><Loader2 className="w-4 h-4 animate-spin" /> Creo il PDF {pdfProgress.done}/{pdfProgress.total}…</>
+                : uploading ? <><Loader2 className="w-4 h-4 animate-spin" /> Caricamento {uploading.done}/{uploading.total}…</>
+                : files.length > 0 ? (mergePdf && files.filter(isImageFile).length >= 2 ? 'Crea il PDF e carica' : `Carica ${files.length} file`) : 'Aggiungi'}
             </button>
-            {!uploading && (
+            {!uploading && !pdfProgress && (
               <button type="button" onClick={resetForm} className={`px-4 py-2 rounded-lg text-sm ${subTextColor}`}>Annulla</button>
             )}
           </div>
         </form>
+      )}
+
+      {pdfProgress && !showForm && (
+        <div className={`${cardClass} p-4 flex items-center gap-3 animate-scale-in`}>
+          <Loader2 className="w-5 h-5 text-indigo-400 animate-spin flex-shrink-0" />
+          <div className="flex-1">
+            <p className={`text-sm ${textColor}`}>Creo il PDF… foto {pdfProgress.done} di {pdfProgress.total}</p>
+            <div className={`mt-2 h-1.5 rounded-full overflow-hidden ${darkMode ? 'bg-white/10' : 'bg-black/10'}`}>
+              <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-300" style={{ width: `${(pdfProgress.done / pdfProgress.total) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className={`${cardClass} p-4 flex items-start gap-3 animate-scale-in`}>
+          <FileStack className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <p className={`text-sm flex-1 ${textColor}`}>{notice}</p>
+          <button onClick={() => setNotice('')} className={subTextColor} aria-label="Chiudi"><X className="w-4 h-4" /></button>
+        </div>
       )}
 
       {(waitingItems.length > 0 || needsKey) && (
@@ -800,21 +956,22 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
       {selecting && (
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
           <div role="toolbar" aria-label="Azioni sui file selezionati"
-            className={`pointer-events-auto w-full max-w-2xl rounded-2xl border shadow-2xl p-2 flex flex-wrap items-center gap-1 animate-scale-in ${
+            className={`pointer-events-auto w-full max-w-3xl rounded-2xl border shadow-2xl p-2 flex flex-wrap items-center gap-1 animate-scale-in ${
               darkMode ? 'bg-[#1b1640]/95 border-white/10 text-white' : 'bg-white/95 border-black/10 text-gray-800'
             }`}>
             <span className="px-3 text-sm font-semibold flex-1 min-w-[7rem]">
               {selectedItems.length === 0 ? 'Nessuno selezionato' : selectedItems.length === 1 ? '1 selezionato' : `${selectedItems.length} selezionati`}
             </span>
             {([
-              { label: 'Sposta', icon: <FolderInput className="w-4 h-4" />, onClick: startMove, disabled: !selectedItems.length },
-              { label: 'Rinomina', icon: <Pencil className="w-4 h-4" />, onClick: renameSelected, disabled: !selectedItems.length },
-              { label: readable.length ? `Leggi con AI (${readable.length})` : 'Leggi con AI', icon: <Sparkles className="w-4 h-4" />, onClick: () => { analyze(readable.map(a => a.id)); setSelected(new Set()); }, disabled: !readable.length },
+              { short: 'Sposta', label: 'Sposta', icon: <FolderInput className="w-4 h-4" />, onClick: startMove, disabled: !selectedItems.length },
+              { short: 'Rinomina', label: 'Rinomina', icon: <Pencil className="w-4 h-4" />, onClick: renameSelected, disabled: !selectedItems.length },
+              { short: 'PDF', label: selectedPhotos.length ? `Crea PDF (${selectedPhotos.length})` : 'Crea PDF', icon: <FileStack className="w-4 h-4" />, onClick: openPdfDialog, disabled: !selectedPhotos.length || !!pdfProgress },
+              { short: 'Leggi AI', label: readable.length ? `Leggi con AI (${readable.length})` : 'Leggi con AI', icon: <Sparkles className="w-4 h-4" />, onClick: () => { analyze(readable.map(a => a.id)); setSelected(new Set()); }, disabled: !readable.length },
             ]).map(a => (
               <button key={a.label} onClick={a.onClick} disabled={a.disabled || bulkBusy}
                 className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
                 {a.icon}<span className="hidden sm:inline">{a.label}</span>
-                <span className="sm:hidden">{a.label.split(' ')[0]}</span>
+                <span className="sm:hidden">{a.short}</span>
               </button>
             ))}
             <button onClick={deleteSelected} disabled={!selectedItems.length || bulkBusy}
@@ -864,6 +1021,48 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
               <button type="button" onClick={() => setMoving(null)} className={`px-4 py-2 rounded-xl text-sm font-medium ${darkMode ? 'text-white/80 bg-white/10 hover:bg-white/15' : 'text-gray-700 bg-black/5 hover:bg-black/10'}`}>Annulla</button>
               <button type="submit" disabled={!moving.subject.trim() || !moving.topic.trim()} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50">
                 <FolderInput className="w-4 h-4" /> Sposta qui
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {pdfDialog && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => setPdfDialog(null)}>
+          <form role="dialog" aria-modal="true" aria-label="Crea PDF"
+            onClick={e => e.stopPropagation()}
+            onSubmit={e => { e.preventDefault(); createPdfFromSelected(); }}
+            onKeyDown={e => { if (e.key === 'Escape') setPdfDialog(null); }}
+            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+            <div>
+              <h2 className={`text-lg font-semibold ${textColor}`}>Unisci {selectedPhotos.length} foto in un PDF</h2>
+              <p className={`mt-1 text-sm ${subTextColor}`}>
+                Ora occupano {formatSize(selectedPhotos.reduce((n, a) => n + (a.file?.size || 0), 0))}. Le pagine seguono l'ordine in cui le vedi
+                {selectedPhotos.length < selectedItems.length ? '; gli altri file selezionati non vengono toccati' : ''}.
+              </p>
+            </div>
+            <div>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>Nome del PDF</label>
+              <input value={pdfDialog.name} onChange={e => setPdfDialog({ ...pdfDialog, name: e.target.value })} className={`${inputClass} w-full`} autoFocus required />
+            </div>
+            <div>
+              <p className={`text-sm mb-1 ${subTextColor}`}>Qualità</p>
+              {qualityPicker(pdfDialog.quality, q => setPdfDialog({ ...pdfDialog, quality: q }))}
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={pdfDialog.removeOriginals} onChange={e => setPdfDialog({ ...pdfDialog, removeOriginals: e.target.checked })} className="mt-0.5 w-4 h-4 accent-indigo-500" />
+              <span className={`text-sm ${textColor}`}>
+                Elimina le foto originali dopo
+                <span className={`block text-xs ${subTextColor}`}>Così liberi davvero lo spazio. Il testo già letto dall'AI passa al PDF.</span>
+              </span>
+            </label>
+            <p className={`text-xs inline-flex items-center gap-1 ${useDrive ? 'text-sky-400' : subTextColor}`}>
+              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Il PDF verrà salvato nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Il PDF verrà salvato in Student Hub</>}
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setPdfDialog(null)} className={`px-4 py-2 rounded-xl text-sm font-medium ${darkMode ? 'text-white/80 bg-white/10 hover:bg-white/15' : 'text-gray-700 bg-black/5 hover:bg-black/10'}`}>Annulla</button>
+              <button type="submit" disabled={!pdfDialog.name.trim()} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-50">
+                <FileStack className="w-4 h-4" /> Crea PDF
               </button>
             </div>
           </form>
