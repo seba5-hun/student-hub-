@@ -562,7 +562,7 @@ async function transcribeWith(pick: AIProvider, data: string, mimeType: string, 
   if (pick === 'gemini') {
     return generateContent(getKey('gemini'), [
       { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
-    ], { temperature: 0.1, maxOutputTokens: 32768 });
+    ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 90_000 });
   }
   if (pick === 'claude') {
     const block: ClaudeContent = mimeType === 'application/pdf'

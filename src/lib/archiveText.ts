@@ -91,6 +91,15 @@ const pageCache = new Map<string, string>();
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// The free Gemini tier allows about 10 requests a minute: pages start at least 6 s apart.
+let nextPageSlot = 0;
+async function pageSlot() {
+  const now = Date.now();
+  const at = Math.max(now, nextPageSlot);
+  nextPageSlot = at + 6000;
+  if (at > now) await wait(at - now);
+}
+
 async function renderPage(page: PDFPageProxy): Promise<Blob> {
   const base = page.getViewport({ scale: 1 });
   // About 1700 px on the long side: sharp enough to read, light enough to send.
@@ -133,32 +142,45 @@ async function readPdf(blob: Blob, key: string): Promise<string> {
     if (scanned.length && !canTranscribe()) throw new MissingApiKeyError();
     let done = total - scanned.length;
     if (scanned.length) setProgress(key, `${done}/${total}`);
-    for (const i of scanned) {
+    const readPage = async (i: number): Promise<string> => {
       const cacheKey = `${key}#${i}`;
-      let pageText = pageCache.get(cacheKey);
-      if (pageText === undefined) {
-        const image = await renderPage(await doc.getPage(i));
-        let lastError: unknown;
-        // Busy servers and free-tier limits usually pass in a few seconds.
-        for (let attempt = 0; attempt < 3 && pageText === undefined; attempt++) {
-          if (attempt > 0) await wait(attempt * 5000);
-          try {
-            const { text, page } = splitPage(await transcribeWithAI(image, 'image/jpeg', true));
-            pageText = `--- Pagina ${page || i} ---\n${text}`;
-          } catch (err) {
-            if (err instanceof MissingApiKeyError) throw err;
-            lastError = err;
-          }
+      const cached = pageCache.get(cacheKey);
+      if (cached !== undefined) return cached;
+      const image = await renderPage(await doc.getPage(i));
+      let lastError: unknown;
+      // Busy servers and free-tier limits usually pass in a few seconds.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await wait(attempt * 5000);
+        try {
+          await pageSlot();
+          const { text, page } = splitPage(await transcribeWithAI(image, 'image/jpeg', true));
+          const pageText = `--- Pagina ${page || i} ---\n${text}`;
+          pageCache.set(cacheKey, pageText);
+          return pageText;
+        } catch (err) {
+          if (err instanceof MissingApiKeyError) throw err;
+          lastError = err;
         }
-        if (pageText === undefined) {
-          const reason = lastError instanceof Error ? lastError.message : String(lastError);
-          throw new Error(`Non sono riuscito a leggere la pagina ${i} di ${total}: ${reason} Premi "riprova": le pagine già lette non vengono rifatte.`);
-        }
-        pageCache.set(cacheKey, pageText);
       }
-      out[i] = pageText;
-      setProgress(key, `${++done}/${total}`);
-    }
+      const reason = lastError instanceof Error ? lastError.message : String(lastError);
+      throw new Error(`Non sono riuscito a leggere la pagina ${i} di ${total}: ${reason} Premi "riprova": le pagine già lette non vengono rifatte.`);
+    };
+    // Two pages at a time: about twice as fast, still within the free limits.
+    let next = 0;
+    let failure: unknown = null;
+    const worker = async () => {
+      while (failure === null && next < scanned.length) {
+        const i = scanned[next++];
+        try {
+          out[i] = await readPage(i);
+          setProgress(key, `${++done}/${total}`);
+        } catch (err) {
+          if (failure === null) failure = err;
+        }
+      }
+    };
+    await Promise.all([worker(), worker()]);
+    if (failure !== null) throw failure;
   } finally {
     setProgress(key, null);
     await doc.destroy();

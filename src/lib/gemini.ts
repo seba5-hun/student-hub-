@@ -70,12 +70,23 @@ async function availableModels(apiKey: string): Promise<string[]> {
 export async function generateContent(
   apiKey: string,
   contents: GeminiContent[],
-  options: { temperature?: number; maxOutputTokens?: number; systemInstruction?: string; signal?: AbortSignal } = {},
+  options: {
+    temperature?: number; maxOutputTokens?: number; systemInstruction?: string; signal?: AbortSignal;
+    // fast: flash models first (reading pages needs no "pro" reasoning, and flash is much quicker).
+    fast?: boolean;
+    // A model that doesn't answer in time is skipped for the next one.
+    timeoutMs?: number;
+  } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
   const now = Date.now();
   const available = models.filter(m => (quotaPausedUntil.get(m) || 0) <= now);
-  const ordered = available.length > 0 ? available : models;
+  let ordered = available.length > 0 ? available : models;
+  if (options.fast) {
+    const speed = (m: string) => (/-pro/.test(m) ? 2 : /-lite/.test(m) ? 1 : 0);
+    ordered = [...ordered].sort((a, b) => speed(a) - speed(b));
+    ordered = ordered.slice(0, 4); // a slow answer is skipped for the next model: don't wait on all of them
+  }
   let lastError = '';
   const tried = new Set<string>();
   const retired = new Set<string>();
@@ -89,9 +100,15 @@ export async function generateContent(
       if (retired.has(model)) continue;
       tried.add(model);
       let response: Response;
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      options.signal?.addEventListener('abort', stop);
+      let timedOut = false;
+      const timer = options.timeoutMs ? window.setTimeout(() => { timedOut = true; controller.abort(); }, options.timeoutMs) : 0;
+      const done = () => { window.clearTimeout(timer); options.signal?.removeEventListener('abort', stop); };
       try {
         response = await fetch(`${API}/models/${model}:generateContent`, {
-          signal: options.signal,
+          signal: controller.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
           body: JSON.stringify({
@@ -102,18 +119,25 @@ export async function generateContent(
           }),
         });
       } catch (err) {
+        done();
         if (options.signal?.aborted) throw err;
+        if (timedOut) {
+          lastError = `Il modello ${model} non ha risposto entro ${Math.round(options.timeoutMs! / 1000)} secondi.`;
+          continue;
+        }
         throw new Error('Errore di connessione. Controlla la rete e riprova.');
       }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        done();
         const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
         if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
           throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
         }
         if (response.status === 429 || /quota|rate limit|resource.?exhausted/i.test(errorMsg)) {
-          quotaPausedUntil.set(model, Date.now() + QUOTA_PAUSE_MS);
+          // The per-minute limit passes in a minute; the daily one needs a longer pause.
+          quotaPausedUntil.set(model, Date.now() + (/per.?minute|PerMinute/i.test(errorMsg) ? 70_000 : QUOTA_PAUSE_MS));
           lastError = 'Hai raggiunto il limite della versione gratuita di Gemini. Aspetta qualche minuto e riprova.';
           continue;
         }
@@ -131,7 +155,19 @@ export async function generateContent(
         throw new Error(errorMsg);
       }
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (err) {
+        if (options.signal?.aborted) throw err;
+        if (timedOut) {
+          lastError = `Il modello ${model} non ha risposto entro ${Math.round(options.timeoutMs! / 1000)} secondi.`;
+          continue;
+        }
+        throw new Error('Errore di connessione. Controlla la rete e riprova.');
+      } finally {
+        done();
+      }
       const text: string = (data.candidates?.[0]?.content?.parts || [])
         .map((p: { text?: string }) => p.text || '')
         .join('')
@@ -146,6 +182,7 @@ export async function generateContent(
   }
   modelCache = null;
   if (/limite della versione gratuita/.test(lastError)) throw new Error(lastError);
+  if (/non ha risposto entro/.test(lastError)) throw new Error(`Gemini è troppo lento in questo momento. ${lastError}`);
   throw new Error(
     /high demand|overloaded|unavailable/i.test(lastError)
       ? `I server di Google sono sovraccarichi in questo momento (non è un problema della tua chiave). Riprova tra qualche minuto. Modelli provati: ${[...tried].join(', ')}.`
