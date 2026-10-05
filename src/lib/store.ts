@@ -150,6 +150,13 @@ export function dateKeyOf(value: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateKey(new Date(value));
 }
 
+// "Lun 05/10/2026": the date with the short weekday in front.
+export function formatDateWithDay(value: string): string {
+  const d = parseDate(value);
+  const day = d.toLocaleDateString('it-IT', { weekday: 'short' }).replace('.', '');
+  return `${day.charAt(0).toUpperCase() + day.slice(1)} ${d.toLocaleDateString('it-IT')}`;
+}
+
 export function formatDate(value: string): string {
   return parseDate(value).toLocaleDateString('it-IT');
 }

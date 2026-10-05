@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Check, Clock, TrendingUp, RotateCcw } from 'lucide-react';
-import { Task, IMPORTANCE_CONFIG, createId, formatDate, formatTaskTime, compareTasks, effectiveImportance, dueLabel, taskDeadline } from '../lib/store';
+import { Task, IMPORTANCE_CONFIG, createId, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance, dueLabel, taskDeadline } from '../lib/store';
 
 interface ImpegniProps {
   tasks: Task[];
@@ -183,7 +183,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
               <div className="flex-1">
                 <p className={`font-medium ${textColor}`}>{task.title}</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                  <span className={`text-xs ${subTextColor}`}>{formatDate(task.date)}{task.endDate ? ` → ${formatDate(task.endDate)}` : ''}</span>
+                  <span className={`text-xs ${subTextColor}`}>{formatDateWithDay(task.date)}{task.endDate ? ` → ${formatDateWithDay(task.endDate)}` : ''}</span>
                   {editingTimeId === task.id ? (
                     <input type="time" autoFocus defaultValue={task.time || ''} aria-label="Orario"
                       onChange={e => setTaskTime(task.id, e.target.value)}
@@ -228,7 +228,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
                   <div className="flex-1">
                     <p className={`font-medium line-through ${textColor}`}>{task.title}</p>
                     <p className={`text-xs ${subTextColor}`}>
-                      {formatDate(task.date)}{task.time ? ` · ${formatTaskTime(task)}` : ''}
+                      {formatDateWithDay(task.date)}{task.time ? ` · ${formatTaskTime(task)}` : ''}
                       {task.autoDone && ' · completato in automatico (data passata)'}
                     </p>
                   </div>
