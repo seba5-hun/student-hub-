@@ -1,3 +1,4 @@
+import type { MindsetData } from './mindset';
 import { v4 as uuidv4 } from 'uuid';
 
 // Types
@@ -113,6 +114,7 @@ export interface UserData {
   sessions: StudySession[];
   archive: ArchiveItem[];
   settings: UserSettings;
+  mindset?: MindsetData; // only for the accounts that have the Mindset section
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -222,6 +224,7 @@ export function normalizeData(parsed: any): UserData {
     sessions: arr(parsed?.sessions),
     archive: arr(parsed?.archive),
     settings: { ...DEFAULT_SETTINGS, ...(parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : {}) },
+    ...(parsed?.mindset && typeof parsed.mindset === 'object' ? { mindset: parsed.mindset as MindsetData } : {}),
   };
 }
 

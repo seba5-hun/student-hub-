@@ -15,6 +15,7 @@ const loaders = {
   calendario: () => import('./components/Calendario'),
   guida: () => import('./components/GuidaStudioAI'),
   admin: () => import('./components/AdminPanel'),
+  mindset: () => import('./components/mindset/Mindset'),
 };
 const Impegni = lazy(loaders.impegni);
 const Voti = lazy(loaders.voti);
@@ -24,6 +25,7 @@ const CosaStudiare = lazy(loaders.cosaStudiare);
 const Calendario = lazy(loaders.calendario);
 const GuidaStudioAI = lazy(loaders.guida);
 const AdminPanel = lazy(loaders.admin);
+const Mindset = lazy(loaders.mindset);
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -54,6 +56,7 @@ import {
   nextSubjectColor,
   SubjectDef,
   isTaskExpired,
+  createId,
 } from './lib/store';
 import { renameSubjectInChats } from './lib/chats';
 import {
@@ -85,6 +88,9 @@ function App() {
   const [adminPending, setAdminPending] = useState(0);
   // Opened as …/admin: go straight to the admin panel after login.
   const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
+  // Opened as …/?mindset=sera (iPhone automation): straight to Mindset's evening reset.
+  const openMindset = useRef(new URLSearchParams(window.location.search).get('mindset'));
+  const [mindsetView, setMindsetView] = useState<string | null>(null);
   const dialog = useDialog();
   // Login screens are light; inside the app the dialogs follow the dashboard theme.
   useEffect(() => { dialog.setDark(!!user && darkMode); }, [dialog, user, darkMode]);
@@ -407,6 +413,14 @@ function App() {
   }, [user, data]);
 
   useEffect(() => {
+    if (!openMindset.current || !user || !data) return;
+    const view = openMindset.current;
+    openMindset.current = null;
+    window.history.replaceState({}, document.title, '/');
+    if (isDeveloper(user.email)) { setMindsetView(view); setCurrentSection('mindset'); }
+  }, [user, data]);
+
+  useEffect(() => {
     if (!openAdmin.current || !user || !data) return;
     openAdmin.current = false;
     window.history.replaceState({}, document.title, '/');
@@ -663,6 +677,16 @@ function App() {
             darkMode={darkMode} 
             onNavigate={handleSectionChange}
             onAddTask={(task) => updateData({ ...data, tasks: [...data.tasks, task] })}
+          />
+        )}
+        {currentSection === 'mindset' && isDeveloper(user.email) && (
+          <Mindset
+            mindset={data.mindset}
+            darkMode={darkMode}
+            initialView={mindsetView}
+            subjects={(data.settings.subjects || []).map(d => d.name)}
+            onUpdate={fn => updateData(prev => ({ ...prev, mindset: fn(prev.mindset) }))}
+            onStudySession={(subject, minutes) => updateData(prev => ({ ...prev, sessions: [...prev.sessions, { id: createId(), subject, duration: minutes, date: new Date().toISOString() }] }))}
           />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (

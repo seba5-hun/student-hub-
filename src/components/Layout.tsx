@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck } from 'lucide-react';
+import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 
@@ -34,6 +34,8 @@ export const SECTIONS = [
 
 // Only for the developer account (statistics of the whole site).
 const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Admin', icon: ShieldCheck };
+// Mindset: for now only on the developer account.
+const MINDSET_SECTION = { id: 'mindset', label: 'Mindset', icon: Compass };
 
 export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0 }: LayoutProps) {
   const dialog = useDialog();
@@ -151,7 +153,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {[...SECTIONS.filter(section => section.id === 'home' || !hiddenSections.includes(section.id)), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
+              {[...(showDeveloper ? [SECTIONS[0], MINDSET_SECTION] : [SECTIONS[0]]), ...SECTIONS.slice(1).filter(section => !hiddenSections.includes(section.id)), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}
