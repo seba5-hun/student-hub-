@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Check, Gift, Sparkles, MessageCircle, Crown, Settings2, Loader2 } from 'lucide-react';
+import { ChevronDown, Check, Gift, Sparkles, MessageCircle, Crown, Settings2, Loader2, X, Eye } from 'lucide-react';
 import {
   AIProvider, CLAUDE_MODELS, FREE_CHAIN, OpenAIModel, getKey, getModel, getProvider, listOpenAIModels, setModel, setProvider,
+  hiddenOpenAIModels, hideOpenAIModel, showAllOpenAIModels,
 } from '../lib/ai';
 
 interface Option {
@@ -57,12 +58,14 @@ export default function ModelPicker({ darkMode, onChange, onOpenSettings, compac
   }
 
   const top: Option[] = [];
+  const hidden = hiddenOpenAIModels();
   if (getKey('openai')) {
-    const full = openAI?.find(m => !m.small);
-    const mini = openAI?.find(m => /mini/.test(m.id));
+    const usable = openAI?.filter(m => !hidden.includes(m.id));
+    const full = usable?.find(m => !m.small);
+    const mini = usable?.find(m => /mini/.test(m.id));
     const saved = getModel('openai');
     // '' = "Automatico": the best model of the key, chosen at the first question.
-    const ids = [...new Set([...(saved === '' ? [''] : []), full?.id, mini?.id, saved].filter((x): x is string => x !== undefined && (x !== '' || saved === '')))];
+    const ids = [...new Set([...(saved === '' ? [''] : []), full?.id, mini?.id, saved].filter((x): x is string => x !== undefined && (x !== '' || saved === '') && !hidden.includes(x)))];
     if (!ids.length) ids.push('');
     ids.forEach(id => top.push({
       key: `openai:${id}`, provider: 'openai', model: id,
@@ -96,15 +99,23 @@ export default function ModelPicker({ darkMode, onChange, onOpenSettings, compac
   const panel = darkMode ? 'bg-[#1b1640] border-white/10 text-white' : 'bg-white border-black/10 text-gray-800';
   const muted = darkMode ? 'text-white/55' : 'text-gray-500';
   const row = (o: Option) => (
-    <button key={o.key} role="menuitemradio" aria-checked={isActive(o)} onClick={() => choose(o)}
-      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-colors ${isActive(o) ? (darkMode ? 'bg-white/10' : 'bg-indigo-50') : (darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5')}`}>
-      <span className="flex-shrink-0">{o.icon}</span>
-      <span className="flex-1 min-w-0">
-        <span className="block text-sm font-medium truncate">{o.label}</span>
-        <span className={`block text-xs truncate ${muted}`}>{o.note}</span>
-      </span>
-      {isActive(o) && <Check className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
-    </button>
+    <div key={o.key} className="group relative">
+      <button role="menuitemradio" aria-checked={isActive(o)} onClick={() => choose(o)}
+        className={`w-full flex items-center gap-3 px-3 py-2 pr-9 rounded-xl text-left transition-colors ${isActive(o) ? (darkMode ? 'bg-white/10' : 'bg-indigo-50') : (darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5')}`}>
+        <span className="flex-shrink-0">{o.icon}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-medium truncate">{o.label}</span>
+          <span className={`block text-xs truncate ${muted}`}>{o.note}</span>
+        </span>
+        {isActive(o) && <Check className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
+      </button>
+      {o.provider === 'openai' && o.model && (
+        <button onClick={() => { hideOpenAIModel(o.model!); setTick(t => t + 1); onChange(); }} title="Nascondi questo modello" aria-label={`Nascondi ${o.model}`}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 ${muted} ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}>
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
   );
 
   return (
@@ -123,6 +134,12 @@ export default function ModelPicker({ darkMode, onChange, onOpenSettings, compac
           {top.map(row)}
           {all.length === 0 && <p className={`px-3 py-2 text-sm ${muted}`}>Nessuna AI configurata.</p>}
           <div className={`mt-2 pt-2 border-t ${darkMode ? 'border-white/10' : 'border-black/10'}`}>
+            {hidden.length > 0 && getKey('openai') && (
+              <button onClick={() => { showAllOpenAIModels(); setTick(t => t + 1); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${muted} ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                <Eye className="w-4 h-4" /> Mostra i modelli nascosti ({hidden.length})
+              </button>
+            )}
             <button onClick={() => { setOpen(false); onOpenSettings(); }}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${muted} ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
               <Settings2 className="w-4 h-4" /> Aggiungi o gestisci le chiavi AI

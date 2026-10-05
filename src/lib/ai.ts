@@ -80,13 +80,14 @@ export function isReady(): boolean {
 
 // Who answered the last question (shown in the chat in "Gratis automatico").
 let lastAnsweredBy = '';
+let lastOpenAIModel = '';
 const PROVIDER_NAMES: Record<KeyProvider, string> = { gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', claude: 'Claude', openai: 'ChatGPT' };
 
 export function providerLabel(): string {
   const p = getProvider();
   if (p === 'claude') return CLAUDE_MODELS.find(m => m.id === getModel('claude'))?.label || 'Claude';
   if (p === 'openrouter') return `OpenRouter · ${getModel('openrouter').replace(/^[^/]+\//, '')}`;
-  if (p === 'openai') return `ChatGPT${getModel('openai') ? ` · ${getModel('openai')}` : ''}`;
+  if (p === 'openai') return `ChatGPT · ${getModel('openai') || (lastOpenAIModel ? `Automatico (${lastOpenAIModel})` : 'Automatico')}`;
   if (p === 'groq') return 'Groq';
   if (p === 'free') return `Gratis automatico${lastAnsweredBy ? ` · ha risposto ${lastAnsweredBy}` : ''}`;
   return 'Google Gemini';
@@ -306,47 +307,66 @@ function compatMessages(system: string, context: string, turns: ChatTurn[]) {
   ];
 }
 
+// Models the student hid from the menu, or that answered "no access" for this key.
+const OPENAI_HIDDEN = 'studenthub_openai_hidden';
+export function hiddenOpenAIModels(): string[] {
+  try { return JSON.parse(read(OPENAI_HIDDEN) || '[]'); } catch { return []; }
+}
+export function hideOpenAIModel(id: string) {
+  write(OPENAI_HIDDEN, JSON.stringify([...new Set([...hiddenOpenAIModels(), id])]));
+  if (getModel('openai') === id) setModel('openai', '');
+}
+export function showAllOpenAIModels() { write(OPENAI_HIDDEN, ''); }
+
+// "Automatico": the newest full model of the key that isn't hidden.
+export async function bestOpenAIModel(key: string): Promise<string | undefined> {
+  const hidden = hiddenOpenAIModels();
+  const list = (await listOpenAIModels(key)).filter(m => !hidden.includes(m.id));
+  return (list.find(m => !m.small) || list[0])?.id;
+}
+
 async function askOpenAI(system: string, context: string, turns: ChatTurn[]): Promise<string> {
   const key = getKey('openai');
-  let model = getModel('openai');
-  if (!model) {
-    const best = (await listOpenAIModels(key)).find(m => !m.small);
-    if (!best) throw new Error('Questa chiave di OpenAI non ha accesso a nessun modello GPT.');
-    model = best.id;
-    setModel('openai', model);
-  }
-  let res: Response;
-  try {
-    res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      // Reasoning models think inside this limit too: keep it generous.
-      body: JSON.stringify({ model, messages: compatMessages(system, context, turns), max_completion_tokens: 32000 }),
-    }, 240, 'ChatGPT');
-  } catch (err) {
-    throw err instanceof Error ? err : new Error('Errore di connessione con OpenAI. Controlla la rete e riprova.');
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg: string = body.error?.message || `Errore ${res.status}`;
-    const code: string = body.error?.code || '';
-    if (res.status === 401) throw new Error('Chiave di OpenAI non valida. Controllala nelle impostazioni AI.');
-    if (code === 'insufficient_quota' || /quota|billing/i.test(msg)) throw new Error('Il credito di OpenAI è finito: ricaricalo su platform.openai.com (Billing).');
-    if (res.status === 429) throw new Error('Troppe richieste a OpenAI in poco tempo. Aspetta un minuto e riprova.');
-    if (res.status === 404 || code === 'model_not_found') {
-      setModel('openai', '');
-      throw new Error(`Il modello "${model}" non è disponibile per questa chiave: riprova, ne sceglierò un altro.`);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const model = getModel('openai') || await bestOpenAIModel(key);
+    if (!model) throw new Error('Questa chiave di OpenAI non ha accesso a nessun modello GPT utilizzabile. Puoi rimostrare i modelli nascosti dal menu dei modelli.');
+    let res: Response;
+    try {
+      res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        // Reasoning models think inside this limit too: keep it generous.
+        body: JSON.stringify({ model, messages: compatMessages(system, context, turns), max_completion_tokens: 32000 }),
+      }, 240, 'ChatGPT');
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Errore di connessione con OpenAI. Controlla la rete e riprova.');
     }
-    throw new Error(`OpenAI: ${msg}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg: string = body.error?.message || `Errore ${res.status}`;
+      const code: string = body.error?.code || '';
+      if (res.status === 401) throw new Error('Chiave di OpenAI non valida. Controllala nelle impostazioni AI.');
+      if (code === 'insufficient_quota' || /quota|billing/i.test(msg)) throw new Error('Il credito di OpenAI è finito: ricaricalo su platform.openai.com (Billing).');
+      if (res.status === 429) throw new Error('Troppe richieste a OpenAI in poco tempo. Aspetta un minuto e riprova.');
+      // A model this key can't use (not available, needs verification, unsupported parameters…):
+      // it is hidden and the next one answers.
+      if (res.status === 404 || res.status === 403 || code === 'model_not_found' || /does not exist|do not have access|not have access|verif|not supported|unsupported/i.test(msg)) {
+        hideOpenAIModel(model);
+        continue;
+      }
+      throw new Error(`OpenAI: ${msg}`);
+    }
+    const text = String(body.choices?.[0]?.message?.content || '').trim();
+    if (!text) {
+      const reason = body.choices?.[0]?.finish_reason;
+      throw new Error(reason === 'length'
+        ? 'ChatGPT ha usato tutto lo spazio per ragionare senza scrivere la risposta: riprova con una domanda più precisa o un argomento più piccolo.'
+        : 'ChatGPT ha restituito una risposta vuota. Riprova.');
+    }
+    lastOpenAIModel = model;
+    return text;
   }
-  const text = String(body.choices?.[0]?.message?.content || '').trim();
-  if (!text) {
-    const reason = body.choices?.[0]?.finish_reason;
-    throw new Error(reason === 'length'
-      ? 'ChatGPT ha usato tutto lo spazio per ragionare senza scrivere la risposta: riprova con una domanda più precisa o un argomento più piccolo.'
-      : 'ChatGPT ha restituito una risposta vuota. Riprova.');
-  }
-  return text;
+  throw new Error('Nessun modello di ChatGPT utilizzabile con questa chiave in questo momento.');
 }
 
 // ---------------------------------------------------------------- Groq (free)
