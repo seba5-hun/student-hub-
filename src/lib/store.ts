@@ -76,6 +76,8 @@ export interface UserSettings {
   homeLayout?: { order: string[]; hidden: string[] };
   // Menu sections the student has hidden.
   hiddenSections?: string[];
+  // When the study statistics were reset: study synced from Mindset before it is not added back.
+  sessionsResetAt?: string;
 }
 
 // Every subject name used anywhere in the data (grades, study sessions, tasks, archive).

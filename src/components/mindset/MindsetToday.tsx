@@ -18,6 +18,7 @@ interface Props {
   eveningOpen: boolean;
   onEveningOpen: (open: boolean) => void;
   onStartFocus: (task: string, area: PriorityArea | 'other') => void;
+  subjects: string[];
 }
 
 const STATUS_LABEL: Record<BlockStatus, string> = { done: 'Fatto', min: 'Minimo', skipped: 'Saltato', excused: 'Imprevisto' };
@@ -29,7 +30,7 @@ const STATUS_STYLE: Record<BlockStatus, string> = {
 };
 const SHORTCUT_NAME = 'Sveglia Mindset';
 
-export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen, onStartFocus }: Props) {
+export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen, onStartFocus, subjects }: Props) {
   const now = useNow(30_000);
   const today = toDateKey(now);
   const log: DayLog = m.days[today] || {};
@@ -165,7 +166,7 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
         </div>
       )}
 
-      <Timeline m={m} today={today} blocks={blocks} log={log} now={now} nowMin={nowMin} currentId={current?.id} setLog={setLog} t={t} />
+      <Timeline m={m} today={today} blocks={blocks} log={log} now={now} nowMin={nowMin} subjects={subjects} currentId={current?.id} setLog={setLog} t={t} />
 
       <Habits m={m} today={today} log={log} setLog={setLog} t={t} />
 
@@ -435,8 +436,8 @@ function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }
 // ---------- timeline ----------
 
 // First thing of the day: what the morning deep work was used for (or that it didn't happen).
-function DeepWorkPicker({ today, log, blocks, setLog, t }: {
-  today: string; log: DayLog; blocks: Block[]; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+function DeepWorkPicker({ today, log, blocks, setLog, t, subjects }: {
+  today: string; log: DayLog; blocks: Block[]; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme; subjects: string[];
 }) {
   const deepId = `${today}-deep`;
   const hasBlock = blocks.some(b => b.id === deepId);
@@ -456,7 +457,7 @@ function DeepWorkPicker({ today, log, blocks, setLog, t }: {
       <div className="flex flex-wrap gap-1.5">
         {DEEP_KINDS.map(k => (
           <Pill key={k.kind} t={t} active={!!d && !d.skipped && d.kind === k.kind}
-            onClick={() => choose(d && !d.skipped && d.kind === k.kind ? undefined : { kind: k.kind, area: k.area, note: note.trim() || undefined, minutes: d?.minutes })}>
+            onClick={() => choose(d && !d.skipped && d.kind === k.kind ? undefined : { kind: k.kind, area: k.area, note: note.trim() || undefined, minutes: d?.minutes, subject: k.area === 'study' ? d?.subject : undefined })}>
             <AreaDot area={k.area} className="mr-1.5" />{k.kind}
           </Pill>
         ))}
@@ -467,6 +468,12 @@ function DeepWorkPicker({ today, log, blocks, setLog, t }: {
           <input value={note} onChange={e => setNote(e.target.value)} onBlur={() => choose({ ...d, note: note.trim() || undefined })}
             onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
             placeholder="Su cosa? Es. schermata di login" className={`${t.input} flex-1 min-w-[12rem] py-1.5 text-sm`} aria-label="Su cosa hai lavorato" />
+          {d.area === 'study' && subjects.length > 0 && (
+            <select value={d.subject || ''} onChange={e => choose({ ...d, subject: e.target.value || undefined })} className={`${t.input} py-1.5 text-sm`} aria-label="Materia del deep work">
+              <option value="">Materia…</option>
+              {subjects.map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          )}
           {!hasBlock && (
             <div className="flex gap-1">
               {[15, 30, 45, 60, 90].map(v => <Pill key={v} t={t} active={d.minutes === v} onClick={() => choose({ ...d, minutes: d.minutes === v ? undefined : v })}>{v}m</Pill>)}
@@ -504,8 +511,8 @@ const FREE_USES: { title: string; area: Area }[] = [
   { title: 'Famiglia', area: 'life' },
 ];
 
-function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: {
-  m: MindsetData; today: string; blocks: Block[]; log: DayLog; now: Date; nowMin: number; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
+function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, subjects }: {
+  m: MindsetData; today: string; blocks: Block[]; log: DayLog; now: Date; nowMin: number; subjects: string[]; currentId?: string; setLog: (k: string, fn: (l: DayLog) => DayLog) => void; t: Theme;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [edit, setEdit] = useState<Block | null>(null);
@@ -516,6 +523,14 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
   });
   // Editing turns the day into its own copy (the day type stays as it is).
   const saveBlocks = (fn: (b: Block[]) => Block[]) => setLog(today, l => ({ ...l, blocks: fn(l.blocks || blocksOf(m, today)) }));
+  // The subject of a study block: its time then goes to the Study Timer (and its pie chart).
+  const setSubject = (block: Block, subject: string | undefined) => {
+    if (block.id === `${today}-deep`) {
+      setLog(today, l => ({ ...l, deepWork: { ...(l.deepWork && !l.deepWork.skipped ? l.deepWork : { kind: 'Studio', area: 'study' as Area }), subject } }));
+      if (!log.blocks) return;
+    }
+    saveBlocks(bs => bs.map(x => (x.id === block.id ? { ...x, subject } : x)));
+  };
   const addBlock = () => {
     const start = fromMin(Math.ceil((nowMin + 5) / 15) * 15);
     setEdit({ id: createId(), start, end: fromMin(toMin(start) + 60), title: '', area: 'study' });
@@ -531,7 +546,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
         <button onClick={addBlock} className={`p-1.5 rounded-lg ${t.sub} ${t.hover}`} aria-label="Aggiungi attività"><Plus className="w-4 h-4" /></button>
       </div>
     }>
-      <DeepWorkPicker today={today} log={log} blocks={blocks} setLog={setLog} t={t} />
+      <DeepWorkPicker today={today} log={log} blocks={blocks} setLog={setLog} t={t} subjects={subjects} />
       <ol className="relative">
         {blocks.map(block => {
           const [s, e] = blockRange(block);
@@ -546,7 +561,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
                 <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: AREAS[block.area].color, opacity: 0.85 }} />
                 <button onClick={() => setOpen(open === block.id ? null : block.id)} className="flex-1 min-w-0 text-left">
                   <span className={`block text-sm truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
-                  <span className={`block text-[11px] ${t.sub}`}>{AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
+                  <span className={`block text-[11px] ${t.sub}`}>{block.subject ? block.subject : AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
                 </button>
                 {st && st !== 'done' && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_STYLE[st]}`}>{STATUS_LABEL[st]}</span>}
                 <button onClick={() => (isFree(block) ? setOpen(open === block.id ? null : block.id) : setEdit(block))} aria-label={`Modifica: ${block.title}`}
@@ -567,6 +582,14 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
                   <Pill t={t} onClick={() => { setEdit(block); setOpen(null); }}><Pencil className="w-3 h-3 inline mr-1" />Modifica</Pill>
                 </div>
               )}
+              {open === block.id && block.area === 'study' && subjects.length > 0 && (
+                <div className="pl-16 pb-3 animate-scale-in">
+                  <p className={`text-xs mb-1.5 ${t.sub}`}>Materia (il tempo va nel Timer Studio):</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {subjects.map(sub => <Pill key={sub} t={t} active={block.subject === sub} onClick={() => setSubject(block, block.subject === sub ? undefined : sub)}>{sub}</Pill>)}
+                  </div>
+                </div>
+              )}
               {open === block.id && isFree(block) && (
                 <div className="pl-16 pb-3 animate-scale-in">
                   <p className={`text-xs mb-1.5 ${t.sub}`}>Usa questo tempo per (poi scegli quanto):</p>
@@ -585,7 +608,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
         })}
       </ol>
       {edit && (
-        <BlockEditor block={edit} t={t} isNew={!blocks.some(x => x.id === edit.id)} onClose={() => setEdit(null)}
+        <BlockEditor block={edit} t={t} subjects={subjects} isNew={!blocks.some(x => x.id === edit.id)} onClose={() => setEdit(null)}
           onDelete={() => { saveBlocks(bs => bs.filter(x => x.id !== edit.id)); setEdit(null); }}
           onSave={nb => { saveBlocks(bs => placeBlock(bs, nb)); setEdit(null); }} />
       )}
@@ -593,8 +616,8 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t }: 
   );
 }
 
-export function BlockEditor({ block, onSave, onDelete, onClose, t, isNew }: {
-  block: Block; onSave: (b: Block) => void; onDelete: () => void; onClose: () => void; t: Theme; isNew: boolean;
+export function BlockEditor({ block, onSave, onDelete, onClose, t, isNew, subjects = [] }: {
+  block: Block; onSave: (b: Block) => void; onDelete: () => void; onClose: () => void; t: Theme; isNew: boolean; subjects?: string[];
 }) {
   const [b, setB] = useState<Block>({ ...block, auto: undefined });
   return (
@@ -617,6 +640,12 @@ export function BlockEditor({ block, onSave, onDelete, onClose, t, isNew }: {
             </button>
           ))}
         </div>
+        {b.area === 'study' && subjects.length > 0 && (
+          <select value={b.subject || ''} onChange={e => setB({ ...b, subject: e.target.value || undefined })} className={`${t.input} w-full`} aria-label="Materia">
+            <option value="">Materia (facoltativa: il tempo va nel Timer Studio)</option>
+            {subjects.map(x => <option key={x} value={x}>{x}</option>)}
+          </select>
+        )}
         <div className="flex items-center gap-2 pt-1">
           {!isNew && <button type="button" onClick={onDelete} className="p-2 rounded-xl text-red-400 hover:bg-red-500/10" aria-label="Elimina"><Trash2 className="w-4 h-4" /></button>}
           <div className="flex-1" />

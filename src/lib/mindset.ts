@@ -27,7 +27,7 @@ export const PRIORITY_AREAS: { id: PriorityArea; label: string; example: string 
   { id: 'project', label: 'Progetto', example: 'Es. finisco la schermata di login' },
 ];
 
-export interface Block { id: string; start: string; end: string; title: string; area: Area; auto?: boolean }
+export interface Block { id: string; start: string; end: string; title: string; area: Area; auto?: boolean; subject?: string }
 export interface DayType {
   id: string;
   name: string;
@@ -42,11 +42,11 @@ export interface DayType {
 export interface Habit { id: string; name: string; full: string; min: string }
 export interface Priority { id: string; area: PriorityArea; text: string; done: boolean }
 export interface Disruption { id: string; cause: string; external: boolean; minutes: number; at: string; blocks: string[] }
-export interface FocusSession { id: string; start: string; minutes: number; task: string; area: PriorityArea | 'other'; rating?: number; interruptions: number }
+export interface FocusSession { id: string; start: string; minutes: number; task: string; area: PriorityArea | 'other'; rating?: number; interruptions: number; subject?: string }
 export interface SleepLog { bed?: string; wake?: string; quality?: number } // local "YYYY-MM-DDTHH:MM"
 export interface CheckIn { energy?: number; focus?: number; mood?: number; stress?: number }
 
-export interface DeepWorkLog { kind: string; area: Area; note?: string; minutes?: number; skipped?: boolean }
+export interface DeepWorkLog { kind: string; area: Area; note?: string; minutes?: number; skipped?: boolean; subject?: string }
 
 export const DEEP_KINDS: { kind: string; area: Area }[] = [
   { kind: 'Progetto', area: 'project' },
@@ -322,7 +322,7 @@ export function blocksOf(m: MindsetData, key: string): Block[] {
     const chosen = log?.deepWork && !log.deepWork.skipped ? log.deepWork : null;
     out.push({ id: `${key}-deep`, start: fromMin(deepStart), end: fromMin(deepEnd),
       title: chosen ? deepWorkTitle(chosen) : type.morningArea === 'project' ? 'Deep work · progetto' : 'Deep work · studio',
-      area: chosen ? chosen.area : type.morningArea, auto: true });
+      area: chosen ? chosen.area : type.morningArea, subject: chosen?.subject, auto: true });
   }
   for (const block of type.blocks) {
     const s = toMin(block.start);
@@ -622,4 +622,39 @@ export function vagueHint(text: string): string | null {
 export function greeting(now: Date): string {
   const h = now.getHours();
   return h < 5 ? 'Buonanotte' : h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : 'Buonasera';
+}
+
+// ---------- sync with the Study Timer ----------
+
+export interface SyncedSession { id: string; subject: string; duration: number; date: string }
+
+// Study done in Mindset (study blocks and morning deep work with a subject) becomes sessions of the
+// Study Timer, so it shows in its charts. Ids start with "mindset-": they are recomputed every time,
+// so a block marked as skipped later disappears from the Timer too. Focus sessions already save
+// their own session: a block they overlap is not counted twice.
+export function mindsetStudySessions(m: MindsetData, now: Date = new Date(), since?: string): SyncedSession[] {
+  const out: SyncedSession[] = [];
+  for (const key of Object.keys(m.days).sort()) {
+    if (key > toDateKey(now)) continue;
+    const log = m.days[key];
+    const focusStarts = (log.focus || []).filter(f => f.subject).map(f => toMin(f.start.slice(11)));
+    for (const b of blocksOf(m, key)) {
+      if (b.area !== 'study' || !b.subject) continue;
+      const st = effectiveStatus(m, key, b, now);
+      if (st !== 'done' && st !== 'min') continue;
+      const [s, e] = blockRange(b);
+      if (focusStarts.some(f => f >= s - 5 && f < e)) continue;
+      const end = new Date(`${key}T00:00:00`);
+      end.setMinutes(e);
+      const date = end.toISOString();
+      if (since && date < since) continue;
+      out.push({ id: `mindset-${key}-${b.id}`, subject: b.subject, duration: Math.round((e - s) * (st === 'min' ? 0.5 : 1)), date });
+    }
+    const d = log.deepWork;
+    if (d && !d.skipped && d.area === 'study' && d.subject && d.minutes && !blocksOf(m, key).some(b => b.id === `${key}-deep`)) {
+      const date = new Date(`${key}T08:00:00`).toISOString();
+      if (!since || date >= since) out.push({ id: `mindset-${key}-deepwork`, subject: d.subject, duration: d.minutes, date });
+    }
+  }
+  return out;
 }

@@ -234,6 +234,27 @@ function App() {
   userRef.current = user;
   dataRef.current = data;
 
+  // Study done in Mindset goes into the Study Timer's sessions (and its charts), kept in sync.
+  const mindsetData = data?.mindset;
+  const isDev = !!user && isDeveloper(user.email);
+  useEffect(() => {
+    if (!isDev || !mindsetData) return;
+    let alive = true;
+    const run = () => import('./lib/mindset').then(({ normalizeMindset, mindsetStudySessions }) => {
+      const current = dataRef.current;
+      const mm = current && normalizeMindset(current.mindset);
+      if (!alive || !current || !mm) return;
+      const desired = mindsetStudySessions(mm, new Date(), current.settings.sessionsResetAt);
+      const synced = current.sessions.filter(s => s.id.startsWith('mindset-'));
+      const same = desired.length === synced.length && desired.every(d => synced.some(c => c.id === d.id && c.duration === d.duration && c.subject === d.subject));
+      if (same) return;
+      updateData(prev => ({ ...prev, sessions: [...prev.sessions.filter(s => !s.id.startsWith('mindset-')), ...desired] }));
+    }).catch(() => { /* retried at the next change */ });
+    run();
+    const id = window.setInterval(run, 60_000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, [isDev, mindsetData, updateData]);
+
   // Tasks whose date has passed are completed automatically (checked every minute).
   const hasData = !!data;
   useEffect(() => {
@@ -649,7 +670,7 @@ function App() {
             extraSubjects={data.tasks.map(t => t.subject).filter((s): s is string => !!s)}
             grades={data.grades}
             darkMode={darkMode}
-            onUpdate={(sessions) => updateData({ ...data, sessions })}
+            onUpdate={(sessions) => updateData(prev => ({ ...prev, sessions, ...(sessions.length === 0 ? { settings: { ...prev.settings, sessionsResetAt: new Date().toISOString() } } : {}) }))}
             preselectedSubject={preselectedSubject}
             subjectDefs={data.settings.subjects || []}
             onUpdateSubjects={updateSubjects}

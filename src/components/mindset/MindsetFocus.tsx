@@ -49,7 +49,7 @@ export default function MindsetFocus({ m, update, t, subjects, preset, onPresetU
     const key = toDateKey(new Date(f.start));
     update(x => withDay({ ...x, activeFocus: null }, key, l => ({
       ...l,
-      focus: [...(l.focus || []), { id: createId(), start: localStamp(new Date(f.start)), minutes, task: f.task, area: f.area, rating: score, interruptions: f.interruptions }],
+      focus: [...(l.focus || []), { id: createId(), start: localStamp(new Date(f.start)), minutes, task: f.task, area: f.area, rating: score, interruptions: f.interruptions, subject: f.subject }],
     })));
     if (f.subject && minutes > 0) onStudySession(f.subject, minutes);
     setRating(null);
