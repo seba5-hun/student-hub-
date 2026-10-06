@@ -246,7 +246,7 @@ function App() {
       if (!alive || !current || !mm) return;
       const desired = mindsetStudySessions(mm, new Date(), current.settings.sessionsResetAt, current.tasks);
       const synced = current.sessions.filter(s => s.id.startsWith('mindset-'));
-      const same = desired.length === synced.length && desired.every(d => synced.some(c => c.id === d.id && c.duration === d.duration && c.subject === d.subject));
+      const same = desired.length === synced.length && desired.every(d => synced.some(c => c.id === d.id && c.duration === d.duration && c.subject === d.subject && c.date === d.date));
       if (same) return;
       updateData(prev => ({ ...prev, sessions: [...prev.sessions.filter(s => !s.id.startsWith('mindset-')), ...desired] }));
     }).catch(() => { /* retried at the next change */ });

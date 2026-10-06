@@ -32,6 +32,7 @@ export interface Block {
   id: string; start: string; end: string; title: string; area: Area; auto?: boolean; subject?: string;
   taskId?: string;        // an Impegno shown in the day (edited in Impegni, not here)
   suggested?: boolean;    // subject chosen by the app for an upcoming test
+  nextDay?: boolean;      // starts after midnight (e.g. going to bed at 00:15)
 }
 export interface DayType {
   id: string;
@@ -316,7 +317,7 @@ export function bedtimeFor(m: MindsetData, wakeKey: string): string {
 // (wake-up, morning deep work, evening wind-down, bed).
 export function blocksOf(m: MindsetData, key: string): Block[] {
   const log = m.days[key];
-  if (log?.blocks) return [...log.blocks].sort((a, c) => toMin(a.start) - toMin(c.start));
+  if (log?.blocks) return [...log.blocks].sort((a, c) => blockRange(a)[0] - blockRange(c)[0]);
   const type = dayTypeOf(m, key);
   const wake = toMin(alarmOf(m, key));
   const out: Block[] = [];
@@ -330,25 +331,28 @@ export function blocksOf(m: MindsetData, key: string): Block[] {
       area: chosen ? chosen.area : type.morningArea, subject: chosen?.subject, auto: true });
   }
   for (const block of type.blocks) {
-    const s = toMin(block.start);
-    const e = toMin(block.end);
+    const [s, e] = blockRange(block);
     if (e <= wake + 10) continue; // before waking up
     out.push({ ...block, start: fromMin(Math.max(s, wake + 10)) });
   }
-  const lastEnd = Math.max(...out.map(x => toMin(x.end)));
+  const lastEnd = Math.max(...out.map(x => blockRange(x)[1]));
+  // Minutes past midnight stay on this day's scale (bed at 00:15 = 1455).
+  const span = (id: string, a: number, z: number, title: string, area: Area): Block =>
+    ({ id, start: fromMin(a), end: fromMin(z), title, area, auto: true, ...(a >= 1440 ? { nextDay: true } : {}) });
   const bed = toMin(bedtimeFor(m, addDays(key, 1)));
   const bedAbs = bed < 12 * 60 ? bed + 1440 : bed; // after midnight
   const windDown = Math.max(lastEnd, bedAbs - 30);
-  if (windDown - lastEnd >= 15) out.push({ id: `${key}-free`, start: fromMin(lastEnd), end: fromMin(windDown), title: 'Tempo libero', area: 'life', auto: true });
-  if (bedAbs > windDown) out.push({ id: `${key}-wind`, start: fromMin(windDown), end: fromMin(bedAbs), title: 'Routine serale · sveglia e telefono fuori', area: 'sleep', auto: true });
-  out.push({ id: `${key}-bed`, start: fromMin(bedAbs), end: fromMin(bedAbs + 5), title: 'A letto', area: 'sleep', auto: true });
+  if (windDown - lastEnd >= 15) out.push(span(`${key}-free`, lastEnd, windDown, 'Tempo libero', 'life'));
+  if (bedAbs > windDown) out.push(span(`${key}-wind`, windDown, bedAbs, 'Routine serale · sveglia e telefono fuori', 'sleep'));
+  out.push(span(`${key}-bed`, bedAbs, bedAbs + 5, 'A letto', 'sleep'));
   return out;
 }
 
 // Minutes of a block on the 0-1440+ scale (blocks after midnight continue the day).
 export function blockRange(block: Block): [number, number] {
-  const s = toMin(block.start);
-  let e = toMin(block.end);
+  const shift = block.nextDay ? 1440 : 0;
+  const s = toMin(block.start) + shift;
+  let e = toMin(block.end) + shift;
   if (e <= s) e += 1440;
   return [s, e];
 }
@@ -536,8 +540,10 @@ export function effectiveStatus(m: MindsetData, key: string, block: Block, now: 
   const explicit = log?.status?.[block.id];
   if (explicit) return explicit;
   if (!log && key !== toDateKey(now)) return undefined;
-  const end = new Date(`${key}T00:00:00`).getTime() + blockRange(block)[1] * 60000;
-  return now.getTime() >= end ? 'done' : undefined;
+  // setMinutes (not "+ minutes × 60000"): right also on daylight-saving days.
+  const end = new Date(`${key}T00:00:00`);
+  end.setMinutes(blockRange(block)[1]);
+  return now.getTime() >= end.getTime() ? 'done' : undefined;
 }
 
 export function completionByType(m: MindsetData, today: string) {
@@ -642,7 +648,7 @@ export function placeBlock(blocks: Block[], nb: Block): Block[] {
     const [s, e] = blockRange(b);
     if (!isFree(b) || e <= ns || s >= ne) { out.push(b); continue; }
     if (ns - s >= 10) out.push({ ...b, end: fromMin(ns), auto: undefined });
-    if (e - ne >= 10) out.push({ ...b, id: `${b.id}~${fromMin(ne)}`, start: fromMin(ne), auto: undefined });
+    if (e - ne >= 10) out.push({ ...b, id: `${b.id}~${fromMin(ne)}`, start: fromMin(ne), auto: undefined, nextDay: ne >= 1440 || undefined });
   }
   return [...out, nb].sort((a, c) => blockRange(a)[0] - blockRange(c)[0]);
 }
@@ -651,9 +657,9 @@ const EXAM = /verific|compito in classe|interrogaz|esame|test|prova/i;
 const onDay = (t: Task, key: string) => t.date === key || (!!t.endDate && t.date <= key && t.endDate >= key);
 
 // The next test (in the following 3 days): the day's study goes to its subject.
-export function upcomingExam(tasks: Task[], key: string): Task | null {
+export function upcomingExam(tasks: Task[], key: string, includeDone = false): Task | null {
   const until = addDays(key, 3);
-  const list = tasks.filter(t => !t.done && t.type === 'scolastico' && t.subject && t.date > key && t.date <= until && (EXAM.test(t.title) || t.importance >= 4))
+  const list = tasks.filter(t => (includeDone || !t.done) && t.type === 'scolastico' && t.subject && t.date > key && t.date <= until && (EXAM.test(t.title) || t.importance >= 4))
     .sort((a, b) => a.date.localeCompare(b.date) || b.importance - a.importance);
   return list[0] || null;
 }
@@ -671,8 +677,9 @@ export function dayWithTasks(m: MindsetData, key: string, tasks: Task[] = []): {
     const end = t.endTime && toMin(t.endTime) > toMin(t.time) ? t.endTime : fromMin(toMin(t.time) + Math.max(30, Math.min(t.estimatedTime || 60, 240)));
     blocks = placeBlock(blocks, { id, start: t.time, end, title: t.title, area: t.type === 'personale' ? 'life' : 'school', taskId: t.id });
   }
-  const exam = upcomingExam(tasks, key);
-  if (exam?.subject) blocks = blocks.map(b => (b.area === 'study' && !b.subject && !b.taskId ? { ...b, subject: exam.subject, suggested: true } : b));
+  // Past days keep the test they were studying for, even once it's done (the Timer keeps that time).
+  const exam = upcomingExam(tasks, key, key < toDateKey(new Date()));
+  if (exam?.subject) blocks = blocks.map(b => (b.area === 'study' && b.subject === undefined && !b.taskId ? { ...b, subject: exam.subject, suggested: true } : b));
   return { blocks, reminders, exam };
 }
 

@@ -878,7 +878,7 @@ const GUIDE_STEPS: { title: string; text: React.ReactNode }[] = [
   },
   {
     title: 'Incollala qui e salva',
-    text: <>Torna su questa pagina, clicca nel campo qui sopra, incolla (<b>Cmd + V</b> o <b>Ctrl + V</b>) e premi <b>Salva e inizia</b>. Fatto: puoi scrivere al tutor!</>,
+    text: <>Torna su questa pagina, clicca nel campo qui sopra, incolla (<b>Cmd + V</b> o <b>Ctrl + V</b>) e premi <b>Salva e usa</b>. Fatto: puoi scrivere al tutor!</>,
   },
 ];
 

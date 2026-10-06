@@ -239,7 +239,9 @@ function EveningCard({ m, now, setLog, update, t, onClose, forced }: {
   const tomorrow = wakeKeyForBedtime(now);
   const log = m.days[evening] || {};
   const suggestion = suggestAlarm(m, now);
-  const [alarm, setAlarm] = useState(m.days[tomorrow]?.alarm || suggestion.alarm);
+  // Follows the suggestion (which changes as it gets late) until the student picks a time.
+  const [alarmEdit, setAlarm] = useState<string | null>(null);
+  const alarm = alarmEdit ?? m.days[tomorrow]?.alarm ?? suggestion.alarm;
   const phone = log.phone;
   const [ph, setPh] = useState(phone !== undefined ? String(Math.floor(phone / 60)) : '');
   const [pm, setPm] = useState(phone !== undefined ? String(phone % 60) : '');
@@ -516,7 +518,9 @@ function DayView({ m, today, now, nowMin, currentId, setLog, t, subjects, tasks 
         {(['oggi', 'domani'] as const).map(w => (
           <button key={w} role="tab" aria-selected={which === w} onClick={() => setWhich(w)}
             className={`py-1.5 rounded-lg text-sm font-medium transition-all ${which === w ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : t.sub}`}>
-            {w === 'oggi' ? 'Oggi · cosa ho fatto' : `Domani · ${dayTypeOf(m, addDays(today, 1)).emoji} ${dayTypeOf(m, addDays(today, 1)).name}`}
+            {w === 'oggi'
+              ? <><span className="sm:hidden">Oggi</span><span className="hidden sm:inline">Oggi · cosa ho fatto</span></>
+              : <><span className="sm:hidden">Domani </span><span className="hidden sm:inline">Domani · </span>{dayTypeOf(m, addDays(today, 1)).emoji} {dayTypeOf(m, addDays(today, 1)).name}</>}
           </button>
         ))}
       </div>
@@ -558,7 +562,11 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
     return { ...l, status };
   });
   // Editing turns the day into its own copy (the day type stays as it is).
-  const saveBlocks = (fn: (b: Block[]) => Block[]) => setLog(today, l => ({ ...l, blocks: fn(l.blocks || blocksOf(m, today)) }));
+  // Impegni and subjects suggested for a test are shown, not saved: they follow Impegni.
+  const saveBlocks = (fn: (b: Block[]) => Block[]) => setLog(today, l => ({
+    ...l,
+    blocks: fn(l.blocks || blocksOf(m, today)).filter(b => !b.taskId).map(b => (b.suggested ? { ...b, subject: undefined, suggested: undefined } : b)),
+  }));
   // The subject of a study block: its time then goes to the Study Timer (and its pie chart).
   const setSubject = (block: Block, subject: string | undefined) => {
     if (block.id === `${today}-deep`) {
@@ -628,7 +636,8 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
                 <div className="pl-16 pb-3 animate-scale-in">
                   <p className={`text-xs mb-1.5 ${t.sub}`}>Materia (il tempo va nel Timer Studio):</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {subjects.map(sub => <Pill key={sub} t={t} active={block.subject === sub} onClick={() => setSubject(block, block.subject === sub ? undefined : sub)}>{sub}</Pill>)}
+                    {/* '' = "no subject" on purpose: the test's subject is not suggested again. */}
+                    {subjects.map(sub => <Pill key={sub} t={t} active={block.subject === sub} onClick={() => setSubject(block, block.subject === sub ? '' : sub)}>{sub}</Pill>)}
                   </div>
                 </div>
               )}
@@ -683,7 +692,7 @@ export function BlockEditor({ block, onSave, onDelete, onClose, t, isNew, subjec
           ))}
         </div>
         {b.area === 'study' && subjects.length > 0 && (
-          <select value={b.subject || ''} onChange={e => setB({ ...b, subject: e.target.value || undefined })} className={`${t.input} w-full`} aria-label="Materia">
+          <select value={b.subject || ''} onChange={e => setB({ ...b, subject: e.target.value, suggested: undefined })} className={`${t.input} w-full`} aria-label="Materia">
             <option value="">Materia (facoltativa: il tempo va nel Timer Studio)</option>
             {subjects.map(x => <option key={x} value={x}>{x}</option>)}
           </select>

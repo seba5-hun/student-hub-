@@ -36,13 +36,15 @@ const AREA_ALIASES: Record<string, Area> = {
 
 const hhmm = (v: unknown): string | null => {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(v ?? '').trim());
+  if (m && +m[1] === 24 && +m[2] === 0) return '00:00'; // "24:00" = midnight
   if (!m || +m[1] > 23 || +m[2] > 59) return null;
   return `${m[1].padStart(2, '0')}:${m[2]}`;
 };
 
 // Takes the ```piano``` block out of the answer and turns it into blocks for the day.
 export function parsePlan(reply: string, today: string): { text: string; plan?: CoachPlan } {
-  const match = /```(?:piano|json)?\s*(\{[\s\S]*?"attivita"[\s\S]*?\})\s*```/i.exec(reply);
+  // One fenced block at a time: the plan is the one that contains "attivita".
+  const match = [...reply.matchAll(/```[a-z]*\s*(\{[\s\S]*?\})\s*```/gi)].find(x => x[1].includes('"attivita"'));
   if (!match) return { text: reply.trim() };
   const text = reply.replace(match[0], '').replace(/\n{3,}/g, '\n\n').trim();
   try {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Square, Bot, Loader2, CalendarCheck, Undo2, Trash2, Sparkles } from 'lucide-react';
-import { MindsetData, CoachMessage, CoachPlan, Priority, AREAS, PRIORITY_AREAS, withDay, formatDuration, blockRange, localStamp } from '../../lib/mindset';
+import { MindsetData, CoachMessage, CoachPlan, Priority, AREAS, PRIORITY_AREAS, withDay, formatDuration, blockRange, blocksOf, localStamp } from '../../lib/mindset';
 import { buildCoachContext, parsePlan, COACH_SYSTEM, StudyInfo } from '../../lib/mindsetCoach';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../../lib/ai';
 import { createId, toDateKey } from '../../lib/store';
@@ -95,15 +95,26 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
   const applyPlan = (msg: CoachMessage, plan: CoachPlan) => {
     update(x => {
       const prev = x.days[plan.day] || {};
-      const previous = { blocks: prev.blocks, priorities: prev.priorities };
+      // Another plan already applied to that day: undoing this one goes back to before both.
+      const earlier = (x.coach || []).find(c => c.applied && c.plan?.day === plan.day && c.id !== msg.id);
+      const previous = earlier?.previous || { blocks: prev.blocks, priorities: prev.priorities };
       const priorities: Priority[] = [...(prev.priorities || [])];
       (Object.entries(plan.priorities) as [Priority['area'], string][]).forEach(([area, text]) => {
         const i = priorities.findIndex(p => p.area === area);
         const item: Priority = { id: createId(), area, text, done: false };
         if (i >= 0) priorities[i] = item; else priorities.push(item);
       });
-      const next = withDay(x, plan.day, l => ({ ...l, blocks: plan.blocks, priorities }));
-      return { ...next, coach: (next.coach || []).map(c => (c.id === msg.id ? { ...c, applied: true, previous } : c)) };
+      // A plan for today starts from now: what was already planned (and done) before it stays.
+      const firstStart = Math.min(...plan.blocks.map(b => blockRange(b)[0]));
+      const kept = plan.day === toDateKey(new Date())
+        ? blocksOf(x, plan.day).filter(b => blockRange(b)[1] <= firstStart && !plan.blocks.some(p => p.id === b.id))
+        : [];
+      const next = withDay(x, plan.day, l => ({ ...l, blocks: [...kept, ...plan.blocks], priorities }));
+      return {
+        ...next,
+        coach: (next.coach || []).map(c => (c.id === msg.id ? { ...c, applied: true, previous }
+          : c.applied && c.plan?.day === plan.day ? { ...c, applied: false, previous: undefined } : c)),
+      };
     });
   };
   const undoPlan = (msg: CoachMessage, plan: CoachPlan) => {

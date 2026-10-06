@@ -86,7 +86,7 @@ export default function MindsetPlan({ m, update, t }: Props) {
           </Field>
           <Field label="Ogni gradino" t={t}>
             <select value={p.stepMinutes} onChange={e => setProfile({ stepMinutes: Number(e.target.value) })} className={`${t.input} w-full py-1.5`}>
-              {[15, 20, 30].map(v => <option key={v} value={v}>{v} minuti prima</option>)}
+              {[15, 20, 30].map(v => <option key={v} value={v}>-{v} min</option>)}
             </select>
           </Field>
           <Field label="Giorni per gradino" t={t}>
@@ -96,7 +96,7 @@ export default function MindsetPlan({ m, update, t }: Props) {
           </Field>
           <Field label="Weekend" t={t}>
             <select value={p.weekendLater} onChange={e => setProfile({ weekendLater: Number(e.target.value) })} className={`${t.input} w-full py-1.5`}>
-              {[0, 30, 60, 90].map(v => <option key={v} value={v}>{v ? `${v} min più tardi` : 'stessa ora'}</option>)}
+              {[0, 30, 60, 90].map(v => <option key={v} value={v}>{v ? `+${v} min` : 'stessa ora'}</option>)}
             </select>
           </Field>
           <Field label="Sveglia più tardi possibile (scuola)" t={t}><input type="time" value={p.latestWake} onChange={e => setProfile({ latestWake: e.target.value })} className={`${t.input} w-full py-1.5`} /></Field>
