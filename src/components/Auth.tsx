@@ -243,7 +243,7 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
         <h1 className="flex flex-col font-bold" style={{ fontSize: 'clamp(52px, 17vw, 68px)', letterSpacing: '-0.05em', lineHeight: 0.98 }} aria-label="Make Your Next Decision.">
           {WORDS.map(([first, rest], i) => (
             <span key={first} className="mynd-word" style={{ animationDelay: `${i * 80}ms` }} aria-hidden>
-              {first === 'Y' ? <span className="steel-text mynd-sheen">Y</span> : first}
+              {first === 'Y' ? <span className="mynd-ignite" style={{ color: 'var(--logo-y)' }}>Y</span> : first}
               <span style={{ color: '#3A3F45' }}>{rest}</span>
             </span>
           ))}

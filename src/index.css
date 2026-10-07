@@ -30,6 +30,7 @@
   --color-emerald-400: var(--success);
   --color-amber-400: var(--warning);
   --color-red-400: var(--danger);
+  --color-logo-y: var(--logo-y);
 }
 
 :root {
@@ -83,18 +84,15 @@ body {
   to { opacity: 1; transform: none; }
 }
 
-@keyframes myndSheen {
-  from { background-position: 200% 0; }
-  to { background-position: 0 0; }
+@keyframes myndIgnite {
+  from { opacity: 0; text-shadow: 0 0 0 rgba(200,242,90,0); }
+  60% { opacity: 1; text-shadow: 0 0 24px rgba(200,242,90,.30); }
+  to { opacity: 1; text-shadow: 0 0 0 rgba(200,242,90,0); }
 }
 
 .mynd-word { display: block; animation: myndWordIn 500ms var(--ease-out) backwards; }
-.mynd-sheen {
-  background-image: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.75) 50%, transparent 65%), var(--steel-gradient);
-  background-size: 250% 100%, 100% 100%;
-  background-repeat: no-repeat;
-  animation: myndSheen 600ms var(--ease-out) 420ms backwards;
-}
+.mynd-ignite { animation: myndIgnite 600ms var(--ease-out) 420ms backwards; }
+@media (prefers-reduced-motion: reduce) { .mynd-ignite { animation: none; } }
 
 @keyframes shimmer {
   to { transform: translateX(100%); }

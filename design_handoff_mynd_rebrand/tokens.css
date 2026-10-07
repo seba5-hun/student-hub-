@@ -2,6 +2,7 @@
 :root{
   --brand: #C8F25A;
   --brand-ring: #C8F25A;
+  --logo-y: #C8F25A;
   --on-brand: #0A0B0C;
   --steel: #B6B9BE;
   --accent: #C9CDD2;
@@ -51,6 +52,7 @@
 [data-theme="light"]{
   --brand: #4A6B00;
   --brand-ring: #5C8500;
+  --logo-y: #5C8500;
   --on-brand: #0A0B0C;
   --steel: #4A4D52;
   --accent: #3F454C;

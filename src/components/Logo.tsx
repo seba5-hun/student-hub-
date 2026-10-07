@@ -1,15 +1,16 @@
-// The MYND logo: the word in the system font, with only the Y in steel.
-// Under 40px the Y is solid steel (no gradient); the logo is never lime.
+// The MYND logo: the word in the system font, with only the Y in lime (var(--logo-y), solid, never a gradient).
+// mono: one colour only, the Y takes the same colour as the other letters.
 interface LogoProps {
   variant?: 'horizontal' | 'stacked';
   size?: number;        // font size in px
   slogan?: boolean;     // "Make Your Next Decision" next to / under the logo
+  mono?: boolean;
   className?: string;
 }
 
-export default function Logo({ variant = 'horizontal', size = 17, slogan = false, className = '' }: LogoProps) {
+export default function Logo({ variant = 'horizontal', size = 17, slogan = false, mono = false, className = '' }: LogoProps) {
   const small = size < 40;
-  const Y = <span className={small ? '' : 'steel-text'} style={small ? { color: 'var(--steel)' } : undefined}>Y</span>;
+  const Y = <span style={{ color: mono ? 'inherit' : 'var(--logo-y)' }}>Y</span>;
   const word = variant === 'stacked'
     ? (
       <span className="inline-flex flex-col" style={{ lineHeight: 0.84 }}>

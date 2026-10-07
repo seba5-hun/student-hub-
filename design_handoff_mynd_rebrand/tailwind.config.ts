@@ -10,6 +10,7 @@ export default {
         "brand-ring": "var(--brand-ring)",
         "on-brand": "var(--on-brand)",
         "steel": "var(--steel)",
+        "logo-y": "var(--logo-y)",
         "accent": "var(--accent)",
         "bg": "var(--bg)",
         "surface": "var(--surface)",
