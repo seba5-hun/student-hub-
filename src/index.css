@@ -372,3 +372,6 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* iPhone app from the Home screen: the status bar is translucent, so fixed bars start below the notch. */
+.safe-top { padding-top: env(safe-area-inset-top); }

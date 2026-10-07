@@ -90,7 +90,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
   return (
     <div className={`min-h-screen ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`}>
-      <header className="fixed top-0 left-0 right-0 z-50 glass-float !border-x-0 !border-t-0" style={{ borderRadius: 0 }}>
+      <header className="fixed top-0 left-0 right-0 z-50 glass-float !border-x-0 !border-t-0 safe-top" style={{ borderRadius: 0 }}>
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} aria-label="Menu" className={`w-11 h-11 -ml-1.5 flex items-center justify-center rounded-full ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
@@ -136,7 +136,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 sidebar-overlay" onClick={() => setSidebarOpen(false)}>
-          <div className="h-full w-72 glass-float !rounded-none !border-y-0 !border-l-0 animate-slide-in" onClick={e => e.stopPropagation()}>
+          <div className="h-full w-72 glass-float !rounded-none !border-y-0 !border-l-0 animate-slide-in safe-top" onClick={e => e.stopPropagation()}>
             <div className={`flex items-center justify-between px-5 h-16 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
               <Logo size={20} />
               <button onClick={() => setSidebarOpen(false)} className={`p-1 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
@@ -167,7 +167,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
         </div>
       )}
 
-      <main className="pt-14 pb-8 px-4 max-w-7xl mx-auto">
+      <main className="pb-8 px-4 max-w-7xl mx-auto" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top))' }}>
         <div key={currentSection} className="animate-section-in">{children}</div>
       </main>
     </div>

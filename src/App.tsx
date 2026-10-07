@@ -646,7 +646,7 @@ function App() {
 
   // Save indicator
   const SaveIndicator = () => saveStatus === 'idle' ? null : (
-    <div className="fixed top-[68px] right-4 z-50 animate-fade-in pointer-events-none">
+    <div className="fixed right-4 z-50 animate-fade-in pointer-events-none" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
       <div className="glass-float rounded-full px-3 py-1.5 flex items-center gap-2">
         <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: saveStatus === 'error' ? 'var(--danger)' : 'var(--brand-fill)', boxShadow: saveStatus === 'error' ? undefined : '0 0 8px rgba(200,242,90,.6)' }} />
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{saveStatus === 'error' ? 'Non siamo riusciti a salvare. Riprovo tra un attimo.' : 'Salvataggio…'}</span>

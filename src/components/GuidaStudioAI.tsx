@@ -653,7 +653,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   const mobileChatList = sidebarOpen && (
     <div className="fixed inset-0 z-[70] bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)}>
-      <aside className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] p-3 flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-white'}`} onClick={e => e.stopPropagation()}>
+      <aside className={`absolute left-0 top-0 bottom-0 w-72 max-w-[85vw] p-3 flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-white'}`} style={{ paddingTop: 'calc(0.75rem + env(safe-area-inset-top))' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <span className={`font-semibold ${textColor}`}>Le tue chat</span>
           {iconButton('Chiudi', <X className={`w-4 h-4 ${textColor}`} />, () => setSidebarOpen(false))}
@@ -667,7 +667,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const renderFullscreen = () => {
     const scopeLabel = scopeSubject ? `${scopeSubject}${scopeTopic ? ` › ${scopeTopic}` : ''}` : 'Tutto l\'archivio';
     return (
-      <div className={`fixed inset-0 z-[60] flex ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`}>
+      <div className={`fixed inset-0 z-[60] flex safe-top ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`}>
         {mobileChatList}
         {fullscreenSidebar && (
           <aside className={`hidden lg:flex w-72 flex-shrink-0 flex-col p-3 border-r ${darkMode ? 'bg-black/20 border-white/10' : 'bg-white/50 border-black/5'}`}>
