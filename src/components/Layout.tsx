@@ -136,7 +136,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 sidebar-overlay" onClick={() => setSidebarOpen(false)}>
-          <div className="h-full w-72 glass-float !rounded-none !border-y-0 !border-l-0 animate-slide-in safe-top" onClick={e => e.stopPropagation()}>
+          <div className="h-full w-72 glass-panel !rounded-none !border-y-0 !border-l-0 animate-slide-in safe-top" onClick={e => e.stopPropagation()}>
             <div className={`flex items-center justify-between px-5 h-16 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
               <Logo size={20} />
               <button onClick={() => setSidebarOpen(false)} className={`p-1 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>

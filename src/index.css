@@ -145,6 +145,14 @@ body {
     box-shadow: var(--shadow-float);
   }
 
+  /* Large floating panels (side menu, big cards): same look as the floating glass but without
+     the live blur, which the phone would recompute at every frame of scroll and animation. */
+  .glass-panel {
+    background: var(--glass-panel);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--shadow-float);
+  }
+
   /* The active element: a glass "lens" with the lime as the lit indicator. */
   .glass-lens {
     background: var(--glass-lens);

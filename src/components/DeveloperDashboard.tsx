@@ -116,7 +116,7 @@ export default function DeveloperDashboard({ darkMode }: { darkMode: boolean }) 
           <YAxis allowDecimals={dataKey === 'minutes'} tick={{ fill: axisColor, fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
           <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: axisColor, strokeDasharray: '3 3' }}
             formatter={(v: number) => [`${v} ${unit}`, title]} labelFormatter={l => `Giorno ${l}`} />
-          <Area type="monotone" dataKey={dataKey} stroke={accent} strokeWidth={2} fill={`url(#${id})`} activeDot={{ r: 5 }} />
+          <Area animationDuration={700} type="monotone" dataKey={dataKey} stroke={accent} strokeWidth={2} fill={`url(#${id})`} activeDot={{ r: 5 }} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -29,9 +29,10 @@
   --glass-hero: linear-gradient(150deg, rgba(200,242,90,.10) 0%, rgba(255,255,255,.05) 45%, rgba(255,255,255,.035) 100%);
   --glass-edge: rgba(255,255,255,.12);
   --glass-float: rgba(28,31,35,.55);
+  --glass-panel: rgba(22,24,28,.94);
   --glass-lens: rgba(255,255,255,.12);
   --glass-well: rgba(0,0,0,.25);
-  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.05), 0 8px 24px rgba(0,0,0,.25);
+  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.05);
   --shadow-float: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.04), 0 16px 40px rgba(0,0,0,.55);
   --shadow-lens: inset 1px 1px 0 rgba(255,255,255,.25), 0 2px 8px rgba(0,0,0,.3);
   --glow-brand: 0 0 24px rgba(200,242,90,.30);
@@ -79,6 +80,7 @@
   --glass-hero: linear-gradient(150deg, rgba(200,242,90,.35) 0%, rgba(255,255,255,.6) 50%, rgba(255,255,255,.5) 100%);
   --glass-edge: rgba(255,255,255,.85);
   --glass-float: rgba(255,255,255,.6);
+  --glass-panel: rgba(255,255,255,.94);
   --glass-lens: rgba(255,255,255,.9);
   --glass-well: rgba(0,0,0,.05);
   --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.95), inset -1px -1px 0 rgba(0,0,0,.03), 0 8px 24px rgba(20,30,45,.08);

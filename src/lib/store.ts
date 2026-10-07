@@ -155,15 +155,29 @@ export function dateKeyOf(value: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateKey(new Date(value));
 }
 
+// toLocaleDateString builds a new formatter at every call (slow in long lists): the
+// formatters are created once and the results remembered.
+const WEEKDAY_FMT = new Intl.DateTimeFormat('it-IT', { weekday: 'short' });
+const DATE_FMT = new Intl.DateTimeFormat('it-IT');
+const dayCache = new Map<string, string>();
+const dateCache = new Map<string, string>();
+const remember = (cache: Map<string, string>, key: string, make: () => string) => {
+  let v = cache.get(key);
+  if (v === undefined) { if (cache.size > 2000) cache.clear(); v = make(); cache.set(key, v); }
+  return v;
+};
+
 // "Lun 05/10/2026": the date with the short weekday in front.
 export function formatDateWithDay(value: string): string {
-  const d = parseDate(value);
-  const day = d.toLocaleDateString('it-IT', { weekday: 'short' }).replace('.', '');
-  return `${day.charAt(0).toUpperCase() + day.slice(1)} ${d.toLocaleDateString('it-IT')}`;
+  return remember(dayCache, value, () => {
+    const d = parseDate(value);
+    const day = WEEKDAY_FMT.format(d).replace('.', '');
+    return `${day.charAt(0).toUpperCase() + day.slice(1)} ${DATE_FMT.format(d)}`;
+  });
 }
 
 export function formatDate(value: string): string {
-  return parseDate(value).toLocaleDateString('it-IT');
+  return remember(dateCache, value, () => DATE_FMT.format(parseDate(value)));
 }
 
 // "15:30" or "15:30 – 17:00"; empty when the task has no time.

@@ -113,6 +113,7 @@ function App() {
     setAnalyticsSection(user && data ? currentSection : isResetPassword ? 'reset-password' : 'accesso');
   }, [initialized, user, data, currentSection, isResetPassword]);
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
+  const lastRemoteJson = useRef('');
   const saveTimer = useRef<number | undefined>(undefined);
   const saveChain = useRef<Promise<void>>(Promise.resolve());
   const savingNow = useRef(false);
@@ -394,7 +395,11 @@ function App() {
       try {
         const remote = await fetchRemoteData(userId);
         if (!remote || busy()) return;
-        setData(prev => (prev && JSON.stringify(prev) !== JSON.stringify(remote) ? remote : prev));
+        // Nothing changed since the last check (the usual case): skip the full comparison.
+        const json = JSON.stringify(remote);
+        if (json === lastRemoteJson.current) return;
+        lastRemoteJson.current = json;
+        setData(prev => (prev && JSON.stringify(prev) !== json ? remote : prev));
       } catch {
         // Offline or temporary error: try again at the next occasion.
       }
@@ -432,14 +437,14 @@ function App() {
   // Handle logout
   // Admin: how many accounts are waiting, for the badge in the menu (refreshed every minute).
   useEffect(() => {
-    if (!user || !data || !isDeveloper(user.email)) return;
+    if (!user || !hasData || !isDeveloper(user.email)) return;
     const check = () => loadAdminUsers()
       .then(r => setAdminPending(r.users.filter(u => u.status === 'pending').length))
       .catch(() => {});
     check();
     const id = window.setInterval(check, 60000);
     return () => window.clearInterval(id);
-  }, [user, data]);
+  }, [user, hasData]);
 
   useEffect(() => {
     if (!openMindset.current || !user || !data) return;

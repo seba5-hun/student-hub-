@@ -64,10 +64,11 @@ export default function WeekDistribution({ sessions, subjectDefs, darkMode, show
 
   return (
     <div className={`relative overflow-hidden rounded-2xl p-[1px] ${darkMode ? 'bg-gradient-to-br from-white/25 via-white/5 to-indigo-400/30' : 'bg-gradient-to-br from-indigo-200 via-white to-purple-200'}`}>
-      <div className={`relative rounded-2xl p-6 ${darkMode ? 'glass-float' : 'bg-white/90'}`}>
+      <div className={`relative rounded-2xl p-6 ${darkMode ? 'glass-panel' : 'bg-white/90'}`}>
         {/* soft light behind the chart */}
-        <div className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-10 w-72 h-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
+        {/* soft light behind the chart: radial gradients (same glow as a blur, without the per-frame cost) */}
+        <div className="pointer-events-none absolute -top-36 -left-28 w-96 h-96 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(200,242,90,.16), rgba(200,242,90,.06) 55%, transparent)' }} />
+        <div className="pointer-events-none absolute -bottom-36 right-0 w-96 h-96 rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(181,227,62,.08), rgba(181,227,62,.03) 55%, transparent)' }} />
 
         <div className="relative flex flex-wrap items-start justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">

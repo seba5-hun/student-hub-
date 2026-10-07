@@ -79,7 +79,7 @@ export default function Voti({ grades, subjectNames = [], darkMode, onUpdate }: 
               <RadarChart data={radarData}>
                 <PolarGrid stroke={darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'} />
                 <PolarAngleAxis dataKey="subject" tick={{ fill: darkMode ? '#fff' : '#333', fontSize: 10 }} />
-                <Radar name="Livello" dataKey="livello" stroke="var(--brand-ring)" fill="var(--brand-ring)" fillOpacity={0.3} />
+                <Radar animationDuration={600} name="Livello" dataKey="livello" stroke="var(--brand-ring)" fill="var(--brand-ring)" fillOpacity={0.3} />
               </RadarChart>
             </ResponsiveContainer>
           ) : <p className={`text-sm ${subTextColor} text-center py-8`}>Servono 3+ materie</p>}
