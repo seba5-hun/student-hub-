@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Square, Bot, Loader2, CalendarCheck, Undo2, Trash2, Sparkles } from 'lucide-react';
-import { MindsetData, CoachMessage, CoachPlan, Priority, AREAS, PRIORITY_AREAS, withDay, formatDuration, blockRange, blocksOf, localStamp } from '../../lib/mindset';
+import { Send, Square, Bot, Loader2, CalendarCheck, Undo2, Trash2, Sparkles, MessageSquare, Plus, Pencil, ChevronDown } from 'lucide-react';
+import { MindsetData, CoachMessage, CoachChat, CoachPlan, Priority, AREAS, PRIORITY_AREAS, withDay, formatDuration, blockRange, blocksOf, localStamp } from '../../lib/mindset';
 import { buildCoachContext, parsePlan, COACH_SYSTEM, StudyInfo } from '../../lib/mindsetCoach';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../../lib/ai';
 import { createId, toDateKey } from '../../lib/store';
@@ -24,6 +24,21 @@ const QUICK = [
   'Com\'è andata questa settimana?',
 ];
 const MAX_SAVED = 60;
+const MAX_CHATS = 30;
+
+// The conversations (the old single one, if any, becomes the first chat).
+function chatsOf(m: MindsetData): CoachChat[] {
+  if (m.coachChats) return m.coachChats;
+  if (m.coach?.length) {
+    const first = m.coach.find(x => x.role === 'user');
+    return [{ id: 'coach-1', title: titleOf(first?.text || 'Conversazione'), messages: m.coach, updated: m.coach[m.coach.length - 1].at }];
+  }
+  return [];
+}
+const titleOf = (text: string) => { const t = text.replace(/\s+/g, ' ').trim(); return t.length > 40 ? `${t.slice(0, 40)}…` : t; };
+// Every change goes through here: the chats are saved and the old field is emptied.
+const withChats = (x: MindsetData, fn: (chats: CoachChat[]) => CoachChat[]): MindsetData => ({ ...x, coach: undefined, coachChats: fn(chatsOf(x)).slice(0, MAX_CHATS) });
+const mapMessages = (chats: CoachChat[], fn: (c: CoachMessage) => CoachMessage) => chats.map(ch => ({ ...ch, messages: ch.messages.map(fn) }));
 
 function Formatted({ text }: { text: string }) {
   const inline = (line: string) => line.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
@@ -53,7 +68,11 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
-  const messages = m.coach || [];
+  const chats = [...chatsOf(m)].sort((a, b) => b.updated.localeCompare(a.updated));
+  const [activeId, setActiveId] = useState<string | null>(() => chats[0]?.id ?? null);
+  const [listOpen, setListOpen] = useState(false);
+  const active = chats.find(c => c.id === activeId) || null;
+  const messages = active?.messages || [];
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages.length, loading]);
   useEffect(() => {
@@ -63,7 +82,13 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
     return () => window.clearInterval(id);
   }, [loading]);
 
-  const save = (fn: (list: CoachMessage[]) => CoachMessage[]) => update(x => ({ ...x, coach: fn(x.coach || []).slice(-MAX_SAVED) }));
+  // Adds to a chat (created if it doesn't exist yet), even if another chat is open meanwhile.
+  const save = (chatId: string, firstText: string, fn: (list: CoachMessage[]) => CoachMessage[]) => update(x => withChats(x, list => {
+    const found = list.find(c => c.id === chatId);
+    const chat: CoachChat = found || { id: chatId, title: titleOf(firstText), messages: [], updated: localStamp(new Date()) };
+    const next = { ...chat, messages: fn(chat.messages).slice(-MAX_SAVED), updated: localStamp(new Date()) };
+    return [next, ...list.filter(c => c.id !== chatId)];
+  }));
 
   const send = async (text: string) => {
     const q = text.trim();
@@ -71,7 +96,9 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
     setInput('');
     setError('');
     const userMsg: CoachMessage = { id: createId(), role: 'user', text: q, at: localStamp(new Date()) };
-    save(list => [...list, userMsg]);
+    const chatId = active?.id || createId();
+    setActiveId(chatId);
+    save(chatId, q, list => [...list, userMsg]);
     const history: ChatTurn[] = [...messages, userMsg].slice(-14).map(x => ({
       role: x.role,
       // The assistant also sees the plans it proposed (and whether they were applied).
@@ -83,7 +110,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
     try {
       const reply = await askTutor(COACH_SYSTEM, async () => buildCoachContext(m, study, new Date()), history, controller.signal);
       const { text: answer, plan } = parsePlan(reply || '', toDateKey(new Date()));
-      save(list => [...list, { id: createId(), role: 'assistant', text: answer || (plan ? 'Ecco la proposta:' : 'Non ho una risposta, riprova.'), at: localStamp(new Date()), plan }]);
+      save(chatId, q, list => [...list, { id: createId(), role: 'assistant', text: answer || (plan ? 'Ecco la proposta:' : 'Non ho una risposta, riprova.'), at: localStamp(new Date()), plan }]);
     } catch (err) {
       if (!(err instanceof StoppedError) && !controller.signal.aborted) setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -96,7 +123,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
     update(x => {
       const prev = x.days[plan.day] || {};
       // Another plan already applied to that day: undoing this one goes back to before both.
-      const earlier = (x.coach || []).find(c => c.applied && c.plan?.day === plan.day && c.id !== msg.id);
+      const earlier = chatsOf(x).flatMap(ch => ch.messages).find(c => c.applied && c.plan?.day === plan.day && c.id !== msg.id);
       const previous = earlier?.previous || { blocks: prev.blocks, priorities: prev.priorities };
       const priorities: Priority[] = [...(prev.priorities || [])];
       (Object.entries(plan.priorities) as [Priority['area'], string][]).forEach(([area, text]) => {
@@ -110,17 +137,14 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
         ? blocksOf(x, plan.day).filter(b => blockRange(b)[1] <= firstStart && !plan.blocks.some(p => p.id === b.id))
         : [];
       const next = withDay(x, plan.day, l => ({ ...l, blocks: [...kept, ...plan.blocks], priorities }));
-      return {
-        ...next,
-        coach: (next.coach || []).map(c => (c.id === msg.id ? { ...c, applied: true, previous }
-          : c.applied && c.plan?.day === plan.day ? { ...c, applied: false, previous: undefined } : c)),
-      };
+      return withChats(next, list => mapMessages(list, c => (c.id === msg.id ? { ...c, applied: true, previous }
+        : c.applied && c.plan?.day === plan.day ? { ...c, applied: false, previous: undefined } : c)));
     });
   };
   const undoPlan = (msg: CoachMessage, plan: CoachPlan) => {
     update(x => {
       const next = withDay(x, plan.day, l => ({ ...l, blocks: msg.previous?.blocks, priorities: msg.previous?.priorities }));
-      return { ...next, coach: (next.coach || []).map(c => (c.id === msg.id ? { ...c, applied: false, previous: undefined } : c)) };
+      return withChats(next, list => mapMessages(list, c => (c.id === msg.id ? { ...c, applied: false, previous: undefined } : c)));
     });
   };
 
@@ -145,11 +169,43 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
         </div>
         <div className="flex items-center gap-1">
           <ModelPicker darkMode={t.dark} compact onChange={() => setAiName(providerLabel())} onOpenSettings={() => setSettings(true)} />
-          {messages.length > 0 && (
-            <button onClick={async () => { if (await dialog.confirm({ title: 'Cancellare la conversazione?', confirmLabel: 'Cancella', danger: true })) save(() => []); }}
-              className={`p-2 rounded-lg ${t.sub} ${t.hover}`} aria-label="Cancella conversazione"><Trash2 className="w-4 h-4" /></button>
-          )}
+          <button onClick={() => { setActiveId(null); setListOpen(false); setError(''); }} disabled={!active}
+            className={`p-2 rounded-lg disabled:opacity-40 ${t.sub} ${t.hover}`} aria-label="Nuova chat" title="Nuova chat"><Plus className="w-4 h-4" /></button>
         </div>
+      </div>
+
+      <div className={`relative px-4 py-2 border-b ${t.border}`}>
+        <button onClick={() => setListOpen(v => !v)} aria-expanded={listOpen}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-left ${t.soft} ${t.hover}`}>
+          <MessageSquare className={`w-4 h-4 flex-shrink-0 ${t.sub}`} />
+          <span className={`flex-1 truncate ${t.text}`}>{active ? active.title : 'Nuova chat'}</span>
+          <span className={`text-xs ${t.sub}`}>{chats.length} {chats.length === 1 ? 'chat' : 'chat'}</span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${listOpen ? 'rotate-180' : ''} ${t.sub}`} />
+        </button>
+        {listOpen && (
+          <div className={`absolute left-4 right-4 z-30 mt-1 max-h-80 overflow-y-auto rounded-2xl border shadow-2xl p-1.5 animate-scale-in ${t.dark ? 'bg-[#1b1640] border-white/10' : 'bg-white border-black/10'}`}>
+            <button onClick={() => { setActiveId(null); setListOpen(false); setError(''); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-indigo-400 ${t.hover}`}><Plus className="w-4 h-4" /> Nuova chat</button>
+            {chats.length === 0 && <p className={`px-3 py-2 text-sm ${t.sub}`}>Nessuna conversazione ancora.</p>}
+            {chats.map(c => (
+              <div key={c.id} className={`group flex items-center gap-1 rounded-xl ${c.id === activeId ? (t.dark ? 'bg-white/10' : 'bg-indigo-50') : ''}`}>
+                <button onClick={() => { setActiveId(c.id); setListOpen(false); setError(''); }} className="flex-1 min-w-0 text-left px-3 py-2">
+                  <span className={`block text-sm truncate ${t.text}`}>{c.title}</span>
+                  <span className={`block text-[11px] ${t.sub}`}>{new Date(c.updated).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} · {c.messages.length} messaggi</span>
+                </button>
+                <button onClick={async () => {
+                  const title = await dialog.prompt({ title: 'Rinomina la chat', defaultValue: c.title, confirmLabel: 'Rinomina' });
+                  if (title?.trim()) update(x => withChats(x, list => list.map(ch => (ch.id === c.id ? { ...ch, title: title.trim() } : ch))));
+                }} className={`p-2 rounded-lg ${t.sub} ${t.hover}`} aria-label={`Rinomina ${c.title}`}><Pencil className="w-3.5 h-3.5" /></button>
+                <button onClick={async () => {
+                  if (!(await dialog.confirm({ title: `Eliminare "${c.title}"?`, message: 'I programmi già applicati alla giornata restano.', confirmLabel: 'Elimina', danger: true }))) return;
+                  update(x => withChats(x, list => list.filter(ch => ch.id !== c.id)));
+                  if (c.id === activeId) setActiveId(null);
+                }} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10" aria-label={`Elimina ${c.title}`}><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

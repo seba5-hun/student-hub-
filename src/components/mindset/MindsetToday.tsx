@@ -608,7 +608,7 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
                   <span className={`block text-sm truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
                   <span className={`block text-[11px] ${t.sub}`}>{block.taskId ? (() => {
                     const clash = blocks.find(o => o.id !== block.id && !o.taskId && !isFree(o) && ['school', 'study', 'sport', 'project'].includes(o.area) && blockRange(o)[0] < e && blockRange(o)[1] > s);
-                    return clash ? <span className="text-amber-400">⚠ si sovrappone a {clash.title}: spostalo o chiedi al Coach</span> : 'Impegno';
+                    return clash ? <span className="text-amber-400">⚠ si sovrappone a {clash.title}: spostalo o chiedi al Coach</span> : block.placed ? 'Impegno · messo nel tempo libero' : 'Impegno';
                   })() : block.subject ? `${block.subject}${block.suggested && exam ? ` · per ${exam.title.toLowerCase()}` : ''}` : AREAS[block.area].label} · {formatDuration(e - s)}{isNow ? ' · adesso' : ''}{auto ? ' · fatto in automatico' : ''}</span>
                 </button>
                 {st && st !== 'done' && <span className={`text-[10px] px-2 py-0.5 rounded-full border ${STATUS_STYLE[st]}`}>{STATUS_LABEL[st]}</span>}

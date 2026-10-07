@@ -26,6 +26,7 @@ Quando ti chiede di organizzare/programmare/riorganizzare una giornata (oggi o d
 \`\`\`
 - "area" è una di: morning, school, study, sport, project, recovery, life, travel, meal, sleep.
 - Metti TUTTA la giornata dal risveglio (o da adesso, se è oggi) fino a "A letto" all'ora giusta per il sonno. Tieni gli impegni fissi (scuola, allenamenti, pasti in famiglia) a meno che lui dica che cambiano.
+- Inserisci SEMPRE gli impegni personali di quel giorno (visite, appuntamenti…): quelli con orario al loro orario, quelli senza orario in uno spazio libero adatto. Usa lo stesso nome dell'impegno.
 - Le priorità sono 3 al massimo, concrete (es. "esercizi 31–40 e correggo gli errori"), e puoi lasciarne fuori una.
 - Il piano NON si applica da solo: lui lo vede e decide se applicarlo. Non dire che l'hai già inserito.`;
 

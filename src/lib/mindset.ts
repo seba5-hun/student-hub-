@@ -33,6 +33,7 @@ export interface Block {
   taskId?: string;        // an Impegno shown in the day (edited in Impegni, not here)
   suggested?: boolean;    // subject chosen by the app for an upcoming test
   nextDay?: boolean;      // starts after midnight (e.g. going to bed at 00:15)
+  placed?: boolean;       // an Impegno without a time, put in free time by the app
 }
 export interface DayType {
   id: string;
@@ -115,6 +116,8 @@ export interface CoachMessage {
   previous?: { blocks?: Block[]; priorities?: Priority[] }; // to undo an applied plan
 }
 
+export interface CoachChat { id: string; title: string; messages: CoachMessage[]; updated: string }
+
 export interface MindsetData {
   v: 1;
   profile: MindsetProfile;
@@ -123,7 +126,8 @@ export interface MindsetData {
   habits: Habit[];
   days: Record<string, DayLog>;
   activeFocus?: ActiveFocus | null;
-  coach?: CoachMessage[];
+  coach?: CoachMessage[];        // old single conversation (moved into coachChats)
+  coachChats?: CoachChat[];
 }
 
 // ---------- time helpers ----------
@@ -670,14 +674,28 @@ export function dayWithTasks(m: MindsetData, key: string, tasks: Task[] = []): {
   let blocks = blocksOf(m, key);
   const dayTasks = tasks.filter(t => onDay(t, key));
   const reminders: Task[] = [];
+  // Already in the plan (e.g. the Coach put "Visita medica" in it): not added twice.
+  const inPlan = (t: Task) => blocks.some(b => b.id === `task-${t.id}` || (!b.taskId && b.title.toLowerCase().includes(t.title.trim().toLowerCase())));
+  const untimed: Task[] = [];
   for (const t of dayTasks) {
-    if (!t.time || (t.endDate && t.date !== key)) { reminders.push(t); continue; }
+    if (!t.time || (t.endDate && t.date !== key)) { (t.type === 'personale' && !t.done && !t.endDate ? untimed : reminders).push(t); continue; }
     const id = `task-${t.id}`;
-    if (blocks.some(b => b.id === id)) continue;
+    if (inPlan(t)) continue;
     const end = t.endTime && toMin(t.endTime) > toMin(t.time) ? t.endTime : fromMin(toMin(t.time) + Math.max(30, Math.min(t.estimatedTime || 60, 240)));
     blocks = placeBlock(blocks, { id, start: t.time, end, title: t.title, area: t.type === 'personale' ? 'life' : 'school', taskId: t.id });
   }
   // Past days keep the test they were studying for, even once it's done (the Timer keeps that time).
+  // Personal Impegni without a time go into the first free time long enough for them
+  // (always the same place, so it doesn't move during the day); otherwise they stay reminders.
+  for (const t of untimed) {
+    if (inPlan(t)) continue;
+    const need = Math.max(15, Math.min(t.estimatedTime || 30, 120));
+    const slot = blocks.find(b => isFree(b) && blockRange(b)[1] - blockRange(b)[0] >= Math.min(need, 30));
+    if (!slot) { reminders.push(t); continue; }
+    const [s0, e0] = blockRange(slot);
+    const end = Math.min(e0, s0 + need);
+    blocks = placeBlock(blocks, { id: `task-${t.id}`, start: fromMin(s0), end: fromMin(end), title: t.title, area: 'life', taskId: t.id, placed: true, ...(s0 >= 1440 ? { nextDay: true } : {}) });
+  }
   const exam = upcomingExam(tasks, key, key < toDateKey(new Date()));
   if (exam?.subject) blocks = blocks.map(b => (b.area === 'study' && b.subject === undefined && !b.taskId ? { ...b, subject: exam.subject, suggested: true } : b));
   return { blocks, reminders, exam };
