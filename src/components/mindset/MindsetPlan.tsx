@@ -10,7 +10,7 @@ import { useDialog } from '../Dialog';
 
 const WEEKDAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
-const APP_URL = 'https://student-hub-sandy-two.vercel.app';
+const APP_URL = 'https://myndspace.world';
 
 interface Props {
   m: MindsetData;

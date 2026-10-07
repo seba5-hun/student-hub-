@@ -41,7 +41,8 @@ Il Client ID è pubblico, come la chiave "publishable" di Supabase.
 1. Vai su **Client** (o **Credenziali** → **Crea credenziali** → **ID client OAuth**).
 2. Tipo di applicazione: **Applicazione web**. Nome: `Student Hub web`.
 3. In **Origini JavaScript autorizzate** premi **Aggiungi URI** e scrivi:
-   - `https://student-hub-sandy-two.vercel.app`
+   - `https://myndspace.world`
+   - `https://www.myndspace.world`
    - (facoltativo, per le prove sul computer) `http://localhost:3000`
 4. **URI di reindirizzamento autorizzati**: lascia vuoto.
 5. **Crea**. Copia l'**ID client**: è una stringa tipo

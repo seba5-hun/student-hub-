@@ -25,11 +25,12 @@ Il piano gratuito di Supabase include 1 GB di spazio file: basta per centinaia d
 
 In **Authentication** → **URL Configuration**:
 
-- **Site URL**: l'indirizzo dove è pubblicata l'app (es. `https://student-hub.netlify.app`).
+- **Site URL**: l'indirizzo dove è pubblicata l'app (es. `https://myndspace.world`).
   Se non l'hai ancora pubblicata, metti `http://localhost:3000`.
 - **Redirect URLs**: aggiungi tutti gli indirizzi da cui usi l'app, ad esempio:
   - `http://localhost:3000`
-  - `https://student-hub.netlify.app` (il tuo indirizzo reale)
+  - `https://myndspace.world/**` (il tuo indirizzo reale)
+  - `https://www.myndspace.world/**`
 
 I link delle email di conferma e di recupero password riportano a questi indirizzi.
 
