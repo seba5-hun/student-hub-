@@ -170,7 +170,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
         <div className="flex items-center gap-1">
           <ModelPicker darkMode={t.dark} compact onChange={() => setAiName(providerLabel())} onOpenSettings={() => setSettings(true)} />
           <button onClick={() => { setActiveId(null); setListOpen(false); setError(''); }} disabled={!active}
-            className={`p-2 rounded-lg disabled:opacity-40 ${t.sub} ${t.hover}`} aria-label="Nuova chat" title="Nuova chat"><Plus className="w-4 h-4" /></button>
+            className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1 disabled:opacity-40" aria-label="Nuova chat" title="Nuova chat"><Plus className="w-4 h-4" /> Nuova</button>
         </div>
       </div>
 
@@ -179,7 +179,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-left ${t.soft} ${t.hover}`}>
           <MessageSquare className={`w-4 h-4 flex-shrink-0 ${t.sub}`} />
           <span className={`flex-1 truncate ${t.text}`}>{active ? active.title : 'Nuova chat'}</span>
-          <span className={`text-xs ${t.sub}`}>{chats.length} {chats.length === 1 ? 'chat' : 'chat'}</span>
+          <span className={`text-xs ${t.sub}`}>{chats.length === 0 ? 'nessuna salvata' : chats.length === 1 ? '1 salvata' : `${chats.length} salvate`}</span>
           <ChevronDown className={`w-4 h-4 transition-transform ${listOpen ? 'rotate-180' : ''} ${t.sub}`} />
         </button>
         {listOpen && (

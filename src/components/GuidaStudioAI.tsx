@@ -140,7 +140,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [chatError, setChatError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [fullscreenSidebar, setFullscreenSidebar] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Chat folders start closed; a tap opens them.
+  const [opened, setOpened] = useState<Set<string>>(new Set());
   // The chat shown on screen: a reply that arrives after switching chat must not end up in the new one.
   const activeChatId = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -585,7 +586,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     return groups;
   })();
 
-  const toggleFolder = (key: string) => setCollapsed(prev => {
+  const toggleFolder = (key: string) => setOpened(prev => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
@@ -606,9 +607,9 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       </div>
     );
     const folderButton = (key: string, label: string, count: number, small = false) => (
-      <button onClick={() => toggleFolder(key)} className={`w-full flex items-center gap-1.5 py-1.5 ${small ? 'pl-3 text-xs' : 'text-sm font-semibold'} ${small ? subTextColor : textColor}`}>
-        {collapsed.has(key) ? <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />}
-        {small ? <Folder className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" /> : <FolderOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+      <button onClick={() => toggleFolder(key)} aria-expanded={opened.has(key)} className={`w-full flex items-center gap-1.5 py-1.5 ${small ? 'pl-3 text-xs' : 'text-sm font-semibold'} ${small ? subTextColor : textColor}`}>
+        {!opened.has(key) ? <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />}
+        {small ? <Folder className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" /> : opened.has(key) ? <FolderOpen className="w-4 h-4 text-amber-400 flex-shrink-0" /> : <Folder className="w-4 h-4 text-amber-400 flex-shrink-0" />}
         <span className="truncate">{label}</span>
         <span className={`ml-auto text-xs font-normal ${subTextColor}`}>{count}</span>
       </button>
@@ -629,7 +630,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
             return (
               <div key={key}>
                 {folderButton(key, group.subject || 'Generale', count)}
-                {!collapsed.has(key) && (
+                {opened.has(key) && (
                   <div className="pl-2 space-y-0.5">
                     {group.direct.map(chatRow)}
                     {group.topics.map(t => {
@@ -637,7 +638,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
                       return (
                         <div key={topicKey}>
                           {folderButton(topicKey, t.topic, t.chats.length, true)}
-                          {!collapsed.has(topicKey) && <div className="pl-4 space-y-0.5">{t.chats.map(chatRow)}</div>}
+                          {opened.has(topicKey) && <div className="pl-4 space-y-0.5">{t.chats.map(chatRow)}</div>}
                         </div>
                       );
                     })}
