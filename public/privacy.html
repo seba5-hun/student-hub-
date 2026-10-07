@@ -3,37 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy · Student Hub</title>
-  <link rel="icon" href="/icon.svg">
+  <title>Privacy · MYND</title>
+  <link rel="icon" type="image/png" href="/favicon-32.png">
+  <meta name="theme-color" content="#0A0B0C">
   <style>
     :root { color-scheme: dark; }
     body {
-      margin: 0; min-height: 100vh; font-family: Inter, system-ui, -apple-system, sans-serif; line-height: 1.65;
-      color: rgba(255,255,255,0.85);
-      background:
-        radial-gradient(at 20% 20%, rgba(99,102,241,0.3) 0%, transparent 50%),
-        radial-gradient(at 80% 80%, rgba(59,130,246,0.2) 0%, transparent 50%),
-        linear-gradient(135deg, #0f0c29 0%, #1a1145 25%, #302b63 50%, #24243e 75%, #0f0c29 100%) fixed;
+      margin: 0; min-height: 100vh; line-height: 1.6; -webkit-font-smoothing: antialiased;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+      color: #ECEEF0;
+      background: radial-gradient(55% 30% at 10% 22%, rgba(200,242,90,.10), transparent 70%), radial-gradient(60% 35% at 95% 70%, rgba(130,150,180,.12), transparent 70%), #0A0B0C fixed;
     }
     main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
-    .card { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 28px; }
-    h1 { color: #fff; font-size: 2rem; margin: 0 0 4px; }
-    h2 { color: #fff; font-size: 1.15rem; margin: 28px 0 8px; }
-    p, li { font-size: 0.97rem; }
+    .card { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); border-radius: 28px; padding: 28px; }
+    h1 { color: #ECEEF0; font-size: 44px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; margin: 0 0 10px; }
+    h2 { color: #ECEEF0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 32px 0 8px; }
+    p, li { font-size: 16px; color: #C3C7CC; }
+    b { color: #ECEEF0; }
     ul { padding-left: 1.2rem; }
-    a { color: #a5b4fc; }
-    .muted { color: rgba(255,255,255,0.55); font-size: 0.9rem; }
-    .back { display: inline-block; margin-bottom: 20px; text-decoration: none; }
+    a { color: #C8F25A; }
+    .muted { color: #969BA1; font-size: 13px; }
+    .back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; text-decoration: none; color: #ECEEF0; }
+    .back span { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); display: inline-flex; align-items: center; justify-content: center; }
+    .logo { font-weight: 600; letter-spacing: -0.03em; }
+    .logo i { font-style: normal; color: #B6B9BE; }
   </style>
 </head>
 <body>
   <main>
-    <a class="back" href="/">← Torna a Student Hub</a>
+    <a class="back" href="/"><span>←</span> <b class="logo">M<i>Y</i>ND</b></a>
     <div class="card">
-      <h1>Informativa sulla privacy</h1>
+      <h1>Privacy.</h1>
       <p class="muted">Ultimo aggiornamento: 2 ottobre 2026</p>
 
-      <p>Student Hub è un'app per organizzare lo studio: impegni, voti, timer, archivio dei materiali e un tutor AI.
+      <p>MYND (prima "Student Hub") è un'app per organizzare lo studio: impegni, voti, timer, archivio dei materiali e un tutor AI.
       Questa pagina spiega quali dati usa e come.</p>
 
       <h2>Dati che salviamo</h2>
@@ -48,13 +51,13 @@
       <p>I dati sono conservati su Supabase (database e spazio file) e ogni utente può vedere solo i propri.</p>
 
       <h2>Google Drive</h2>
-      <p>Se scegli di collegare Google Drive, Student Hub chiede solo il permesso <b>drive.file</b>: può vedere,
+      <p>Se scegli di collegare Google Drive, MYND chiede solo il permesso <b>drive.file</b>: può vedere,
       creare e modificare <b>esclusivamente i file che carica lui</b> nella cartella "Student Hub" del tuo Drive.
       Non può leggere né modificare nessun altro file del tuo Drive.</p>
       <ul>
         <li>I file caricati restano nel tuo Google Drive e sono tuoi.</li>
         <li>L'app legge anche il tuo indirizzo email Google e lo spazio usato, solo per mostrarteli nell'Archivio.</li>
-        <li>Il testo trascritto dei file (per il tutor AI) viene salvato in Student Hub.</li>
+        <li>Il testo trascritto dei file (per il tutor AI) viene salvato in MYND.</li>
         <li>L'accesso a Google resta nel tuo browser per circa un'ora; puoi revocarlo in qualsiasi momento con
         "Scollega" o da <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</li>
       </ul>
@@ -82,7 +85,7 @@
       <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
 
       <h2>Contatti</h2>
-      <p>Student Hub — Sebastiano Zorzi · <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a></p>
+      <p>MYND — Sebastiano Zorzi · <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a></p>
     </div>
   </main>
 </body>

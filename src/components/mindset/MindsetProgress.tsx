@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 import { BedDouble, Smartphone, Flame, Lightbulb, TrendingUp, AlertTriangle } from 'lucide-react';
 import {
   MindsetData, scoreDay, weekAverage, sleepStats, sleepWarning, phoneStats, habitStreak, disruptionPatterns, completionByType,
@@ -60,7 +60,9 @@ export default function MindsetProgress({ m, t }: { m: MindsetData; t: Theme }) 
                   contentStyle={{ background: t.dark ? '#1b1640' : '#fff', border: 'none', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.25)', color: t.dark ? '#fff' : '#111' }}
                   formatter={(v: number) => [v ?? 'nessun dato', 'Punteggio']}
                   labelFormatter={(_, p) => (p?.[0] ? new Date(`${p[0].payload.key}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }) : '')} />
-                <Bar dataKey="score" fill="#818cf8" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={22}>
+                  {chart.map((d, i) => <Cell key={d.key} fill={i === chart.length - 1 ? 'var(--brand-ring)' : (t.dark ? '#3A3F45' : '#D5D9DE')} />)}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

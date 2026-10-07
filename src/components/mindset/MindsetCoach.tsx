@@ -163,7 +163,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0"><Bot className="w-5 h-5 text-white" /></div>
           <div className="min-w-0">
-            <p className={`font-semibold ${t.text}`}>Mindset Coach</p>
+            <p className={`font-semibold ${t.text}`}>Coach</p>
             <p className={`text-xs truncate ${t.sub}`}>Conosce la tua giornata, il sonno, gli impegni e lo studio</p>
           </div>
         </div>
@@ -183,7 +183,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
           <ChevronDown className={`w-4 h-4 transition-transform ${listOpen ? 'rotate-180' : ''} ${t.sub}`} />
         </button>
         {listOpen && (
-          <div className={`absolute left-4 right-4 z-30 mt-1 max-h-80 overflow-y-auto rounded-2xl border shadow-2xl p-1.5 animate-scale-in ${t.dark ? 'bg-[#1b1640] border-white/10' : 'bg-white border-black/10'}`}>
+          <div className={`absolute left-4 right-4 z-30 mt-1 max-h-80 overflow-y-auto rounded-2xl border shadow-2xl p-1.5 animate-scale-in ${t.dark ? 'glass-float' : 'glass-float'}`}>
             <button onClick={() => { setActiveId(null); setListOpen(false); setError(''); }}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-indigo-400 ${t.hover}`}><Plus className="w-4 h-4" /> Nuova chat</button>
             {chats.length === 0 && <p className={`px-3 py-2 text-sm ${t.sub}`}>Nessuna conversazione ancora.</p>}
@@ -219,7 +219,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[88%] rounded-2xl px-4 py-3 ${msg.role === 'user'
-              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
+              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-[var(--on-brand)]'
               : `${t.soft} ${t.text}`}`}>
               {msg.role === 'user' ? <p className="text-sm whitespace-pre-wrap">{msg.text}</p> : <Formatted text={msg.text} />}
               {msg.plan && <PlanCard plan={msg.plan} applied={!!msg.applied} t={t} today={today}
@@ -252,7 +252,7 @@ export default function MindsetCoach({ m, update, t, study }: Props) {
           {loading ? (
             <button type="button" onClick={() => abortRef.current?.abort()} className="p-3 rounded-xl bg-red-500/80 text-white" aria-label="Ferma"><Square className="w-4 h-4" /></button>
           ) : (
-            <button type="submit" disabled={!input.trim()} className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white disabled:opacity-40" aria-label="Invia"><Send className="w-4 h-4" /></button>
+            <button type="submit" disabled={!input.trim()} className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-[var(--on-brand)] disabled:opacity-40" aria-label="Invia"><Send className="w-4 h-4" /></button>
           )}
         </form>
       </div>

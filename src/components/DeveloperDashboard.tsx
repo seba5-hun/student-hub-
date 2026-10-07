@@ -65,7 +65,7 @@ export default function DeveloperDashboard({ darkMode }: { darkMode: boolean }) 
   const cardClass = darkMode ? 'glass-card' : 'glass-card-light';
   const axisColor = darkMode ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)';
   const gridColor = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const accent = darkMode ? '#818cf8' : '#6366f1';
+  const accent = darkMode ? '#C8F25A' : '#5C8500';
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -135,7 +135,7 @@ export default function DeveloperDashboard({ darkMode }: { darkMode: boolean }) 
           <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="group" aria-label="Periodo">
             {[7, 30, 90].map(d => (
               <button key={d} onClick={() => setDays(d)}
-                className={`px-3 py-1 rounded-lg text-sm ${days === d ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : subTextColor}`}>
+                className={`px-3 py-1 rounded-lg text-sm ${days === d ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : subTextColor}`}>
                 {d} giorni
               </button>
             ))}

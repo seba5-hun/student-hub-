@@ -10,16 +10,16 @@ export type BlockStatus = 'done' | 'min' | 'skipped' | 'excused';
 export type HabitMark = 'full' | 'min';
 
 export const AREAS: Record<Area, { label: string; color: string }> = {
-  morning: { label: 'Mattino', color: '#fbbf24' },
-  school: { label: 'Scuola', color: '#60a5fa' },
-  study: { label: 'Studio', color: '#818cf8' },
-  sport: { label: 'Sport', color: '#34d399' },
-  project: { label: 'Progetto', color: '#f59e0b' },
-  recovery: { label: 'Recupero', color: '#2dd4bf' },
-  life: { label: 'Vita', color: '#f472b6' },
-  travel: { label: 'Viaggio', color: '#94a3b8' },
-  meal: { label: 'Pasto', color: '#fb923c' },
-  sleep: { label: 'Sonno', color: '#a78bfa' },
+  morning: { label: 'Mattino', color: 'var(--brand-ring)' },
+  school: { label: 'Scuola', color: 'var(--area-scuola)' },
+  study: { label: 'Studio', color: 'var(--area-studio)' },
+  sport: { label: 'Sport', color: 'var(--area-sport)' },
+  project: { label: 'Progetto', color: 'var(--area-progetto)' },
+  recovery: { label: 'Recupero', color: 'var(--area-recupero)' },
+  life: { label: 'Vita', color: 'var(--area-vita)' },
+  travel: { label: 'Viaggio', color: 'var(--area-viaggio)' },
+  meal: { label: 'Pasto', color: 'var(--area-pasto)' },
+  sleep: { label: 'Sonno', color: 'var(--area-sonno)' },
 };
 
 export const PRIORITY_AREAS: { id: PriorityArea; label: string; example: string }[] = [

@@ -93,7 +93,8 @@ export function usedSubjectNames(data: UserData): string[] {
   return unique;
 }
 
-export const SUBJECT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#14b8a6', '#3b82f6', '#a855f7'];
+// MYND: subjects take the 10 area colors in order (colors already chosen by the student are kept).
+export const SUBJECT_COLORS = ['#83AFDF', '#ABA1DD', '#6BBDAB', '#C9A46C', '#8CB987', '#D595B0', '#6AB7D1', '#D89B7C', '#98A8E1', '#DC9693'];
 
 // First palette color not used yet by the given subjects (cycles when all are taken).
 export function nextSubjectColor(subjects: SubjectDef[]): string {

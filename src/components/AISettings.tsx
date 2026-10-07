@@ -283,7 +283,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la chiave gratuita di Groq</h3>
           <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
             <li>Vai su <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">console.groq.com/keys <ExternalLink className="w-3 h-3" /></a> e accedi (anche con Google). Non serve la carta di credito.</li>
-            <li>Premi <b>Create API Key</b>, scrivi un nome (es. "Student Hub") e premi <b>Submit</b>.</li>
+            <li>Premi <b>Create API Key</b>, scrivi un nome (es. "MYND") e premi <b>Submit</b>.</li>
             <li>Copia la chiave che compare: inizia con <b>gsk_</b>. Si vede una volta sola, quindi copiala subito.</li>
             <li>Incollala qui sopra e premi <b>Salva</b>.</li>
           </ol>
@@ -309,7 +309,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
             <li>Vai su <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">console.anthropic.com <ExternalLink className="w-3 h-3" /></a> e crea un account (serve avere almeno 18 anni).</li>
             <li>In <b>Plans &amp; Billing</b> aggiungi un piccolo credito (bastano pochi euro, durano settimane). Puoi disattivare la ricarica automatica.</li>
-            <li>In <b>API Keys</b> premi <b>Create Key</b>, dai un nome (es. "Student Hub") e copia la chiave: inizia con <b>sk-ant-</b>.</li>
+            <li>In <b>API Keys</b> premi <b>Create Key</b>, dai un nome (es. "MYND") e copia la chiave: inizia con <b>sk-ant-</b>.</li>
             <li>Incollala qui sopra e premi <b>Salva</b>.</li>
           </ol>
           <p className={`text-xs ${subTextColor}`}>
@@ -325,7 +325,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           <ol className={`text-sm ${subTextColor} list-decimal pl-5 space-y-1.5`}>
             <li>Vai su <a href="https://platform.openai.com/signup" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline inline-flex items-center gap-0.5">platform.openai.com <ExternalLink className="w-3 h-3" /></a> e accedi (puoi usare lo stesso account di ChatGPT; serve avere almeno 18 anni).</li>
             <li>Vai in <b>Settings → Billing</b> e aggiungi un piccolo credito (da 5 $). L'abbonamento ChatGPT Plus <b>non</b> vale per le API: è un credito separato.</li>
-            <li>Vai in <b>API keys</b>, premi <b>Create new secret key</b>, dai un nome (es. "Student Hub") e copia la chiave: inizia con <b>sk-</b>.</li>
+            <li>Vai in <b>API keys</b>, premi <b>Create new secret key</b>, dai un nome (es. "MYND") e copia la chiave: inizia con <b>sk-</b>.</li>
             <li>Incollala qui sopra: comparirà la lista dei modelli, lascia <b>Automatico</b> o scegline uno, poi premi <b>Salva</b>.</li>
           </ol>
           <p className={`text-xs ${subTextColor}`}>

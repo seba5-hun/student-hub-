@@ -70,8 +70,8 @@ export default function MindsetFocus({ m, update, t, subjects, preset, onPresetU
         <div className="relative my-6" style={{ width: 2 * r + 20, height: 2 * r + 20 }}>
           <svg width={2 * r + 20} height={2 * r + 20} className="-rotate-90">
             <circle cx={r + 10} cy={r + 10} r={r} fill="none" strokeWidth={8} className={t.dark ? 'stroke-white/10' : 'stroke-black/10'} />
-            <circle cx={r + 10} cy={r + 10} r={r} fill="none" strokeWidth={8} strokeLinecap="round" stroke={done ? '#34d399' : '#818cf8'}
-              strokeDasharray={c} strokeDashoffset={c * (shown / total)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+            <circle cx={r + 10} cy={r + 10} r={r} fill="none" strokeWidth={8} strokeLinecap="round" stroke={done ? 'var(--success)' : 'var(--brand-ring)'}
+              strokeDasharray={c} strokeDashoffset={c * (shown / total)} style={{ transition: 'stroke-dashoffset 1s linear', filter: t.dark ? 'drop-shadow(0 0 12px rgba(200,242,90,.25))' : undefined }} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className={`text-5xl font-bold tabular-nums ${t.text}`}>{String(Math.floor(shown / 60)).padStart(2, '0')}:{String(shown % 60).padStart(2, '0')}</span>
@@ -85,7 +85,7 @@ export default function MindsetFocus({ m, update, t, subjects, preset, onPresetU
             <div className="flex justify-center gap-2">
               {[1, 2, 3, 4, 5].map(n => (
                 <button key={n} onClick={() => setRating(n)} aria-label={`Concentrazione ${n}`}
-                  className={`w-11 h-11 rounded-xl font-semibold ${rating === n ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' : `${t.soft} ${t.text} ${t.hover}`}`}>{n}</button>
+                  className={`w-11 h-11 rounded-xl font-semibold ${rating === n ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-[var(--on-brand)]' : `${t.soft} ${t.text} ${t.hover}`}`}>{n}</button>
               ))}
             </div>
             <button onClick={() => finish(active, active.planned, rating ?? undefined)} className="btn-primary text-sm flex items-center gap-2 mx-auto">
@@ -124,7 +124,7 @@ export default function MindsetFocus({ m, update, t, subjects, preset, onPresetU
         <div className="grid grid-cols-3 gap-2">
           {MODES.map((md, i) => (
             <button key={md.work} onClick={() => setMode(i)}
-              className={`p-3 rounded-2xl text-left transition-all ${mode === i ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25' : `${t.soft} ${t.hover}`}`}>
+              className={`p-3 rounded-2xl text-left transition-all ${mode === i ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-[var(--on-brand)] shadow-lg shadow-indigo-500/25' : `${t.soft} ${t.hover}`}`}>
               <span className={`block text-lg font-bold tabular-nums ${mode === i ? '' : t.text}`}>{md.work}/{md.pause}</span>
               <span className={`block text-sm font-medium ${mode === i ? '' : t.text}`}>{md.name}</span>
               <span className={`block text-[11px] ${mode === i ? 'text-white/75' : t.sub}`}>{md.note}</span>

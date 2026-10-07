@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Sun, Timer as TimerIcon, CalendarRange, LineChart, Compass, Bot } from 'lucide-react';
+import { Sun, Timer as TimerIcon, CalendarDays, TrendingUp, MessageCircle } from 'lucide-react';
 import { MindsetData, PriorityArea, defaultMindset, normalizeMindset, formatDuration } from '../../lib/mindset';
 import { toDateKey } from '../../lib/store';
 import { themeOf } from './ui';
@@ -14,9 +14,9 @@ type Tab = 'oggi' | 'focus' | 'piano' | 'progressi' | 'coach';
 const TABS: { id: Tab; label: string; icon: typeof Sun }[] = [
   { id: 'oggi', label: 'Oggi', icon: Sun },
   { id: 'focus', label: 'Focus', icon: TimerIcon },
-  { id: 'piano', label: 'Piano', icon: CalendarRange },
-  { id: 'progressi', label: 'Progressi', icon: LineChart },
-  { id: 'coach', label: 'Coach', icon: Bot },
+  { id: 'piano', label: 'Piano', icon: CalendarDays },
+  { id: 'progressi', label: 'Andamento', icon: TrendingUp },
+  { id: 'coach', label: 'Coach', icon: MessageCircle },
 ];
 
 interface Props {
@@ -54,26 +54,30 @@ export default function Mindset({ mindset, darkMode, onUpdate, subjects, onStudy
   }
 
   return (
-    <div className="space-y-4 pb-20 sm:pb-0">
+    <div className="space-y-4 pb-28 sm:pb-0">
       <div className="flex items-center justify-between gap-3">
-        <h1 className={`text-sm font-bold tracking-[0.3em] ${t.sub} flex items-center gap-2`}><Compass className="w-4 h-4" /> MINDSET</h1>
+        <h1 className={`text-xs font-medium uppercase tracking-[0.08em] ${t.sub}`}>Performance</h1>
         {m.activeFocus && tab !== 'focus' && (
-          <button onClick={() => setTab('focus')} className="text-xs px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 animate-pulse">Focus in corso</button>
+          <button onClick={() => setTab('focus')} className="text-xs px-3 h-8 rounded-full glass-card !rounded-full inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#C8F25A', boxShadow: '0 0 8px #C8F25A' }} />Focus in corso</button>
         )}
       </div>
 
-      {/* Tabs: on top on larger screens, as a bottom bar on the phone. */}
-      <nav aria-label="Mindset" className={`fixed sm:static bottom-0 inset-x-0 z-40 sm:z-auto sm:rounded-2xl p-1.5 sm:p-1 flex gap-1 border-t sm:border ${
-        darkMode ? 'bg-[#141033]/95 sm:bg-white/[0.06] border-white/10' : 'bg-white/95 sm:bg-black/[0.04] border-black/10'
-      }`} style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}>
-        {TABS.map(x => (
-          <button key={x.id} onClick={() => setTab(x.id)} aria-current={tab === x.id ? 'page' : undefined}
-            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 py-2 rounded-xl text-[11px] sm:text-sm font-medium transition-all ${
-              tab === x.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : t.sub
-            }`}>
-            <x.icon className="w-5 h-5 sm:w-4 sm:h-4" /> {x.label}
-          </button>
-        ))}
+      {/* Tabs: a floating glass capsule at the bottom on the phone, a bar on top on larger screens.
+          The active tab is a glass "lens" that slides to its place. */}
+      <nav aria-label="Performance"
+        className="glass-float fixed sm:static z-40 sm:z-auto left-[14px] right-[14px] h-[68px] sm:h-14 rounded-full p-1.5 flex"
+        style={{ bottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+        <div className="relative flex-1 flex">
+          <span aria-hidden className="glass-lens absolute top-0 bottom-0 rounded-full transition-transform duration-[250ms]"
+            style={{ width: `${100 / TABS.length}%`, transform: `translateX(${TABS.findIndex(x => x.id === tab) * 100}%)`, transitionTimingFunction: 'var(--ease-spring)' }} />
+          {TABS.map(x => (
+            <button key={x.id} onClick={() => setTab(x.id)} aria-current={tab === x.id ? 'page' : undefined}
+              className="relative flex-1 flex flex-col sm:flex-row items-center justify-center gap-[3px] sm:gap-2 rounded-full text-[10px] sm:text-sm font-semibold transition-colors duration-150"
+              style={{ color: tab === x.id ? 'var(--brand-ring)' : 'var(--text-muted)' }}>
+              <x.icon className="w-[22px] h-[22px] sm:w-[18px] sm:h-[18px]" strokeWidth={1.75} /> {x.label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div key={tab} className="animate-section-in">
@@ -103,7 +107,7 @@ function Welcome({ m, darkMode, onStart }: { m: MindsetData; darkMode: boolean; 
   return (
     <div className={`${t.card} p-6 sm:p-8 max-w-2xl mx-auto space-y-6 animate-scale-in`}>
       <div>
-        <p className={`text-xs font-bold tracking-[0.3em] ${t.sub}`}>MINDSET</p>
+        <p className={`text-xs font-bold tracking-[0.3em] ${t.sub}`}>PERFORMANCE</p>
         <h2 className={`text-3xl font-bold mt-2 ${t.text}`}>Ciao {p.name}.</h2>
         <p className={`mt-2 ${t.sub}`}>
           Questo non è un programma da rispettare per forza. È un sistema che osserva le tue giornate, impara da quello

@@ -1,49 +1,61 @@
 @import "tailwindcss";
+@import "./tokens.css";
 
-@theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
+/* MYND: the old indigo/violet/blue accents of the whole app now point at the brand tokens
+   (lime on graphite), so every section follows the theme (data-theme on <html>). */
+@theme inline {
+  --font-sans: var(--font-sans);
+  --color-indigo-50: rgba(200, 242, 90, 0.12);
+  --color-indigo-100: rgba(200, 242, 90, 0.2);
+  --color-indigo-200: rgba(200, 242, 90, 0.45);
+  --color-indigo-300: var(--brand);
+  --color-indigo-400: var(--brand);
+  --color-indigo-500: var(--brand-fill);
+  --color-indigo-600: var(--brand);
+  --color-indigo-700: var(--brand);
+  --color-purple-300: var(--brand);
+  --color-purple-400: var(--brand);
+  --color-purple-500: var(--brand-fill);
+  --color-purple-600: var(--brand-fill-2);
+  --color-purple-700: var(--brand);
+  --color-violet-400: var(--brand);
+  --color-violet-500: var(--brand-fill);
+  --color-violet-600: var(--brand-fill-2);
+  --color-fuchsia-500: var(--brand-fill-2);
+  --color-blue-300: var(--brand);
+  --color-blue-400: var(--brand);
+  --color-blue-500: var(--brand-fill);
+  --color-blue-600: var(--brand-fill-2);
+  --color-cyan-600: var(--brand-fill-2);
+  --color-emerald-400: var(--success);
+  --color-amber-400: var(--warning);
+  --color-red-400: var(--danger);
+}
+
+:root {
+  --brand-fill: #C8F25A;   /* lime fill of buttons and active states, same in both themes */
+  --brand-fill-2: #B5E33E;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+  scrollbar-color: var(--border) transparent;
 }
 
+html { background: var(--bg); }
+
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-sans);
   overflow-x: hidden;
   margin: 0;
   padding: 0;
-}
-
-/* Colour shown under the fixed background (e.g. the bounce at the end of the page on iPhone/Mac) */
-body:has(.gradient-bg.mesh-gradient) {
-  background-color: #1a1145;
-}
-
-body:has(.gradient-bg-light.mesh-gradient-light) {
-  background-color: #f0f4ff;
+  background: var(--bg);
+  color: var(--text);
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
-}
-
-/* Gradient Backgrounds */
-:root {
-  --bg-dark: linear-gradient(135deg, #0f0c29 0%, #1a1145 25%, #302b63 50%, #24243e 75%, #0f0c29 100%);
-  --bg-light: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 25%, #f5f0ff 50%, #fef0f5 75%, #f0f4ff 100%);
-  --mesh-dark:
-    radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.3) 0%, transparent 50%),
-    radial-gradient(at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%),
-    radial-gradient(at 40% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%),
-    radial-gradient(at 80% 80%, rgba(59, 130, 246, 0.2) 0%, transparent 50%);
-  --mesh-light:
-    radial-gradient(at 20% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
-    radial-gradient(at 80% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-    radial-gradient(at 40% 80%, rgba(236, 72, 153, 0.06) 0%, transparent 50%),
-    radial-gradient(at 80% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 50%);
 }
 
 @keyframes fadeIn {
@@ -66,9 +78,31 @@ body:has(.gradient-bg-light.mesh-gradient-light) {
   to { transform: none; opacity: 1; }
 }
 
+@keyframes myndWordIn {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes myndSheen {
+  from { background-position: 200% 0; }
+  to { background-position: 0 0; }
+}
+
+.mynd-word { display: block; animation: myndWordIn 500ms var(--ease-out) backwards; }
+.mynd-sheen {
+  background-image: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.75) 50%, transparent 65%), var(--steel-gradient);
+  background-size: 250% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  animation: myndSheen 600ms var(--ease-out) 420ms backwards;
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.6); }
+  0%, 100% { box-shadow: 0 0 10px rgba(200, 242, 90, 0.25); }
+  50% { box-shadow: 0 0 24px rgba(200, 242, 90, 0.5); }
 }
 
 /* Scrollbar */
@@ -81,62 +115,62 @@ body:has(.gradient-bg-light.mesh-gradient-light) {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.3);
+  background: var(--border);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.5);
+  background: var(--text-subtle);
 }
 
 /* Project components. They live in the `components` layer so that Tailwind utilities
    (pl-10, px-6, border-l-4, rounded-xl…) can override them, as Tailwind intends: outside a
    layer they would win over every utility (e.g. input icons ended up on top of the text). */
 @layer components {
-  /* Glassmorphism Cards */
-  /* No backdrop-filter: the cards sit on a soft gradient, where a blur is almost invisible
-     but has to be recomputed for every card at every scroll frame (the main cause of lag). */
-  .glass-card {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.06));
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 1rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  }
-
+  /* Liquid Glass, level 1 ("content glass"): cards, fields, rows. No blur (speed). The two
+     old class names stay: the theme now comes from data-theme, not from the class. */
+  .glass-card,
   .glass-card-light {
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 1rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    background: var(--glass);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-spec);
+    color: var(--text);
   }
 
-  .gradient-bg {
-    background: var(--bg-dark);
+  /* Liquid Glass, level 2 ("floating glass"): bottom bar, menus, sheets. Blur only here. */
+  .glass-float {
+    background: var(--glass-float);
+    -webkit-backdrop-filter: var(--blur-float);
+    backdrop-filter: var(--blur-float);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--shadow-float);
   }
 
+  /* The active element: a glass "lens" with the lime as the lit indicator. */
+  .glass-lens {
+    background: var(--glass-lens);
+    box-shadow: var(--shadow-lens);
+  }
+
+  .glass-hero {
+    background: var(--glass-hero);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--shadow-spec);
+  }
+
+  .gradient-bg,
   .gradient-bg-light {
-    background: var(--bg-light);
+    background: var(--bg);
   }
 
-  .mesh-gradient {
-    background: var(--mesh-dark);
-  }
-
-  .mesh-gradient-light {
-    background: var(--mesh-light);
-  }
-
-  /* Both classes set `background`, so used together the later one would replace the other
-     and the page would show through (white text on an almost white page in dark mode).
-     The combined rules draw the mesh on top of the base gradient. */
-  /* The background is painted once on a fixed layer behind the page, so scrolling doesn't
-     have to repaint a gradient as tall as the whole page. */
   .gradient-bg.mesh-gradient,
   .gradient-bg-light.mesh-gradient-light {
     background: none;
     isolation: isolate;
   }
 
+  /* Background: two very soft still glows under the glass, painted once on a fixed layer. */
   .gradient-bg.mesh-gradient::before,
   .gradient-bg-light.mesh-gradient-light::before {
     content: '';
@@ -145,15 +179,18 @@ body:has(.gradient-bg-light.mesh-gradient-light) {
     z-index: -1;
     pointer-events: none;
     transform: translateZ(0);
+    background: var(--ambient), var(--bg);
   }
 
-  .gradient-bg.mesh-gradient::before {
-    background: var(--mesh-dark), var(--bg-dark);
+  /* Steel Y of the logo */
+  .steel-text {
+    background: var(--steel-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
-  .gradient-bg-light.mesh-gradient-light::before {
-    background: var(--mesh-light), var(--bg-light);
-  }
+  .tabular { font-variant-numeric: tabular-nums; }
 
   /* Animations */
   .animate-fade-in {
@@ -180,57 +217,100 @@ body:has(.gradient-bg-light.mesh-gradient-light) {
     animation: pulseGlow 2s ease-in-out infinite;
   }
 
-  /* Buttons */
+  /* Main button: lime pill (in both themes), dark text. One per screen. */
   .btn-primary {
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    color: white;
-    border: none;
-    border-radius: 0.75rem;
+    background: var(--btn-primary);
+    color: var(--on-brand);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: var(--radius-full);
     padding: 0.625rem 1.25rem;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), opacity var(--dur-fast);
+    box-shadow: var(--btn-primary-shadow);
   }
 
   .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    box-shadow: var(--btn-primary-shadow), 0 0 32px rgba(200, 242, 90, 0.25);
   }
 
   .btn-primary:active {
-    transform: translateY(0);
+    transform: scale(0.98);
   }
 
-  /* Inputs */
-  .input-glass {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 0.75rem;
-    padding: 0.625rem 1rem;
-    color: white;
-    outline: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  .btn-secondary {
+    background: var(--glass);
+    border: 1px solid var(--glass-edge);
+    box-shadow: var(--shadow-spec);
+    color: var(--text);
+    border-radius: var(--radius-full);
+    padding: 0.625rem 1.25rem;
+    font-weight: 500;
+    transition: transform var(--dur-fast) var(--ease-out);
   }
 
-  .input-glass:focus {
-    border-color: rgba(99, 102, 241, 0.5);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-  }
+  .btn-secondary:active { transform: scale(0.98); }
 
+  /* Fields inside the app: content glass, lime border when active. */
+  .input-glass,
   .input-light {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 0.75rem;
+    background: var(--glass);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-md);
     padding: 0.625rem 1rem;
-    color: #1f2937;
+    color: var(--text);
     outline: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: var(--shadow-spec);
+    transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
   }
 
+  .input-glass::placeholder,
+  .input-light::placeholder { color: var(--text-subtle); }
+
+  .input-glass:focus,
   .input-light:focus {
-    border-color: rgba(99, 102, 241, 0.5);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    border-color: var(--brand);
+    box-shadow: var(--focus-ring);
+  }
+
+  select.input-glass option,
+  select.input-light option { background: var(--surface); color: var(--text); }
+
+  /* Fields of the access screens ("manifesto"): label + underline, lime when active. */
+  .field-line {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .field-line:focus-within { border-bottom: 1.5px solid var(--brand); }
+  .field-line > label,
+  .field-line > span.field-label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    transition: color var(--dur-fast);
+  }
+  .field-line:focus-within > label,
+  .field-line:focus-within > span.field-label { color: var(--brand); }
+  .field-line input {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    width: 100%;
+    padding: 0;
+  }
+  .field-line input::placeholder { color: var(--text-subtle); font-weight: 400; }
+
+  :focus-visible {
+    outline: 1.5px solid var(--brand);
+    outline-offset: 2px;
   }
 
   /* Sidebar Overlay */
@@ -252,6 +332,37 @@ body:has(.gradient-bg-light.mesh-gradient-light) {
 
   .heatmap-cell:hover {
     transform: scale(1.3);
+  }
+
+  /* Charts: transparent hover cursor, floating-glass tooltip, quiet axes. */
+  .recharts-tooltip-cursor { fill: var(--glass) !important; stroke: none !important; }
+  .recharts-default-tooltip {
+    background: var(--glass-float) !important;
+    -webkit-backdrop-filter: var(--blur-float);
+    backdrop-filter: var(--blur-float);
+    border: 1px solid var(--glass-edge) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--shadow-float);
+    color: var(--text) !important;
+  }
+  .recharts-default-tooltip .recharts-tooltip-label { color: var(--text-muted) !important; }
+  .recharts-cartesian-axis-tick-value { fill: var(--text-subtle) !important; font-size: 11px; }
+  .recharts-cartesian-axis-line, .recharts-cartesian-axis-tick-line { stroke: var(--border) !important; }
+
+  /* Skeleton while loading: glass with a light that runs across. */
+  .skeleton {
+    background: var(--glass);
+    border-radius: var(--radius-md);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    animation: shimmer 1.2s infinite;
   }
 }
 

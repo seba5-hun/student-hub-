@@ -82,7 +82,7 @@ function studentContext(data: UserData): string {
   return context;
 }
 
-const SYSTEM_PROMPT = `Sei il tutor di studio di Student Hub: un insegnante paziente ed esperto che aiuta uno studente delle scuole superiori italiane. Rispondi sempre in italiano.
+const SYSTEM_PROMPT = `Sei il tutor di studio di MYND: un insegnante paziente ed esperto che aiuta uno studente delle scuole superiori italiane. Rispondi sempre in italiano.
 
 Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file, più i suoi voti e i suoi impegni.
 
@@ -486,7 +486,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       <div className="flex justify-end gap-2 mt-2">
         <button onClick={() => setEditingId(null)} className={`px-3 py-1.5 rounded-lg text-sm ${subTextColor} ${hoverBg}`}>Annulla</button>
         <button onClick={() => submitEdit(msg)} disabled={!editText.trim() && !msg.images?.length}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-blue-500 to-cyan-600 text-white flex items-center gap-1 disabled:opacity-50">
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-blue-500 to-cyan-600 text-[var(--on-brand)] flex items-center gap-1 disabled:opacity-50">
           <CheckIcon className="w-4 h-4" /> Invia
         </button>
       </div>
@@ -812,7 +812,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               </div>
             )}
             {msg.role === 'user'
-              ? userBubble(msg, 'rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white', 'text-sm')
+              ? userBubble(msg, 'rounded-2xl px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-[var(--on-brand)]', 'text-sm')
               : (
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
                   {messageImages(msg)}
@@ -851,7 +851,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           {imagePicker(`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'}`)}
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey}
             placeholder="Chiedi aiuto..." rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
-          {sendButton('w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white disabled:opacity-50 flex-shrink-0')}
+          {sendButton('w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-[var(--on-brand)] disabled:opacity-50 flex-shrink-0')}
         </div>
       </div>
     </div>
@@ -894,14 +894,14 @@ function ApiKeyGuide({ darkMode }: { darkMode: boolean }) {
       <div>
         <h3 className={`text-lg font-semibold ${textColor}`}>📖 Come ottenere la API key (5 minuti)</h3>
         <p className={`text-sm ${subTextColor} mt-1`}>
-          La API key è come una "tessera" personale che permette a Student Hub di usare l'intelligenza artificiale di Google (Gemini). È gratuita.
+          La API key è come una "tessera" personale che permette a MYND di usare l'intelligenza artificiale di Google (Gemini). È gratuita.
         </p>
       </div>
 
       <ol className="space-y-4">
         {GUIDE_STEPS.map((step, i) => (
           <li key={step.title} className="flex gap-4">
-            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 text-white text-sm font-bold flex items-center justify-center">{i + 1}</span>
+            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 text-[var(--on-brand)] text-sm font-bold flex items-center justify-center">{i + 1}</span>
             <div>
               <p className={`font-medium ${textColor}`}>{step.title}</p>
               <p className={`text-sm ${subTextColor} mt-0.5`}>{step.text}</p>

@@ -90,7 +90,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className={`text-2xl font-bold ${textColor}`}>📋 Impegni</h2>
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Impegni.</h2>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Nuovo
         </button>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ShieldCheck, Users, Activity, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
+import { Users, Activity, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
 import DeveloperDashboard, { formatDuration } from './DeveloperDashboard';
 import { AdminUser, AccountStatus, loadAdminUsers, setUserStatus, setRequireApproval } from '../lib/admin';
 import { useDialog } from './Dialog';
@@ -108,11 +108,11 @@ export default function AdminPanel({ darkMode, onPendingChange }: { darkMode: bo
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className={`text-2xl font-bold flex items-center gap-2 ${textColor}`}><ShieldCheck className="w-6 h-6 text-indigo-400" /> Admin</h2>
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] flex items-center gap-2 ${textColor}`}>Admin.</h2>
         <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
           {[{ id: 'users' as const, label: 'Utenti', icon: <Users className="w-4 h-4" /> }, { id: 'stats' as const, label: 'Statistiche', icon: <Activity className="w-4 h-4" /> }].map(t => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${tab === t.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : subTextColor}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${tab === t.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : subTextColor}`}>
               {t.icon}{t.label}
               {t.id === 'users' && counts.pending > 0 && <span className="ml-1 min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center">{counts.pending}</span>}
             </button>

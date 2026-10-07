@@ -573,7 +573,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     <div className={`grid grid-cols-3 gap-1 rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="radiogroup" aria-label="Qualità del PDF">
       {PDF_QUALITIES.map(q => (
         <button key={q.id} type="button" role="radio" aria-checked={value === q.id} onClick={() => onPick(q.id)}
-          className={`px-2 py-1.5 rounded-lg text-center transition-all ${value === q.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+          className={`px-2 py-1.5 rounded-lg text-center transition-all ${value === q.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)] shadow' : subTextColor}`}>
           <span className="block text-sm font-medium">{q.label}</span>
           <span className={`block text-[10px] ${value === q.id ? 'text-white/80' : ''}`}>{q.note}</span>
         </button>
@@ -591,7 +591,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         className={`w-5 h-5 flex-shrink-0 rounded-md border-2 flex items-center justify-center transition-all duration-150 ${
           state === 'none'
             ? (darkMode ? 'border-white/30 hover:border-white/60' : 'border-black/25 hover:border-black/50')
-            : 'border-transparent bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow shadow-indigo-500/30'
+            : 'border-transparent bg-gradient-to-br from-indigo-500 to-purple-600 text-[var(--on-brand)] shadow shadow-indigo-500/30'
         }`}>
         {state === 'all' && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
         {state === 'some' && <Minus className="w-3.5 h-3.5" strokeWidth={3} />}
@@ -636,8 +636,8 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className={`text-2xl font-bold ${textColor}`}>📁 Archivio</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Archivio.</h2>
         <div className="flex items-center gap-2">
           {archive.length > 0 && (
             <button onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}
@@ -670,11 +670,11 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             <h3 className={`text-sm font-semibold ${textColor}`}>Dove salvare i file</h3>
             <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="radiogroup" aria-label="Dove salvare i file">
               {([
-                { id: 'app' as const, label: 'Student Hub', icon: <HardDrive className="w-4 h-4" /> },
+                { id: 'app' as const, label: 'MYND', icon: <HardDrive className="w-4 h-4" /> },
                 { id: 'drive' as const, label: 'Google Drive', icon: <Cloud className="w-4 h-4" /> },
               ]).map(o => (
                 <button key={o.id} role="radio" aria-checked={storage === o.id} onClick={() => setStorage(o.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${storage === o.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+                  className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-all ${storage === o.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)] shadow' : subTextColor}`}>
                   {o.icon}{o.label}
                 </button>
               ))}
@@ -684,7 +684,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           {storage === 'drive' && !driveConfigured ? (
             <p className="text-xs text-amber-400 animate-scale-in">
               Google Drive non è ancora attivo: l'amministratore deve completare la configurazione con Google.
-              Intanto i file vengono salvati in Student Hub.
+              Intanto i file vengono salvati in MYND.
             </p>
           ) : !useDrive ? (
             <p className={`text-xs ${subTextColor}`}>I file vanno nello spazio dell'app, massimo 50 MB ciascuno. Per avere più spazio scegli Google Drive.</p>
@@ -722,7 +722,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                 <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 {driveWasConnected
                   ? 'Il collegamento a Google scade dopo circa un\'ora: ricollegalo con un clic.'
-                  : 'Usi lo spazio del tuo Google Drive (15 GB gratis). Student Hub vede solo i file che carica lui, non il resto del tuo Drive.'}
+                  : 'Usi lo spazio del tuo Google Drive (15 GB gratis). MYND vede solo i file che carica lui, non il resto del tuo Drive.'}
               </p>
               <button onClick={connectDrive} disabled={driveBusy} className="btn-primary text-sm flex items-center gap-2 disabled:opacity-60">
                 {driveBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
@@ -771,7 +771,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             <p className={`text-sm font-medium ${textColor}`}>Clicca per scegliere i file o trascinali qui</p>
             <p className={`text-xs ${subTextColor} mt-1`}>PDF, foto (anche più pagine insieme), file di testo e altri documenti · max {useDrive ? '2 GB' : '50 MB'} per file</p>
             <p className={`text-xs mt-2 inline-flex items-center gap-1 ${useDrive ? 'text-sky-400' : subTextColor}`}>
-              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Salvati nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Salvati in Student Hub</>}
+              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Salvati nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Salvati in MYND</>}
             </p>
             <input
               ref={fileInputRef}
@@ -968,7 +968,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 pointer-events-none">
           <div role="toolbar" aria-label="Azioni sui file selezionati"
             className={`pointer-events-auto w-full max-w-3xl rounded-2xl border shadow-2xl p-2 flex flex-wrap items-center gap-1 animate-scale-in ${
-              darkMode ? 'bg-[#1b1640]/95 border-white/10 text-white' : 'bg-white/95 border-black/10 text-gray-800'
+              darkMode ? 'glass-float text-white' : 'glass-float text-gray-800'
             }`}>
             <span className="px-3 text-sm font-semibold flex-1 min-w-[7rem]">
               {selectedItems.length === 0 ? 'Nessuno selezionato' : selectedItems.length === 1 ? '1 selezionato' : `${selectedItems.length} selezionati`}
@@ -1003,7 +1003,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             onClick={e => e.stopPropagation()}
             onSubmit={e => { e.preventDefault(); confirmMove(); }}
             onKeyDown={e => { if (e.key === 'Escape') setMoving(null); }}
-            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-float' : 'glass-card-light'}`}>
             <div>
               <h2 className={`text-lg font-semibold ${textColor}`}>Sposta {selectedItems.length > 1 ? `${selectedItems.length} elementi` : `"${selectedItems[0]?.name}"`}</h2>
               <p className={`mt-1 text-sm ${subTextColor}`}>Scegli una materia e un argomento esistenti, oppure scrivine di nuovi.</p>
@@ -1022,7 +1022,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
               <div className="flex flex-wrap gap-1.5">
                 {moveTopics.slice(0, 8).map(x => (
                   <button key={x} type="button" onClick={() => setMoving({ ...moving, topic: x })}
-                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.topic === x ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
+                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.topic === x ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
                     {x}
                   </button>
                 ))}
@@ -1044,7 +1044,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             onClick={e => e.stopPropagation()}
             onSubmit={e => { e.preventDefault(); createPdfFromSelected(); }}
             onKeyDown={e => { if (e.key === 'Escape') setPdfDialog(null); }}
-            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+            className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-float' : 'glass-card-light'}`}>
             <div>
               <h2 className={`text-lg font-semibold ${textColor}`}>Unisci {selectedPhotos.length} foto in un PDF</h2>
               <p className={`mt-1 text-sm ${subTextColor}`}>
@@ -1068,7 +1068,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
               </span>
             </label>
             <p className={`text-xs inline-flex items-center gap-1 ${useDrive ? 'text-sky-400' : subTextColor}`}>
-              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Il PDF verrà salvato nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Il PDF verrà salvato in Student Hub</>}
+              {useDrive ? <><Cloud className="w-3.5 h-3.5" /> Il PDF verrà salvato nel tuo Google Drive</> : <><HardDrive className="w-3.5 h-3.5" /> Il PDF verrà salvato in MYND</>}
             </p>
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setPdfDialog(null)} className={`px-4 py-2 rounded-xl text-sm font-medium ${darkMode ? 'text-white/80 bg-white/10 hover:bg-white/15' : 'text-gray-700 bg-black/5 hover:bg-black/10'}`}>Annulla</button>

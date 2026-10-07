@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0A0B0C;color:#ECEEF0;font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#C8F25A}a:hover{color:#DDF78F}</style>
+</helmet>
+<div style="max-width:1120px;margin:0 auto;padding:72px 32px 120px;display:flex;flex-direction:column;gap:88px">
+
+  <header style="display:flex;flex-direction:column;gap:40px">
+    <div style="font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#969BA1">Passo 8 di 8 — Brand book · v1.0 · ottobre 2026</div>
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap">
+      <div style="font-weight:600;font-size:clamp(96px,14vw,168px);line-height:.84;letter-spacing:-.045em;display:flex;flex-direction:column"><span>M<span style="background:linear-gradient(170deg,#F4F3F0 0%,#9A9CA1 45%,#E2E2E0 60%,#6E7075 100%);-webkit-background-clip:text;background-clip:text;color:transparent">Y</span></span><span>ND</span></div>
+      <div style="display:flex;flex-direction:column;gap:10px;max-width:420px">
+        <span style="font-size:13px;letter-spacing:.28em;text-transform:uppercase;color:#969BA1">Make Your Next Decision</span>
+        <span style="font-size:17px;line-height:1.55;color:#C3C7CC;text-wrap:pretty">Il sistema per studenti-atleti che organizza studio, sport, sonno e progetti, e ogni volta ti indica la prossima decisione giusta. Documento di consegna per lo sviluppo (React + TypeScript + Tailwind).</span>
+      </div>
+    </div>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">01</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Identità</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px">
+      <sc-for list="{{ identity }}" as="i" hint-placeholder-count="6">
+        <div style="border-radius:22px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);box-shadow:inset 1px 1px 0 rgba(255,255,255,.14);padding:20px;display:flex;flex-direction:column;gap:8px">
+          <span style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#969BA1">{{ i.k }}</span>
+          <span style="font-size:20px;font-weight:600;letter-spacing:-.02em">{{ i.v }}</span>
+          <span style="font-size:14px;line-height:1.5;color:#969BA1">{{ i.d }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">02</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Logo</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:12px">
+      <div style="height:220px;border-radius:22px;background:#070708;border:1px solid #1C1C1E;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px"><div style="font-weight:600;font-size:72px;line-height:.84;letter-spacing:-.045em;display:flex;flex-direction:column"><span>M<span style="background:linear-gradient(170deg,#F4F3F0 0%,#9A9CA1 45%,#E2E2E0 60%,#6E7075 100%);-webkit-background-clip:text;background-clip:text;color:transparent">Y</span></span><span>ND</span></div><span style="font-size:12px;color:#969BA1">Verticale · principale</span></div>
+      <div style="height:220px;border-radius:22px;background:#F1F2F3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#0D0F11"><div style="font-weight:600;font-size:52px;letter-spacing:-.045em;line-height:1">M<span style="background:linear-gradient(170deg,#8E9095 0%,#3E4044 48%,#7A7C80 62%,#2A2B2E 100%);-webkit-background-clip:text;background-clip:text;color:transparent">Y</span>ND</div><span style="font-size:12px;color:#62676D">Orizzontale · chiaro</span></div>
+      <div style="height:220px;border-radius:22px;background:#15171A;border:1px solid #2A2D31;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px"><div style="width:112px;height:112px;border-radius:25px;background:linear-gradient(155deg,#5A5C60 0%,#2B2C2F 48%,#1A1B1D 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center"><div style="font-weight:600;font-size:38px;line-height:.84;letter-spacing:-.045em;display:flex;flex-direction:column;color:#ECEAE5"><span>M<span style="color:#0A0A0B">Y</span></span><span>ND</span></div></div><span style="font-size:12px;color:#969BA1">Icona iOS · Metallo</span></div>
+      <div style="height:220px;border-radius:22px;background:#15171A;border:1px solid #2A2D31;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px"><span style="font-weight:600;font-size:84px;line-height:1;letter-spacing:-.04em;background:linear-gradient(170deg,#F4F3F0 0%,#9A9CA1 45%,#E2E2E0 60%,#6E7075 100%);-webkit-background-clip:text;background-clip:text;color:transparent">Y</span><span style="font-size:12px;color:#969BA1">Simbolo / favicon</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:8px 32px">
+      <sc-for list="{{ logoRules }}" as="r" hint-placeholder-count="6">
+        <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #1F2226;font-size:15px;line-height:1.5"><span style="color:{{ r.c }};flex:none;width:18px">{{ r.s }}</span><span style="color:#C3C7CC">{{ r.t }}</span></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">03</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Colori · Lime su Grafite</h2></div>
+    <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="4">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <span style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#969BA1">{{ g.title }}</span>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+          <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="5">
+            <div style="border-radius:18px;overflow:hidden;border:1px solid #2A2D31;background:#15171A">
+              <div style="display:grid;grid-template-columns:1fr 1fr;height:64px"><span style="background:{{ c.d }}"></span><span style="background:{{ c.l }}"></span></div>
+              <div style="padding:12px 14px;display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:14px;font-weight:600">{{ c.n }}</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#969BA1">--{{ c.t }}</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#C3C7CC">{{ c.d }} · {{ c.l }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+    <span style="font-size:13px;color:#62676D">Ogni campione: a sinistra tema scuro, a destra tema chiaro. Il lime pieno (#C8F25A) si usa come sfondo dei pulsanti in entrambi i temi, con testo #0A0B0C; sul chiaro, per testi e anelli si usa la variante scura.</span>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">04</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Tipografia · SF Pro (sistema)</h2></div>
+    <span style="font-family:'Geist Mono',monospace;font-size:13px;color:#969BA1">font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif · numeri: font-variant-numeric: tabular-nums</span>
+    <div style="display:flex;flex-direction:column">
+      <sc-for list="{{ type }}" as="t" hint-placeholder-count="9">
+        <div style="display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:20px;align-items:baseline;padding:14px 0;border-bottom:1px solid #1F2226">
+          <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:600">{{ t.n }}</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#969BA1">{{ t.spec }}</span></div>
+          <span style="font-size:{{ t.px }};font-weight:{{ t.w }};letter-spacing:{{ t.ls }};line-height:1.1;text-transform:{{ t.tt }};font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere">{{ t.s }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">05</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Token</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px">
+      <sc-for list="{{ tokens }}" as="g" hint-placeholder-count="4">
+        <div style="border-radius:22px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);box-shadow:inset 1px 1px 0 rgba(255,255,255,.14);padding:20px;display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:16px;font-weight:600;padding-bottom:8px">{{ g.title }}</span>
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px"><span style="font-family:'Geist Mono',monospace;color:#C3C7CC">{{ r.k }}</span><span style="font-family:'Geist Mono',monospace;color:#969BA1;text-align:right">{{ r.v }}</span></div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">06</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Materiale · Liquid Glass</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;padding:32px;border-radius:30px;background:radial-gradient(55% 60% at 10% 20%,rgba(200,242,90,.12),transparent 70%),radial-gradient(60% 60% at 95% 80%,rgba(130,150,180,.14),transparent 70%),#0A0B0C;border:1px solid #2A2D31">
+      <div style="border-radius:28px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);box-shadow:inset 1px 1px 0 rgba(255,255,255,.22),inset -1px -1px 0 rgba(255,255,255,.05),0 8px 24px rgba(0,0,0,.25);padding:22px;display:flex;flex-direction:column;gap:6px"><span style="font-size:16px;font-weight:600">Vetro contenuto</span><span style="font-size:13px;line-height:1.5;color:#969BA1">Card, campi, chip. Nessuna sfocatura. Bordo speculare di 1 px.</span></div>
+      <div style="border-radius:28px;background:rgba(28,31,35,.55);backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);border:1px solid rgba(255,255,255,.12);box-shadow:inset 1px 1px 0 rgba(255,255,255,.22),0 16px 40px rgba(0,0,0,.55);padding:22px;display:flex;flex-direction:column;gap:6px"><span style="font-size:16px;font-weight:600">Vetro fluttuante</span><span style="font-size:13px;line-height:1.5;color:#969BA1">Barra in basso, menu, fogli, finestre. Sfocatura 18 px, solo qui.</span></div>
+      <div style="display:flex;flex-direction:column;gap:12px;justify-content:center">
+        <span style="height:52px;border-radius:999px;background:linear-gradient(180deg,#D9F88A 0%,#C8F25A 55%,#B5E33E 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 0 24px rgba(200,242,90,.3);color:#0A0B0C;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600">Pulsante principale</span>
+        <span style="height:52px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:inset 1px 1px 0 rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500">Pulsante secondario</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">07</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Componenti</h2></div>
+    <div style="display:flex;flex-direction:column">
+      <sc-for list="{{ components }}" as="c" hint-placeholder-count="10">
+        <div style="display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:20px;padding:14px 0;border-bottom:1px solid #1F2226;font-size:15px;line-height:1.5"><span style="font-weight:600">{{ c.n }}</span><span style="color:#C3C7CC">{{ c.d }}</span></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">08</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Tono di voce</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px">
+      <sc-for list="{{ voice }}" as="v" hint-placeholder-count="4">
+        <div style="border-radius:22px;background:#15171A;border:1px solid #2A2D31;padding:20px;display:flex;flex-direction:column;gap:10px">
+          <span style="font-size:14px;color:#969BA1;text-decoration:line-through">{{ v.no }}</span>
+          <span style="font-size:17px;font-weight:600">{{ v.si }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;align-items:baseline;gap:16px;border-bottom:1px solid #2A2D31;padding-bottom:16px"><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">09</span><h2 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-.03em">Codice · variabili CSS + Tailwind</h2></div>
+    <pre style="margin:0;padding:24px;border-radius:22px;background:#070708;border:1px solid #1C1C1E;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.65;color:#C3C7CC;overflow:auto;white-space:pre">{{ css }}</pre>
+    <pre style="margin:0;padding:24px;border-radius:22px;background:#070708;border:1px solid #1C1C1E;font-family:'Geist Mono',monospace;font-size:12.5px;line-height:1.65;color:#C3C7CC;overflow:auto;white-space:pre">{{ tw }}</pre>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  hex(L, C, H) {
+    const h = H * Math.PI / 180, a = C * Math.cos(h), b = C * Math.sin(h);
+    const l = (L + .3963377774 * a + .2158037573 * b) ** 3, m = (L - .1055613458 * a - .0638541728 * b) ** 3, s = (L - .0894841775 * a - 1.291485548 * b) ** 3;
+    const rgb = [4.0767416621 * l - 3.3077115913 * m + .2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s, -.0041960863 * l - .7034186147 * m + 1.707614701 * s];
+    return '#' + rgb.map(x => { x = x <= .0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0), 1 / 2.4) - .055; return Math.round(Math.min(1, Math.max(0, x)) * 255).toString(16).padStart(2, '0'); }).join('').toUpperCase();
+  }
+  renderVals() {
+    const C = (n, t, d, l) => ({ n, t, d, l });
+    const areas = [['Scuola', 'area-scuola', 252], ['Studio', 'area-studio', 292], ['Sport', 'area-sport', 178], ['Progetto', 'area-progetto', 78], ['Recupero', 'area-recupero', 142], ['Vita', 'area-vita', 352], ['Viaggio', 'area-viaggio', 222], ['Pasto', 'area-pasto', 48], ['Sonno', 'area-sonno', 272], ['Extra', 'area-extra', 22]].map(([n, t, h]) => C(n, t, this.hex(.74, .085, h), this.hex(.5, .085, h)));
+    const colorGroups = [
+      { title: 'Brand', items: [C('Lime · firma', 'brand', '#C8F25A', '#4A6B00'), C('Lime · anelli', 'brand-ring', '#C8F25A', '#5C8500'), C('Testo su lime', 'on-brand', '#0A0B0C', '#0A0B0C'), C('Acciaio · Y', 'steel', '#B6B9BE', '#4A4D52'), C('Accento titanio', 'accent', '#C9CDD2', '#3F454C')] },
+      { title: 'Neutri', items: [C('Sfondo', 'bg', '#0A0B0C', '#F1F2F3'), C('Superficie', 'surface', '#15171A', '#FFFFFF'), C('Bordo', 'border', '#2A2D31', '#DDE0E3'), C('Testo', 'text', '#ECEEF0', '#0D0F11'), C('Testo secondario', 'text-muted', '#969BA1', '#62676D'), C('Testo terziario', 'text-subtle', '#62676D', '#8A9097')] },
+      { title: 'Stati', items: [C('Successo', 'success', '#6FD3C4', '#0E6E63'), C('Attenzione', 'warning', '#E0B055', '#8F5F00'), C('Errore', 'danger', '#E8685B', '#B83A2E')] },
+      { title: 'Aree della giornata e materie', items: areas }
+    ];
+    const type = [
+      ['Display', '52 / 1.0 · 700 · −0.05em', 52, 700, '-.05em', 'none', 'Make Your Next'], ['Titolo 1', '44 / 1.0 · 700 · −0.045em', 44, 700, '-.045em', 'none', 'Bentornato.'], ['Titolo 2', '34 / 1.1 · 700 · −0.035em', 34, 700, '-.035em', 'none', 'Buongiorno, Luca.'], ['Titolo 3', '22 / 1.25 · 600 · −0.02em', 22, 600, '-.02em', 'none', 'Missione di domani'], ['Testo', '17 / 1.5 · 400', 17, 400, '0', 'none', 'Il sonno è performance.'], ['Piccolo', '15 / 1.45 · 400', 15, 400, '0', 'none', 'Dopo: Palestra alle 18:00'], ['Didascalia', '13 / 1.4 · 400', 13, 400, '0', 'none', 'media della settimana 71'], ['Etichetta', '12 / 1.3 · 500 · +0.08em · MAIUSC.', 12, 500, '.08em', 'uppercase', 'Adesso · 16:30'], ['Numero', '76 / 0.9 · 300 · −0.04em · tabular', 76, 300, '-.04em', 'none', '49:12']
+    ].map(([n, spec, px, w, ls, tt, s]) => ({ n, spec, px: px + 'px', w, ls, tt, s }));
+    const R = rows => rows.map(([k, v]) => ({ k, v }));
+    const tokens = [
+      { title: 'Spazi (base 4)', rows: R([['space-1', '4px'], ['space-2', '8px'], ['space-3', '12px'], ['space-4', '16px'], ['space-5', '20px'], ['space-6', '24px'], ['space-8', '32px'], ['space-10', '40px'], ['space-14', '56px']]) },
+      { title: 'Raggi', rows: R([['radius-sm', '8px · spunte'], ['radius-md', '16px · campi'], ['radius-lg', '18px · righe timeline'], ['radius-xl', '28px · card'], ['radius-2xl', '40px · fogli'], ['radius-full', '999px · pulsanti, chip, barra']]) },
+      { title: 'Ombre e vetro', rows: R([['glass', 'rgba(255,255,255,.055)'], ['glass-edge', 'rgba(255,255,255,.12)'], ['glass-float', 'rgba(28,31,35,.55) + blur 18px'], ['shadow-spec', 'inset 1px 1px 0 rgba(255,255,255,.22)'], ['shadow-float', '0 16px 40px rgba(0,0,0,.55)'], ['glow-brand', '0 0 24px rgba(200,242,90,.30)']]) },
+      { title: 'Movimento', rows: R([['dur-fast', '150ms · tocchi, dissolvenze'], ['dur-base', '250ms · lente, fogli'], ['dur-slow', '600ms · riflesso Y, anello'], ['ease-out', 'cubic-bezier(.2,.8,.2,1)'], ['ease-spring', 'cubic-bezier(.3,1.3,.5,1)'], ['reduce-motion', 'solo dissolvenze, 0 spostamenti']]) },
+      { title: 'Accessibilità', rows: R([['touch-min', '44 × 44px'], ['contrasto testo', '≥ 4.5 : 1'], ['contrasto grafici', '≥ 3 : 1'], ['reduce-transparency', 'vetro → superficie piena'], ['focus', 'bordo lime 1.5px + alone 4px']]) }
+    ];
+    const css = [':root { /* tema scuro (predefinito) */', ...colorGroups.flatMap(g => g.items.map(c => `  --${c.t}: ${c.d};`)), '  --glass: rgba(255,255,255,.055);', '  --glass-edge: rgba(255,255,255,.12);', '  --glass-float: rgba(28,31,35,.55);', '  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.05);', '  --shadow-float: 0 16px 40px rgba(0,0,0,.55);', '  --ease-out: cubic-bezier(.2,.8,.2,1);', '}', '', '[data-theme="light"] {', ...colorGroups.flatMap(g => g.items.map(c => `  --${c.t}: ${c.l};`)), '  --glass: rgba(255,255,255,.55);', '  --glass-edge: rgba(255,255,255,.85);', '  --glass-float: rgba(255,255,255,.6);', '  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.95);', '  --shadow-float: 0 16px 40px rgba(20,30,45,.16);', '}', '', '@media (prefers-reduced-transparency: reduce) { :root { --glass-float: var(--surface); } }'].join('\n');
+    const keys = colorGroups.flatMap(g => g.items.map(c => c.t));
+    const tw = ['// tailwind.config.ts', 'export default {', '  darkMode: ["class", \'[data-theme="dark"]\'],', '  theme: {', '    extend: {', '      colors: {', ...keys.map(k => `        "${k}": "var(--${k})",`), '      },', '      borderRadius: { sm: "8px", md: "16px", lg: "18px", xl: "28px", "2xl": "40px" },', '      fontFamily: { sans: ["-apple-system", "BlinkMacSystemFont", "SF Pro Text", "system-ui", "sans-serif"] },', '      transitionTimingFunction: { out: "cubic-bezier(.2,.8,.2,1)", spring: "cubic-bezier(.3,1.3,.5,1)" },', '      transitionDuration: { fast: "150ms", base: "250ms", slow: "600ms" },', '      boxShadow: { spec: "var(--shadow-spec)", float: "var(--shadow-float)", glow: "0 0 24px rgba(200,242,90,.30)" },', '    },', '  },', '};'].join('\n');
+    return {
+      identity: [
+        { k: 'Nome', v: 'MYND', d: 'Sempre maiuscolo. Si pronuncia “mind”. Acronimo di Make Your Next Decision.' },
+        { k: 'Slogan', v: 'Make Your Next Decision.', d: 'In inglese, sempre con il punto finale. L’app è in italiano.' },
+        { k: 'Sezione premium', v: 'Performance', d: 'Sostituisce “Mindset”. Schede: Oggi · Focus · Piano · Andamento · Coach.' },
+        { k: 'Personalità', v: 'Lucido, ambizioso, calmo', d: 'Uno strumento di precisione, mai un quaderno. Lusso come essenzialità.' },
+        { k: 'Interfaccia', v: 'Liquid Glass', d: 'Vetro con bordo speculare; il lime è la spia accesa sull’elemento attivo.' },
+        { k: 'Accesso', v: 'Il manifesto', d: 'Titolo enorme con il punto finale, campi sottolineati, un solo pulsante lime.' }
+      ],
+      logoRules: [
+        { s: '✓', c: '#C8F25A', t: 'Solo la Y è in acciaio; M, N, D hanno sempre il colore del testo.' },
+        { s: '✓', c: '#C8F25A', t: 'Spazio di rispetto attorno al logo: almeno l’altezza della N.' },
+        { s: '✓', c: '#C8F25A', t: 'Misura minima: verticale 24 px, orizzontale 64 px; sotto si usa la Y.' },
+        { s: '✓', c: '#C8F25A', t: 'Sotto i 40 px la Y diventa acciaio pieno (#B6B9BE / #4A4D52), senza sfumatura.' },
+        { s: '✕', c: '#E8685B', t: 'Mai il logo in lime: il lime è dell’interfaccia, non del marchio.' },
+        { s: '✕', c: '#E8685B', t: 'Mai deformare, ruotare, ombreggiare o mettere su foto molto contrastate.' }
+      ],
+      colorGroups, type, tokens, css, tw,
+      components: [
+        { n: 'Pulsante principale', d: 'Pillola alta 54–56 px, lime con riflesso e alone, testo #0A0B0C a 17/600. Un solo pulsante principale per schermata.' },
+        { n: 'Pulsante secondario', d: 'Pillola in vetro contenuto con bordo speculare. Il pulsante “testo” è senza sfondo, a 15–16 px.' },
+        { n: 'Campo', d: 'Nell’accesso: etichetta in maiuscolo e riga sottile, che diventa lime quando il campo è attivo. Nell’app: vetro contenuto, alto 52 px, raggio 16.' },
+        { n: 'Card', d: 'Vetro contenuto, raggio 28, padding 20. La card “Adesso” ha un riflesso lime in alto a sinistra.' },
+        { n: 'Anello di progresso', d: 'Tratto 7 px con estremità arrotondate e binario al 9%. Numero a 34/300, tabular. Alone lime solo nel tema scuro.' },
+        { n: 'Chip', d: 'Pillola alta 36 px con pallino del colore dell’area; quando è selezionato diventa lime pieno con testo nero.' },
+        { n: 'Scala 1–5', d: 'Cinque pillole alte 40–44 px dentro un incavo; il valore scelto diventa la “lente” di vetro.' },
+        { n: 'Timeline', d: 'Righe in vetro alte 52 px, orario a sinistra (tabular), pallino luminoso del colore dell’area.' },
+        { n: 'Menu e fogli', d: 'Vetro fluttuante, raggio 24–40, voci alte 44 px; le azioni distruttive in rosso (danger).' },
+        { n: 'Barra in basso', d: 'Capsula fluttuante alta 68 px, a 14 px dai bordi; la scheda attiva è una lente che scivola in 250 ms. Icone a linea Lucide da 22 px, tratto 1.75.' },
+        { n: 'Grafici', d: 'Barre arrotondate in grigio #3A3F45, il valore di oggi in lime. Ciambella nei colori delle aree, separatori da 2 px.' },
+        { n: 'Stati vuoti ed errori', d: 'Un titolo breve con il punto finale, una riga di spiegazione e una sola azione. Mai rosso per i risultati personali.' }
+      ],
+      voice: [
+        { no: 'Hai fallito l’obiettivo.', si: 'Sotto l’obiettivo di 40 minuti. Domani si recupera.' },
+        { no: 'Errore 500. Riprova.', si: 'Non siamo riusciti a salvare. Riprova tra un attimo.' },
+        { no: 'Non hai studiato oggi!', si: 'Giornata leggera. La versione minima vale comunque.' },
+        { no: 'Nessun dato disponibile.', si: 'Ancora niente qui. La prima sessione lo riempie.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

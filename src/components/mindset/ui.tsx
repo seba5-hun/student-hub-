@@ -60,15 +60,13 @@ export function Scale({ label, value, onChange, t, low, high }: {
   return (
     <div className="flex items-center gap-3">
       <span className={`w-20 text-sm ${t.text}`}>{label}</span>
-      <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
+      <div className="flex gap-1 p-1 rounded-full" style={{ background: 'var(--glass-well)' }} role="radiogroup" aria-label={label}>
         {[1, 2, 3, 4, 5].map(n => (
           <button key={n} type="button" role="radio" aria-checked={value === n} aria-label={`${label} ${n}`}
             onClick={() => onChange(value === n ? undefined : n)}
-            className={`w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
-              value === n
-                ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/30 scale-105'
-                : `${t.soft} ${t.sub} ${t.hover}`
-            }`}>
+            className={`w-10 h-10 rounded-full text-base font-semibold tabular transition-all duration-150 ${
+              value === n ? 'glass-lens' : t.text
+            }`} style={value === n ? { color: 'var(--brand-ring)' } : undefined}>
             {n}
           </button>
         ))}
@@ -78,21 +76,23 @@ export function Scale({ label, value, onChange, t, low, high }: {
   );
 }
 
-// Score ring 0-100.
-export function ScoreRing({ score, size = 88, t }: { score: number | null; size?: number; t: Theme }) {
-  const r = size / 2 - 7;
+// Score ring 0-100: lime arc on a 9% track, thin number in the middle, fills in 900ms.
+export function ScoreRing({ score, size = 88, t, sub }: { score: number | null; size?: number; t: Theme; sub?: string }) {
+  const r = size * 0.43;
   const c = 2 * Math.PI * r;
   const v = score ?? 0;
-  const color = score === null ? (t.dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)') : v >= 75 ? '#34d399' : v >= 50 ? '#818cf8' : '#f59e0b';
+  const [shown, setShown] = useState(0);
+  useEffect(() => { const id = requestAnimationFrame(() => setShown(v)); return () => cancelAnimationFrame(id); }, [v]);
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+    <div className="relative flex-shrink-0 rounded-full" style={{ width: size, height: size, boxShadow: score !== null ? 'var(--glow-ring)' : undefined }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={7} className={t.dark ? 'stroke-white/10' : 'stroke-black/10'} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={7} strokeLinecap="round" stroke={color}
-          strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.3s' }} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={7} stroke={t.dark ? 'rgba(255,255,255,.09)' : 'rgba(0,0,0,.07)'} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={7} strokeLinecap="round" stroke="var(--brand-ring)"
+          strokeDasharray={c} strokeDashoffset={c * (1 - shown / 100)} style={{ transition: 'stroke-dashoffset 900ms var(--ease-out)', opacity: score === null ? 0 : 1 }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className={`text-2xl font-bold tabular-nums ${t.text}`}>{score ?? '–'}</span>
+        <span className={`font-light tabular leading-none ${t.text}`} style={{ fontSize: size * 0.34, letterSpacing: '-0.04em' }}>{score ?? '–'}</span>
+        {sub && <span className={`text-[10px] mt-0.5 ${t.sub}`}>{sub}</span>}
       </div>
     </div>
   );
@@ -103,7 +103,7 @@ export function Pill({ active, onClick, children, t, className = '' }: {
 }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active}
-      className={`px-3 py-1.5 rounded-full text-sm transition-all ${active ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : `${t.soft} ${t.sub} ${t.hover}`} ${className}`}>
+      className={`px-3 py-1.5 rounded-full text-sm transition-all ${active ? 'bg-[#C8F25A] text-[#0A0B0C] font-semibold' : `glass-card !rounded-full ${t.text}`} ${className}`}>
       {children}
     </button>
   );

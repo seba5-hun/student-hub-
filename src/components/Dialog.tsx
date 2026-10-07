@@ -86,7 +86,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       {current && o && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => close(false)}>
           <div role="dialog" aria-modal="true" aria-label={o.title} onClick={e => e.stopPropagation()}
-            className={`w-full max-w-sm p-6 animate-scale-in ${dark ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+            className={`w-full max-w-sm p-6 animate-scale-in ${dark ? 'glass-float' : 'glass-card-light'}`}>
             <h2 className={`text-lg font-semibold ${dark ? 'text-white' : 'text-gray-900'}`}>{o.title}</h2>
             {o.message && <p className={`mt-2 text-sm whitespace-pre-line ${dark ? 'text-white/70' : 'text-gray-600'}`}>{o.message}</p>}
             {current.kind === 'prompt' && (

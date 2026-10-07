@@ -9,7 +9,7 @@ import { Task, Grade, StudySession, getSubjectAverages, createId, toDateKey } fr
 export interface StudyInfo { tasks: Task[]; grades: Grade[]; sessions: StudySession[]; subjects: string[]; weeklyGoal: number }
 
 
-export const COACH_SYSTEM = `Sei il Mindset Coach di Sebastiano, uno studente-atleta (scuola, wingfoil agonistico, palestra, progetti personali).
+export const COACH_SYSTEM = `Sei il Coach di MYND (sezione Performance) di Sebastiano, uno studente-atleta (scuola, wingfoil agonistico, palestra, progetti personali).
 Parli in italiano, in modo diretto, concreto e breve. Usi SEMPRE i suoi dati reali (te li do sotto): orari, impegni, verifiche, voti, sonno, telefono, imprevisti.
 
 Regole:

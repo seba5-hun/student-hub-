@@ -19,7 +19,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
         <div style={{ maxWidth: 420, textAlign: 'center' }}>
           <h1 style={{ fontSize: 20, marginBottom: 12 }}>Qualcosa è andato storto</h1>
           <p style={{ fontSize: 14, opacity: 0.8, marginBottom: 16, wordBreak: 'break-word' }}>{this.state.error.message}</p>
-          <button onClick={() => window.location.reload()} style={{ padding: '8px 16px', borderRadius: 8, border: 0, background: '#6366f1', color: '#fff' }}>
+          <button onClick={() => window.location.reload()} style={{ padding: '8px 16px', borderRadius: 8, border: 0, background: '#C8F25A', color: '#0A0B0C' }}>
             Ricarica
           </button>
         </div>

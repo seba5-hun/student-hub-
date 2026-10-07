@@ -96,7 +96,7 @@ export default function ModelPicker({ darkMode, onChange, onOpenSettings, compac
     onChange();
   };
 
-  const panel = darkMode ? 'bg-[#1b1640] border-white/10 text-white' : 'bg-white border-black/10 text-gray-800';
+  const panel = darkMode ? 'glass-float text-white' : 'glass-float text-gray-800';
   const muted = darkMode ? 'text-white/55' : 'text-gray-500';
   const row = (o: Option) => (
     <div key={o.key} className="group relative">

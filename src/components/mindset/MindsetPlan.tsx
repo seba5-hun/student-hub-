@@ -137,9 +137,9 @@ export default function MindsetPlan({ m, update, t }: Props) {
       <Section title="Profilo" t={t}>
         <Field label="Il tuo nome" t={t}><input value={p.name} onChange={e => setProfile({ name: e.target.value })} className={`${t.input} w-full py-1.5`} /></Field>
         <button onClick={async () => {
-          const ok = await dialog.confirm({ title: 'Azzerare Mindset?', message: 'Cancelli diario, sonno, focus e impostazioni di Mindset. Le altre sezioni non cambiano.', confirmLabel: 'Azzera', danger: true });
+          const ok = await dialog.confirm({ title: 'Azzerare Performance?', message: 'Cancelli diario, sonno, focus e impostazioni di Performance. Le altre sezioni non cambiano.', confirmLabel: 'Azzera', danger: true });
           if (ok) update(() => defaultMindset());
-        }} className="mt-4 text-sm text-red-400 flex items-center gap-1.5"><RotateCcw className="w-4 h-4" /> Azzera Mindset</button>
+        }} className="mt-4 text-sm text-red-400 flex items-center gap-1.5"><RotateCcw className="w-4 h-4" /> Azzera Performance</button>
       </Section>
     </div>
   );
@@ -253,7 +253,7 @@ function ShortcutsGuide({ t }: { t: Theme }) {
       {open && (
         <div className={`mt-4 space-y-5 text-sm ${t.text}`}>
           <div>
-            <p className="font-semibold mb-1">0. Aggiungi Student Hub alla schermata Home</p>
+            <p className="font-semibold mb-1">0. Aggiungi MYND alla schermata Home</p>
             <p className={t.sub}>In Safari apri il sito › tasto Condividi › "Aggiungi alla schermata Home". Così si apre come un'app.</p>
           </div>
           <div>

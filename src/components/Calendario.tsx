@@ -79,8 +79,8 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className={`text-2xl font-bold ${textColor}`}>📅 Calendario</h2>
-        <button onClick={() => openQuickAdd()} className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white hover:scale-110 transition-transform shadow-lg">
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Calendario.</h2>
+        <button onClick={() => openQuickAdd()} className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[var(--on-brand)] hover:scale-110 transition-transform shadow-lg">
           <Plus className="w-5 h-5" />
         </button>
       </div>
@@ -178,8 +178,8 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
                 <input type="time" value={quickAddTime} onChange={e => setQuickAddTime(e.target.value)} aria-label="Orario (opzionale)" title="Orario (opzionale)" className={`${darkMode ? 'input-glass' : 'input-light'} w-32`} />
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setQuickAddType('scolastico')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'scolastico' ? 'bg-indigo-500 text-white' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>📚 Scolastico</button>
-                <button onClick={() => setQuickAddType('personale')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'personale' ? 'bg-indigo-500 text-white' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>👤 Personale</button>
+                <button onClick={() => setQuickAddType('scolastico')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'scolastico' ? 'bg-indigo-500 text-[var(--on-brand)]' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>📚 Scolastico</button>
+                <button onClick={() => setQuickAddType('personale')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'personale' ? 'bg-indigo-500 text-[var(--on-brand)]' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>👤 Personale</button>
               </div>
               <div className="flex gap-2">
                 {IMPORTANCE_CONFIG.map(imp => (
@@ -190,7 +190,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setShowQuickAdd(false)} className={`flex-1 py-2 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}>Annulla</button>
-                <button onClick={handleQuickAdd} disabled={!quickAddTitle.trim()} className="flex-1 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white disabled:opacity-50">Aggiungi</button>
+                <button onClick={handleQuickAdd} disabled={!quickAddTitle.trim()} className="flex-1 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)] disabled:opacity-50">Aggiungi</button>
               </div>
             </div>
           </div>

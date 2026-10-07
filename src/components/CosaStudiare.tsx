@@ -81,7 +81,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
 
   return (
     <div className="space-y-6">
-      <h2 className={`text-2xl font-bold ${textColor}`}>🧠 Cosa studiare</h2>
+      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Cosa studiare.</h2>
 
       {focusOfTheDay && (
         <div className={`${cardClass} p-6 border-l-4 border-l-indigo-500`}>

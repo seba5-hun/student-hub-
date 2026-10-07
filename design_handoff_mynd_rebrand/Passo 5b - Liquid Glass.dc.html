@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#0A0B0C;color:#ECEEF0;font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;-webkit-font-smoothing:antialiased}a{color:#C8F25A}a:hover{color:#DDF78F}</style>
+</helmet>
+<div style="max-width:1320px;margin:0 auto;padding:64px 32px 96px;display:flex;flex-direction:column;gap:48px">
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <div style="font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#969BA1">Passo 5 di 8 — Interfaccia · Luce → Liquid Glass</div>
+    <h1 style="margin:0;font-weight:600;font-size:clamp(34px,4.4vw,56px);letter-spacing:-.035em;line-height:1.02;text-wrap:pretty">Luce, diventata vetro liquido.</h1>
+    <p style="margin:0;max-width:760px;color:#969BA1;font-size:16px;line-height:1.55;text-wrap:pretty">Superfici in vetro con un bordo che cattura la luce in alto a sinistra. Barra in basso e menu fluttuano sopra i contenuti e li sfocano. La scheda attiva è una “lente” di vetro, il lime resta la spia accesa. La sfocatura è solo sugli elementi che galleggiano (barra, menu, finestre), così l’app resta veloce. Con “riduci trasparenza” diventano superfici piene.</p>
+    <div style="font-family:'Geist Mono',monospace;font-size:12px;color:#62676D">Scelte fissate · MYND · Make Your Next Decision. · Logo Y d’acciaio · Icona Metallo · Lime su Grafite · SF Pro · Interfaccia Luce (liquid glass) · Schede: Oggi, Focus, Piano, Andamento, Coach</div>
+  </header>
+
+  <div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center;align-items:flex-start">
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
+        <div style="font-family:'Geist Mono',monospace;font-size:12px;color:#969BA1">{{ t.label }}</div>
+        <div style="width:390px;max-width:100%;height:844px;border-radius:52px;overflow:hidden;position:relative;background:{{ t.bg }};border:1px solid #2A2D31;color:{{ t.text }}">
+          <div style="position:absolute;inset:0;background:{{ t.ambient }}"></div>
+          <div style="position:relative;padding:58px 18px 0;display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-weight:600;font-size:17px;letter-spacing:-.03em">M<span style="color:{{ t.steel }}">Y</span>ND</div>
+              <div style="width:36px;height:36px;border-radius:50%;background:{{ t.glass }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">L</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 2px 4px">
+              <span style="font-size:13px;color:{{ t.muted }}">Martedì 7 ottobre</span>
+              <span style="font-size:34px;font-weight:700;letter-spacing:-.035em;line-height:1.1">Buongiorno, Luca.</span>
+            </div>
+
+            <div style="border-radius:30px;background:{{ t.heroGlass }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};padding:20px;display:flex;align-items:center;gap:18px">
+              <div style="position:relative;width:100px;height:100px;flex:none;border-radius:50%;box-shadow:{{ t.glow }}">
+                <svg width="100" height="100" viewBox="0 0 100 100" style="transform:rotate(-90deg)"><circle cx="50" cy="50" r="43" fill="none" stroke="{{ t.track }}" stroke-width="7"></circle><circle cx="50" cy="50" r="43" fill="none" stroke="{{ t.ring }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="210.7 270.2"></circle></svg>
+                <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:34px;font-weight:300;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums">78</span><span style="font-size:10px;color:{{ t.muted }}">media 71</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:{{ t.muted }}">Adesso · 16:30</span>
+                <span style="font-size:19px;font-weight:600;letter-spacing:-.02em;line-height:1.2">Fisica — ripasso per la verifica</span>
+                <span style="font-size:13px;color:{{ t.muted }}">Dopo: Palestra 18:00</span>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px">
+              <span style="flex:1;height:50px;border-radius:999px;background:{{ t.primary }};color:#0A0B0C;border:1px solid rgba(255,255,255,.5);box-shadow:{{ t.primaryShadow }};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600">Inizia focus</span>
+              <span style="flex:1;height:50px;border-radius:999px;background:{{ t.glass }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:500">Imprevisto</span>
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ t.chips }}" as="c" hint-placeholder-count="3">
+                <span style="height:36px;padding:0 14px;border-radius:999px;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:{{ c.w }}"><span style="width:8px;height:8px;border-radius:50%;background:{{ c.dot }}"></span>{{ c.l }}</span>
+              </sc-for>
+            </div>
+
+            <div style="border-radius:26px;background:{{ t.glass }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};padding:14px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;font-size:14px;padding:0 4px"><span>Energia</span><span style="color:{{ t.muted }}">4 di 5</span></div>
+              <div style="display:flex;gap:6px;padding:4px;border-radius:999px;background:{{ t.well }}">
+                <sc-for list="{{ t.scale }}" as="s" hint-placeholder-count="5"><span style="flex:1;height:40px;border-radius:999px;background:{{ s.bg }};box-shadow:{{ s.sh }};color:{{ s.c }};display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums">{{ s.n }}</span></sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ t.tl }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;gap:12px;align-items:center">
+                  <span style="width:42px;font-size:13px;color:{{ t.muted }};font-variant-numeric:tabular-nums">{{ r.t }}</span>
+                  <div style="flex:1;height:52px;border-radius:18px;background:{{ t.glass }};border:1px solid {{ t.edge }};box-shadow:{{ t.spec }};display:flex;align-items:center;gap:12px;padding:0 14px">
+                    <span style="width:10px;height:10px;border-radius:50%;background:{{ r.c }};box-shadow:0 0 10px {{ r.c }}"></span>
+                    <span style="flex:1;font-size:15px">{{ r.a }}</span>
+                    <span style="font-size:13px;color:{{ t.muted }}">{{ r.d }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="position:absolute;right:18px;bottom:110px;width:220px;border-radius:24px;background:{{ t.float }};backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);border:1px solid {{ t.edge }};box-shadow:{{ t.floatShadow }};padding:6px;display:flex;flex-direction:column">
+            <div style="height:44px;border-radius:18px;background:{{ t.lens }};display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:15px"><span>Trasforma in studio</span><span style="color:{{ t.ring }}">✓</span></div>
+            <div style="height:44px;display:flex;align-items:center;padding:0 12px;font-size:15px">Trasforma in recupero</div>
+            <div style="height:44px;display:flex;align-items:center;padding:0 12px;font-size:15px;color:{{ t.err }}">Elimina blocco</div>
+          </div>
+
+          <div style="position:absolute;left:14px;right:14px;bottom:24px;height:68px;border-radius:999px;background:{{ t.float }};backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);border:1px solid {{ t.edge }};box-shadow:{{ t.floatShadow }};display:flex;align-items:center;justify-content:space-between;padding:0 6px">
+            <sc-for list="{{ t.nav }}" as="n" hint-placeholder-count="5">
+              <div style="flex:1;height:56px;border-radius:999px;background:{{ n.bg }};box-shadow:{{ n.sh }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:{{ n.c }}">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="{{ n.p }}"></path></svg>
+                <span style="font-size:10px;font-weight:600">{{ n.l }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px">
+    <sc-for list="{{ rules }}" as="r" hint-placeholder-count="4">
+      <div style="border-radius:24px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);box-shadow:inset 1px 1px 0 rgba(255,255,255,.18);padding:22px;display:flex;flex-direction:column;gap:8px">
+        <span style="font-size:15px;font-weight:600">{{ r.t }}</span>
+        <span style="font-size:14px;line-height:1.5;color:#969BA1">{{ r.d }}</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  hex(L, C, H) {
+    const h = H * Math.PI / 180, a = C * Math.cos(h), b = C * Math.sin(h);
+    const l = (L + .3963377774 * a + .2158037573 * b) ** 3, m = (L - .1055613458 * a - .0638541728 * b) ** 3, s = (L - .0894841775 * a - 1.291485548 * b) ** 3;
+    const rgb = [4.0767416621 * l - 3.3077115913 * m + .2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s, -.0041960863 * l - .7034186147 * m + 1.707614701 * s];
+    return '#' + rgb.map(x => { x = x <= .0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(x, 0), 1 / 2.4) - .055; return Math.round(Math.min(1, Math.max(0, x)) * 255).toString(16).padStart(2, '0'); }).join('');
+  }
+  renderVals() {
+    const P = ['M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z', 'M10 2h4M12 14l3-3M12 6a8 8 0 1 0 0 16a8 8 0 1 0 0-16z', 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M22 7l-8.5 8.5-5-5L2 17M16 7h6v6', 'M7.9 20A9 9 0 1 0 4 16.1L2 22z'];
+    const TABS = ['Oggi', 'Focus', 'Piano', 'Andamento', 'Coach'];
+    const mk = (k) => {
+      const D = k === 'd', A = h => this.hex(D ? .76 : .55, .1, h);
+      const t = D ? {
+        label: 'TEMA SCURO', bg: '#0A0B0C', text: '#ECEEF0', muted: '#969BA1', steel: '#B6B9BE', err: '#E8685B',
+        ambient: 'radial-gradient(55% 30% at 10% 22%,rgba(200,242,90,.13),transparent 70%),radial-gradient(60% 35% at 95% 70%,rgba(130,150,180,.14),transparent 70%)',
+        glass: 'rgba(255,255,255,.055)', heroGlass: 'linear-gradient(150deg,rgba(200,242,90,.10) 0%,rgba(255,255,255,.05) 45%,rgba(255,255,255,.035) 100%)', edge: 'rgba(255,255,255,.12)',
+        spec: 'inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.05), 0 8px 24px rgba(0,0,0,.25)',
+        ring: '#C8F25A', track: 'rgba(255,255,255,.09)', glow: '0 0 30px rgba(200,242,90,.22)',
+        primary: 'linear-gradient(180deg,#D9F88A 0%,#C8F25A 55%,#B5E33E 100%)', primaryShadow: 'inset 0 1px 0 rgba(255,255,255,.6), 0 0 24px rgba(200,242,90,.30)',
+        well: 'rgba(0,0,0,.25)', lens: 'rgba(255,255,255,.10)', float: 'rgba(28,31,35,.55)', floatShadow: 'inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.04), 0 16px 40px rgba(0,0,0,.55)'
+      } : {
+        label: 'TEMA CHIARO', bg: '#E9ECEF', text: '#0D0F11', muted: '#5A5F66', steel: '#4A4D52', err: '#B83A2E',
+        ambient: 'radial-gradient(55% 30% at 10% 22%,rgba(170,215,40,.28),transparent 70%),radial-gradient(60% 35% at 95% 70%,rgba(120,140,175,.24),transparent 70%)',
+        glass: 'rgba(255,255,255,.55)', heroGlass: 'linear-gradient(150deg,rgba(200,242,90,.35) 0%,rgba(255,255,255,.6) 50%,rgba(255,255,255,.5) 100%)', edge: 'rgba(255,255,255,.85)',
+        spec: 'inset 1px 1px 0 rgba(255,255,255,.95), inset -1px -1px 0 rgba(0,0,0,.03), 0 8px 24px rgba(20,30,45,.08)',
+        ring: '#5C8500', track: 'rgba(0,0,0,.07)', glow: 'none',
+        primary: 'linear-gradient(180deg,#D9F88A 0%,#C8F25A 55%,#B5E33E 100%)', primaryShadow: 'inset 0 1px 0 rgba(255,255,255,.7), 0 6px 18px rgba(120,160,0,.25)',
+        well: 'rgba(0,0,0,.05)', lens: 'rgba(0,0,0,.05)', float: 'rgba(255,255,255,.6)', floatShadow: 'inset 1px 1px 0 rgba(255,255,255,1), 0 16px 40px rgba(20,30,45,.16)'
+      };
+      const lensBg = D ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.9)', lensSh = D ? 'inset 1px 1px 0 rgba(255,255,255,.25), 0 2px 8px rgba(0,0,0,.3)' : 'inset 1px 1px 0 #fff, 0 2px 8px rgba(20,30,45,.12)';
+      return { ...t,
+        chips: [['Scuola', 252, true], ['Sport', 178, false], ['Progetto', 78, false]].map(([l, h, on]) => ({ l, dot: A(h), bg: on ? '#C8F25A' : t.glass, fg: on ? '#0A0B0C' : t.text, w: on ? 600 : 500 })),
+        scale: [1, 2, 3, 4, 5].map(n => ({ n, bg: n === 4 ? lensBg : 'transparent', sh: n === 4 ? lensSh : 'none', c: n === 4 ? t.ring : t.text })),
+        tl: [['15:00', 'Studio · Fisica', '90 min', 292], ['16:30', 'Pausa e pasto', '30 min', 48], ['18:00', 'Palestra', '75 min', 178], ['19:30', 'Progetto', '45 min', 78]].map(([t2, a, d, h]) => ({ t: t2, a, d, c: A(h) })),
+        nav: TABS.map((l, i) => ({ l, p: P[i], bg: i === 0 ? lensBg : 'transparent', sh: i === 0 ? lensSh : 'none', c: i === 0 ? t.ring : t.muted }))
+      };
+    };
+    return {
+      themes: [mk('d'), mk('l')],
+      rules: [
+        { t: 'Bordo speculare', d: 'Ogni superficie ha un filo di luce di 1 px in alto a sinistra e uno più debole in basso a destra: è questo che la fa sembrare vetro.' },
+        { t: 'Due livelli di vetro', d: 'Contenuti: vetro leggero senza sfocatura. Elementi che galleggiano (barra, menu, finestre): vetro sfocato a 18 px. Mai di più.' },
+        { t: 'La lente', d: 'La scheda o l’opzione attiva diventa una bolla di vetro in rilievo che scivola da una posizione all’altra in 250 ms.' },
+        { t: 'Accessibilità', d: '“Riduci trasparenza” trasforma il vetro in superfici piene; “riduci movimento” toglie lo scivolamento della lente. Testo sempre pieno, mai trasparente.' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

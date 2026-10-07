@@ -64,7 +64,7 @@ export default function WeekDistribution({ sessions, subjectDefs, darkMode, show
 
   return (
     <div className={`relative overflow-hidden rounded-2xl p-[1px] ${darkMode ? 'bg-gradient-to-br from-white/25 via-white/5 to-indigo-400/30' : 'bg-gradient-to-br from-indigo-200 via-white to-purple-200'}`}>
-      <div className={`relative rounded-2xl p-6 ${darkMode ? 'bg-[#1b1640]/80' : 'bg-white/90'}`}>
+      <div className={`relative rounded-2xl p-6 ${darkMode ? 'glass-float' : 'bg-white/90'}`}>
         {/* soft light behind the chart */}
         <div className="pointer-events-none absolute -top-24 -left-16 w-72 h-72 rounded-full bg-indigo-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 right-10 w-72 h-72 rounded-full bg-fuchsia-500/10 blur-3xl" />
@@ -92,7 +92,7 @@ export default function WeekDistribution({ sessions, subjectDefs, darkMode, show
             </div>
             <button onClick={onToggleStats} aria-expanded={showStats}
               className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-1.5 transition-all duration-300 ${showStats
-                ? 'bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-white shadow-lg shadow-indigo-500/30'
+                ? 'bg-gradient-to-r from-indigo-500 to-fuchsia-500 text-[var(--on-brand)] shadow-lg shadow-indigo-500/30'
                 : darkMode ? 'bg-white/10 text-white ring-1 ring-white/15 hover:bg-white/15' : 'bg-gray-900/5 text-gray-800 ring-1 ring-black/10 hover:bg-gray-900/10'}`}>
               <BarChart3 className="w-4 h-4" /> Statistiche
               <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showStats ? 'rotate-180' : ''}`} />
@@ -121,7 +121,7 @@ export default function WeekDistribution({ sessions, subjectDefs, darkMode, show
                       </linearGradient>
                     ))}
                     <filter id="wd-glow" x="-30%" y="-30%" width="160%" height="160%">
-                      <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor={darkMode ? '#000' : '#6366f1'} floodOpacity={darkMode ? 0.45 : 0.18} />
+                      <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor={darkMode ? '#000' : '#0D0F11'} floodOpacity={darkMode ? 0.45 : 0.18} />
                     </filter>
                   </defs>
                   {/* track */}
@@ -148,7 +148,7 @@ export default function WeekDistribution({ sessions, subjectDefs, darkMode, show
                 ) : (
                   <div key="total" className="animate-scale-in">
                     <p className={`text-xs font-semibold uppercase tracking-widest ${mutedColor}`}>Totale</p>
-                    <p className={`text-4xl font-bold tabular-nums mt-1 bg-clip-text text-transparent ${darkMode ? 'bg-gradient-to-br from-white to-indigo-200' : 'bg-gradient-to-br from-gray-900 to-indigo-600'}`}>
+                    <p className={`text-4xl font-bold tabular-nums mt-1 bg-clip-text text-transparent ${darkMode ? 'bg-gradient-to-br from-white to-[#B6B9BE]' : 'bg-gradient-to-br from-gray-900 to-[#4A4D52]'}`}>
                       {(total / 60).toFixed(1)}<span className="text-2xl"> h</span>
                     </p>
                     {change !== null ? (

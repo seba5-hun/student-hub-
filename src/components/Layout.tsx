@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { BookOpen, Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
+import Logo from './Logo';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export const SECTIONS = [
 // Only for the developer account (statistics of the whole site).
 const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Admin', icon: ShieldCheck };
 // Mindset: for now only on the developer account.
-const MINDSET_SECTION = { id: 'mindset', label: 'Mindset', icon: Compass };
+const MINDSET_SECTION = { id: 'mindset', label: 'Performance', icon: Compass };
 
 export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0 }: LayoutProps) {
   const dialog = useDialog();
@@ -47,7 +48,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'student-hub-backup.json';
+    a.download = 'mynd-backup.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -67,7 +68,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
           const result = ev.target?.result as string;
           const imported = parseImportedData(result);
           if (!imported) {
-            dialog.alert({ title: 'File non valido', message: 'Seleziona un backup esportato da Student Hub.' });
+            dialog.alert({ title: 'File non valido', message: 'Seleziona un backup esportato da MYND.' });
             return;
           }
           const ok = await dialog.confirm({
@@ -89,35 +90,30 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
   return (
     <div className={`min-h-screen ${darkMode ? 'gradient-bg mesh-gradient' : 'gradient-bg-light mesh-gradient-light'}`}>
-      <header className={`fixed top-0 left-0 right-0 z-50 ${darkMode ? 'bg-black/30' : 'bg-white/70'} backdrop-blur-xl border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
+      <header className="fixed top-0 left-0 right-0 z-50 glass-float !border-x-0 !border-t-0" style={{ borderRadius: 0 }}>
         <div className="flex items-center justify-between px-4 h-14">
           <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(true)} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
+            <button onClick={() => setSidebarOpen(true)} aria-label="Menu" className={`w-11 h-11 -ml-1.5 flex items-center justify-center rounded-full ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
               <span className="relative block">
                 <Menu className="w-5 h-5" />
                 {adminBadge > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500" />}
               </span>
             </button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                <BookOpen className="w-4 h-4 text-white" />
-              </div>
-              <span className={`font-bold text-lg hidden sm:block ${darkMode ? 'text-white' : 'text-gray-800'}`}>Student Hub</span>
-            </div>
+            <button onClick={() => onSectionChange('home')} aria-label="MYND, vai alla Home"><Logo size={17} /></button>
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={onToggleDarkMode} className={`p-2 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
+            <button onClick={onToggleDarkMode} aria-label={darkMode ? 'Tema chiaro' : 'Tema scuro'} className={`w-11 h-11 flex items-center justify-center rounded-full ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             <div className="relative">
-              <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+              <button onClick={() => setShowMenu(!showMenu)} aria-label="Account" className="w-9 h-9 rounded-full glass-card !rounded-full flex items-center justify-center text-sm font-semibold">
                 {user.email[0].toUpperCase()}
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                  <div className={`absolute right-0 top-10 w-56 rounded-xl ${darkMode ? 'bg-gray-900/95 border-white/10' : 'bg-white border-black/10'} border shadow-xl z-50 animate-scale-in overflow-hidden`}>
+                  <div className="absolute right-0 top-12 w-60 rounded-3xl glass-float z-50 animate-scale-in overflow-hidden p-1.5">
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
                       <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{user.email}</p>
                     </div>
@@ -140,14 +136,9 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 sidebar-overlay" onClick={() => setSidebarOpen(false)}>
-          <div className={`h-full w-72 ${darkMode ? 'bg-gray-900/95' : 'bg-white/95'} border-r shadow-2xl ${darkMode ? 'border-white/10' : 'border-black/5'} animate-slide-in`} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                  <BookOpen className="w-4 h-4 text-white" />
-                </div>
-                <span className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Student Hub</span>
-              </div>
+          <div className="h-full w-72 glass-float !rounded-none !border-y-0 !border-l-0 animate-slide-in" onClick={e => e.stopPropagation()}>
+            <div className={`flex items-center justify-between px-5 h-16 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
+              <Logo size={20} />
               <button onClick={() => setSidebarOpen(false)} className={`p-1 rounded-lg ${darkMode ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-gray-700'}`}>
                 <X className="w-5 h-5" />
               </button>
@@ -157,9 +148,10 @@ export default function Layout({ children, currentSection, onSectionChange, user
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  aria-current={currentSection === section.id ? 'page' : undefined}
+                  className={`w-full flex items-center gap-3 px-4 h-12 rounded-2xl text-[15px] font-medium transition-all duration-150 ${
                     currentSection === section.id
-                      ? 'bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-400 border border-indigo-500/30'
+                      ? 'glass-lens text-[var(--brand-ring)]'
                       : darkMode ? 'text-white/70 hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'
                   }`}
                 >

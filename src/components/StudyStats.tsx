@@ -63,7 +63,7 @@ export default function StudyStats({ sessions, subjectDefs, darkMode, onClose }:
         <div className={`ml-auto flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
           {KINDS.map(k => (
             <button key={k.id} role="tab" aria-selected={kind === k.id} onClick={() => { setKind(k.id); setOffset(0); }}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${kind === k.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : subTextColor}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${kind === k.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)] shadow' : subTextColor}`}>
               {k.label}
             </button>
           ))}
@@ -133,7 +133,7 @@ export default function StudyStats({ sessions, subjectDefs, darkMode, onClose }:
                       </div>
                     );
                   }} />
-                <Bar dataKey="hours" fill="#818cf8" radius={[4, 4, 0, 0]} maxBarSize={kind === 'month' ? 18 : 40} />
+                <Bar dataKey="hours" fill="var(--brand-ring)" radius={[4, 4, 0, 0]} maxBarSize={kind === 'month' ? 18 : 40} />
               </BarChart>
             </ResponsiveContainer>
           </div>

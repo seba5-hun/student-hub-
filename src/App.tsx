@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
+import { ManifestoScreen, PrimaryButton } from './components/Auth';
+import Logo from './components/Logo';
 import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
 import Home from './components/Home';
@@ -89,11 +91,17 @@ function App() {
   // Opened as …/admin: go straight to the admin panel after login.
   const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
   // Opened as …/?mindset=sera (iPhone automation): straight to Mindset's evening reset.
-  const openMindset = useRef(new URLSearchParams(window.location.search).get('mindset'));
+  const openMindset = useRef(new URLSearchParams(window.location.search).get('performance') || new URLSearchParams(window.location.search).get('mindset'));
   const [mindsetView, setMindsetView] = useState<string | null>(null);
   const dialog = useDialog();
   // Login screens are light; inside the app the dialogs follow the dashboard theme.
-  useEffect(() => { dialog.setDark(!!user && darkMode); }, [dialog, user, darkMode]);
+  // MYND: the theme lives on <html data-theme> (the access screens are always dark).
+  const themeDark = !user || darkMode;
+  useEffect(() => {
+    dialog.setDark(themeDark);
+    document.documentElement.dataset.theme = themeDark ? 'dark' : 'light';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeDark ? '#0A0B0C' : '#F1F2F3');
+  }, [dialog, themeDark]);
 
   // Usage statistics: who is using the app (or just the login page) and which section is open.
   useEffect(() => {
@@ -503,9 +511,9 @@ function App() {
         if (Notification.permission !== 'granted') return;
         if (sessionStorage.getItem(`notified_${today}`)) return;
         try {
-          new Notification('Student Hub 📚', {
+          new Notification('MYND', {
             body: `Hai ${todayTasks.length} impegn${todayTasks.length === 1 ? 'o' : 'i'} per oggi!`,
-            icon: '/icon.svg',
+            icon: '/icon-192.png',
           });
           sessionStorage.setItem(`notified_${today}`, 'true');
         } catch {
@@ -567,24 +575,45 @@ function App() {
 
   // Account waiting for approval, rejected or blocked
   if (user && accountStatus && accountStatus !== 'approved') {
+    const pending = accountStatus === 'pending';
     const info = {
-      pending: { icon: '⏳', title: 'Account in attesa di approvazione', text: 'La tua registrazione è arrivata! Potrai usare Student Hub appena verrà approvata. Questa pagina si aggiorna da sola.' },
-      rejected: { icon: '🚫', title: 'Richiesta non accettata', text: 'La tua richiesta di accesso non è stata accettata. Se pensi sia un errore, contatta l\'amministratore.' },
-      blocked: { icon: '🔒', title: 'Account sospeso', text: 'Il tuo account è stato sospeso. Per informazioni contatta l\'amministratore.' },
+      pending: { chip: 'In revisione', title: <>Quasi<br />pronto.</>, text: 'MYND è su invito: il tuo account viene approvato a mano. Questa pagina si aggiorna da sola appena è attivo.' },
+      rejected: { chip: 'Non accettato', title: <>Richiesta<br />non accettata.</>, text: 'La tua richiesta di accesso non è stata accettata. Se pensi sia un errore, contatta l\'amministratore.' },
+      blocked: { chip: 'Sospeso', title: <>Account<br />sospeso.</>, text: 'Il tuo account è stato sospeso. Per informazioni contatta l\'amministratore.' },
     }[accountStatus];
+    const steps: [string, 'done' | 'now' | 'next', string?][] = [['Account creato', 'done'], ['Approvazione', 'now', pending ? 'in corso' : undefined], ['La tua prima giornata', 'next']];
     return (
-      <div className="min-h-screen gradient-bg-light mesh-gradient-light flex items-center justify-center p-4">
-        <div className="glass-card-light p-8 max-w-md w-full text-center">
-          <div className="text-5xl mb-4">{info.icon}</div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">{info.title}</h1>
-          <p className="text-sm text-gray-600 mb-2">{info.text}</p>
-          <p className="text-xs text-gray-500 mb-6">Account: {user.email}</p>
-          <div className="flex gap-2 justify-center">
-            {accountStatus === 'pending' && <button onClick={() => loadUser(user)} className="btn-primary text-sm">Controlla di nuovo</button>}
-            <button onClick={handleLogout} className="px-4 py-2 rounded-xl text-sm text-gray-700 bg-black/5 hover:bg-black/10">Esci</button>
-          </div>
+      <ManifestoScreen glow="right" footer={
+        <div className="flex gap-2.5">
+          <button onClick={handleLogout} className="btn-secondary flex-1 h-14 text-base">Esci</button>
+          {pending && <div className="flex-[1.6] min-w-0 whitespace-nowrap"><PrimaryButton type="button" onClick={() => loadUser(user)}>Controlla lo stato</PrimaryButton></div>}
         </div>
-      </div>
+      }>
+        <div className="flex flex-col gap-9">
+          <span className="self-start h-8 px-3.5 rounded-full glass-card !rounded-full inline-flex items-center gap-2 text-[13px] font-medium">
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: pending ? '#C8F25A' : 'var(--danger)', boxShadow: pending ? '0 0 10px #C8F25A' : undefined }} />{info.chip}
+          </span>
+          <div className="flex flex-col gap-3">
+            <h1 className="text-[52px] font-bold" style={{ letterSpacing: '-0.05em', lineHeight: 0.98 }}>{info.title}</h1>
+            <p className="text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>{info.text}</p>
+            <p className="text-[13px]" style={{ color: 'var(--text-subtle)' }}>{user.email}</p>
+          </div>
+          {pending && (
+            <div className="flex flex-col">
+              {steps.map(([label, st, note], i) => (
+                <div key={label} className="flex gap-3.5 items-center py-3.5" style={{ borderBottom: i < steps.length - 1 ? '1px solid var(--border)' : undefined }}>
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-[13px] font-bold flex-shrink-0"
+                    style={st === 'done' ? { background: '#C8F25A', color: '#0A0B0C' } : st === 'now' ? { border: '1.5px solid #C8F25A', boxShadow: '0 0 12px rgba(200,242,90,.3)' } : { border: '1.5px solid #3A3F45' }}>
+                    {st === 'done' && '✓'}
+                  </span>
+                  <span className="text-base" style={{ color: st === 'next' ? 'var(--text-muted)' : 'var(--text)' }}>{label}</span>
+                  {note && <span className="ml-auto text-[13px]" style={{ color: 'var(--text-muted)' }}>{note}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ManifestoScreen>
     );
   }
 
@@ -592,7 +621,7 @@ function App() {
   if (user && !data) {
     return (
       <div className="min-h-screen gradient-bg mesh-gradient flex items-center justify-center p-4">
-        <div className="glass-card p-8 max-w-md text-center text-white">
+        <div className={`${loadError ? 'glass-card p-8' : ''} max-w-md text-center text-white`}>
           {loadError ? (
             <>
               <h1 className="text-xl font-bold mb-3">Impossibile caricare i dati</h1>
@@ -603,7 +632,7 @@ function App() {
               </div>
             </>
           ) : (
-            <div className="animate-pulse text-white/60">Caricamento dati...</div>
+            <div className="flex flex-col items-center gap-5"><Logo variant="stacked" size={56} /><div className="skeleton h-1.5 w-32 !rounded-full" /></div>
           )}
         </div>
       </div>
@@ -617,10 +646,10 @@ function App() {
 
   // Save indicator
   const SaveIndicator = () => saveStatus === 'idle' ? null : (
-    <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
-      <div className={`${darkMode ? 'glass-card' : 'glass-card-light'} px-4 py-2 flex items-center gap-2`}>
-        <div className={`w-2 h-2 rounded-full animate-pulse ${saveStatus === 'error' ? 'bg-red-400' : 'bg-emerald-400'}`} />
-        <span className={`text-xs ${darkMode ? 'text-white/70' : 'text-gray-600'}`}>{saveStatus === 'error' ? 'Non salvato, riprovo tra poco…' : 'Salvataggio...'}</span>
+    <div className="fixed top-[68px] right-4 z-50 animate-fade-in pointer-events-none">
+      <div className="glass-float rounded-full px-3 py-1.5 flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: saveStatus === 'error' ? 'var(--danger)' : 'var(--brand-fill)', boxShadow: saveStatus === 'error' ? undefined : '0 0 8px rgba(200,242,90,.6)' }} />
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{saveStatus === 'error' ? 'Non siamo riusciti a salvare. Riprovo tra un attimo.' : 'Salvataggio…'}</span>
       </div>
     </div>
   );

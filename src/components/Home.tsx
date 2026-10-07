@@ -167,8 +167,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
                   <Bar dataKey="ore" fill="url(#barGrad)" radius={[6, 6, 0, 0]} />
                   <defs>
                     <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" />
-                      <stop offset="100%" stopColor="#8b5cf6" />
+                      <stop offset="0%" stopColor="#D9F88A" />
+                      <stop offset="100%" stopColor="#B5E33E" />
                     </linearGradient>
                   </defs>
                 </BarChart>
@@ -295,23 +295,18 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
 }
 
 function StatCard({ icon, label, value, color, darkMode }: { icon: React.ReactNode; label: string; value: string | number; color: string; darkMode: boolean }) {
-  const colors: Record<string, string> = {
-    indigo: 'from-indigo-500/20 to-indigo-600/10 border-indigo-500/30',
-    emerald: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30',
-    amber: 'from-amber-500/20 to-amber-600/10 border-amber-500/30',
-    rose: 'from-rose-500/20 to-rose-600/10 border-rose-500/30',
-  };
+  // MYND: glass tiles; the icon carries the color of its area, the number is the hero.
   const iconColors: Record<string, string> = {
-    indigo: 'text-indigo-400',
-    emerald: 'text-emerald-400',
-    amber: 'text-amber-400',
-    rose: 'text-rose-400',
+    indigo: 'var(--brand-ring)',
+    emerald: 'var(--area-sport)',
+    amber: 'var(--area-progetto)',
+    rose: 'var(--area-vita)',
   };
 
   return (
-    <div className={`rounded-xl p-4 bg-gradient-to-br ${colors[color]} border`}>
-      <div className={`${iconColors[color]} mb-2`}>{icon}</div>
-      <p className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{value}</p>
+    <div className={`${darkMode ? 'glass-card' : 'glass-card-light'} !rounded-[22px] p-4`}>
+      <div className="mb-2" style={{ color: iconColors[color] }}>{icon}</div>
+      <p className={`text-3xl font-light tabular tracking-tight ${darkMode ? 'text-white' : 'text-gray-800'}`}>{value}</p>
       <p className={`text-xs ${darkMode ? 'text-white/60' : 'text-gray-500'}`}>{label}</p>
     </div>
   );
@@ -371,8 +366,8 @@ function GoalCard({ weeklyHours, goal, progress, circumference, strokeDashoffset
               strokeDasharray={circumference} strokeDashoffset={shownOffset} strokeLinecap="round" className="progress-ring" />
             <defs>
               <linearGradient id="goalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#8b5cf6" />
+                <stop offset="0%" stopColor="var(--brand-ring)" />
+                <stop offset="100%" stopColor="var(--brand-ring)" />
               </linearGradient>
             </defs>
           </svg>
@@ -413,7 +408,7 @@ function GoalCard({ weeklyHours, goal, progress, circumference, strokeDashoffset
           <div className="flex flex-wrap justify-center gap-2 mt-3">
             {GOAL_PRESETS.map(h => (
               <button key={h} onClick={() => setDraft(h)}
-                className={`text-xs px-3 py-1 rounded-full transition-colors ${draft === h ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white' : chip}`}>
+                className={`text-xs px-3 py-1 rounded-full transition-colors ${draft === h ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : chip}`}>
                 {h}h
               </button>
             ))}

@@ -229,7 +229,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
 
   return (
     <div className="space-y-6">
-      <h2 className={`text-2xl font-bold ${textColor}`}>⏱️ Timer Studio</h2>
+      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Timer Studio.</h2>
 
       <div className={`${cardClass} p-8 text-center`}>
         <div className="mb-6">

@@ -1,0 +1,99 @@
+/* MYND — design tokens. Tema scuro predefinito; chiaro con [data-theme="light"] su <html> */
+:root{
+  --brand: #C8F25A;
+  --brand-ring: #C8F25A;
+  --on-brand: #0A0B0C;
+  --steel: #B6B9BE;
+  --accent: #C9CDD2;
+  --bg: #0A0B0C;
+  --surface: #15171A;
+  --border: #2A2D31;
+  --text: #ECEEF0;
+  --text-muted: #969BA1;
+  --text-subtle: #62676D;
+  --success: #6FD3C4;
+  --warning: #E0B055;
+  --danger: #E8685B;
+  --area-scuola: #83AFDF;
+  --area-studio: #ABA1DD;
+  --area-sport: #6BBDAB;
+  --area-progetto: #C9A46C;
+  --area-recupero: #8CB987;
+  --area-vita: #D595B0;
+  --area-viaggio: #6AB7D1;
+  --area-pasto: #D89B7C;
+  --area-sonno: #98A8E1;
+  --area-extra: #DC9693;
+  --glass: rgba(255,255,255,.055);
+  --glass-hero: linear-gradient(150deg, rgba(200,242,90,.10) 0%, rgba(255,255,255,.05) 45%, rgba(255,255,255,.035) 100%);
+  --glass-edge: rgba(255,255,255,.12);
+  --glass-float: rgba(28,31,35,.55);
+  --glass-lens: rgba(255,255,255,.12);
+  --glass-well: rgba(0,0,0,.25);
+  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.05), 0 8px 24px rgba(0,0,0,.25);
+  --shadow-float: inset 1px 1px 0 rgba(255,255,255,.22), inset -1px -1px 0 rgba(255,255,255,.04), 0 16px 40px rgba(0,0,0,.55);
+  --shadow-lens: inset 1px 1px 0 rgba(255,255,255,.25), 0 2px 8px rgba(0,0,0,.3);
+  --glow-brand: 0 0 24px rgba(200,242,90,.30);
+  --glow-ring: 0 0 30px rgba(200,242,90,.22);
+  --focus-ring: 0 0 0 4px rgba(200,242,90,.12);
+  --btn-primary: linear-gradient(180deg, #D9F88A 0%, #C8F25A 55%, #B5E33E 100%);
+  --btn-primary-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 24px rgba(200,242,90,.30);
+  --steel-gradient: linear-gradient(170deg, #F4F3F0 0%, #9A9CA1 45%, #E2E2E0 60%, #6E7075 100%);
+  --icon-metal: linear-gradient(155deg, #5A5C60 0%, #2B2C2F 48%, #1A1B1D 100%);
+  --ambient: radial-gradient(55% 30% at 10% 22%, rgba(200,242,90,.13), transparent 70%), radial-gradient(60% 35% at 95% 70%, rgba(130,150,180,.14), transparent 70%);
+  --blur-float: blur(18px) saturate(170%);
+  --radius-sm: 8px; --radius-md: 16px; --radius-lg: 18px; --radius-xl: 28px; --radius-2xl: 40px; --radius-full: 999px;
+  --dur-fast: 150ms; --dur-base: 250ms; --dur-slow: 600ms;
+  --ease-out: cubic-bezier(.2,.8,.2,1); --ease-spring: cubic-bezier(.3,1.3,.5,1);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+[data-theme="light"]{
+  --brand: #4A6B00;
+  --brand-ring: #5C8500;
+  --on-brand: #0A0B0C;
+  --steel: #4A4D52;
+  --accent: #3F454C;
+  --bg: #F1F2F3;
+  --surface: #FFFFFF;
+  --border: #DDE0E3;
+  --text: #0D0F11;
+  --text-muted: #62676D;
+  --text-subtle: #8A9097;
+  --success: #0E6E63;
+  --warning: #8F5F00;
+  --danger: #B83A2E;
+  --area-scuola: #3D6692;
+  --area-studio: #645A90;
+  --area-sport: #187363;
+  --area-progetto: #7E5D24;
+  --area-recupero: #466F41;
+  --area-vita: #884E68;
+  --area-viaggio: #186E86;
+  --area-pasto: #8A5336;
+  --area-sonno: #526094;
+  --area-extra: #8D4F4D;
+  --glass: rgba(255,255,255,.55);
+  --glass-hero: linear-gradient(150deg, rgba(200,242,90,.35) 0%, rgba(255,255,255,.6) 50%, rgba(255,255,255,.5) 100%);
+  --glass-edge: rgba(255,255,255,.85);
+  --glass-float: rgba(255,255,255,.6);
+  --glass-lens: rgba(255,255,255,.9);
+  --glass-well: rgba(0,0,0,.05);
+  --shadow-spec: inset 1px 1px 0 rgba(255,255,255,.95), inset -1px -1px 0 rgba(0,0,0,.03), 0 8px 24px rgba(20,30,45,.08);
+  --shadow-float: inset 1px 1px 0 rgba(255,255,255,1), 0 16px 40px rgba(20,30,45,.16);
+  --shadow-lens: inset 1px 1px 0 #fff, 0 2px 8px rgba(20,30,45,.12);
+  --glow-ring: none;
+  --btn-primary-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 6px 18px rgba(120,160,0,.25);
+  --steel-gradient: linear-gradient(170deg, #8E9095 0%, #3E4044 48%, #7A7C80 62%, #2A2B2E 100%);
+  --ambient: radial-gradient(55% 30% at 10% 22%, rgba(170,215,40,.28), transparent 70%), radial-gradient(60% 35% at 95% 70%, rgba(120,140,175,.24), transparent 70%);
+}
+
+@media (prefers-reduced-transparency: reduce){
+ :root, [data-theme="light"]{ --glass: var(--surface); --glass-float: var(--surface); --blur-float: none; }
+}
+@media (prefers-reduced-motion: reduce){
+ *, *::before, *::after{ animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+body{ background: var(--bg); color: var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+.tabular{ font-variant-numeric: tabular-nums; }

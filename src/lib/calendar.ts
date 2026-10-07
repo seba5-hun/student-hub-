@@ -4,10 +4,10 @@ export function generateICS(tasks: Task[]): string {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Student Hub//IT',
+    'PRODID:-//MYND//IT',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:Student Hub - Impegni',
+    'X-WR-CALNAME:MYND - Impegni',
     'X-WR-TIMEZONE:Europe/Rome',
   ];
 
@@ -39,7 +39,7 @@ export function generateICS(tasks: Task[]): string {
       'BEGIN:VALARM',
       'TRIGGER:-PT1H',
       'ACTION:DISPLAY',
-      'DESCRIPTION:Promemoria Student Hub',
+      'DESCRIPTION:Promemoria MYND',
       'END:VALARM',
       'END:VEVENT'
     );
@@ -53,7 +53,7 @@ function escapeICS(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
-export function downloadICS(tasks: Task[], filename: string = 'student-hub-impegni.ics'): void {
+export function downloadICS(tasks: Task[], filename: string = 'mynd-impegni.ics'): void {
   const ics = generateICS(tasks);
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);

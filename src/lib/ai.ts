@@ -247,7 +247,7 @@ async function askOpenRouter(system: string, context: string, turns: ChatTurn[],
         'Content-Type': 'application/json',
         Authorization: `Bearer ${getKey('openrouter')}`,
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'Student Hub',
+        'X-Title': 'MYND',
       },
       body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
     }, 180, 'OpenRouter');

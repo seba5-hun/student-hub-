@@ -25,8 +25,8 @@ interface Props {
 
 const STATUS_LABEL: Record<BlockStatus, string> = { done: 'Fatto', min: 'Minimo', skipped: 'Saltato', excused: 'Imprevisto' };
 const STATUS_STYLE: Record<BlockStatus, string> = {
-  done: 'bg-emerald-500 text-white border-emerald-500',
-  min: 'bg-sky-500/80 text-white border-sky-500',
+  done: 'bg-[#C8F25A] text-[#0A0B0C] border-[#C8F25A]',
+  min: 'bg-transparent text-[var(--brand-ring)] border-[var(--brand-ring)]',
   skipped: 'bg-transparent text-amber-400 border-amber-400/70',
   excused: 'bg-transparent text-slate-400 border-slate-400/60',
 };
@@ -69,18 +69,18 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className={`${t.card} p-5 flex items-center gap-4`}>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm ${t.sub}`}>{now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-          <h2 className={`text-2xl sm:text-3xl font-bold tracking-tight ${t.text}`}>{greeting(now)}, {m.profile.name}.</h2>
-          <div className="mt-2 relative inline-block">
+      {/* Header: date and greeting straight on the background */}
+      <div className="flex items-end justify-between gap-3 px-0.5 pt-1">
+        <div className="min-w-0">
+          <p className={`text-[13px] first-letter:uppercase ${t.sub}`}>{now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${t.text}`}>{greeting(now)}, {m.profile.name}.</h2>
+          <div className="mt-3 relative inline-block">
             <button onClick={() => setTypeMenu(v => !v)} aria-expanded={typeMenu}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${t.soft} ${t.text} ${t.hover}`}>
+              className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-sm font-medium glass-card !rounded-full">
               {type.emoji} Giornata {type.name} <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {typeMenu && (
-              <div className={`absolute z-30 mt-2 w-56 rounded-2xl border shadow-2xl p-1.5 animate-scale-in ${t.dark ? 'bg-[#1b1640] border-white/10' : 'bg-white border-black/10'}`}>
+              <div className={`absolute z-30 mt-2 w-56 rounded-2xl border shadow-2xl p-1.5 animate-scale-in ${t.dark ? 'glass-float' : 'glass-float'}`}>
                 <p className={`px-3 py-1.5 text-xs ${t.sub}`}>Cambia il tipo di oggi (es. niente vento):</p>
                 {m.dayTypes.map(dt => (
                   <button key={dt.id} onClick={() => changeType(dt.id)}
@@ -92,10 +92,6 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
             )}
           </div>
         </div>
-        <button onClick={() => setShowParts(v => !v)} className="flex flex-col items-center gap-1" aria-label="Dettaglio del punteggio">
-          <ScoreRing score={score} t={t} />
-          <span className={`text-xs ${t.sub}`}>media 7 gg: <b className={t.text}>{weekly ?? '–'}</b></span>
-        </button>
       </div>
 
       {showParts && (
@@ -105,7 +101,7 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
             <div key={p.key} className="flex items-center gap-3">
               <span className={`w-24 text-sm ${t.text}`}>{p.label}</span>
               <div className={`flex-1 h-2 rounded-full overflow-hidden ${t.soft}`}>
-                {p.value !== null && <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400" style={{ width: `${p.value * 100}%` }} />}
+                {p.value !== null && <div className="h-full rounded-full" style={{ width: `${p.value * 100}%`, background: 'var(--brand-ring)' }} />}
               </div>
               <span className={`w-40 text-xs text-right ${t.sub}`}>{p.detail}</span>
             </div>
@@ -129,29 +125,29 @@ export default function MindsetToday({ m, update, t, eveningOpen, onEveningOpen,
       {showMorning && <MorningCard m={m} today={today} log={log} setLog={setLog} t={t} />}
       {showEvening && <EveningCard m={m} now={now} setLog={setLog} update={update} t={t} onClose={() => onEveningOpen(false)} forced={eveningOpen} />}
 
-      {/* Now / next */}
-      <div className={`${t.card} p-4 sm:p-5`}>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[12rem]">
-            <p className={`text-xs uppercase tracking-wider ${t.sub}`}>Adesso</p>
-            {current ? (
-              <>
-                <p className={`text-lg font-semibold flex items-center gap-2 ${t.text}`}><AreaDot area={current.area} className="w-2.5 h-2.5" />{current.title}</p>
-                <p className={`text-sm ${t.sub}`}>fino alle {current.end} · ancora {formatDuration(blockRange(current)[1] - nowMin)}</p>
-              </>
-            ) : <p className={`text-lg font-semibold ${t.text}`}>Tempo libero</p>}
-            {next && <p className={`text-sm mt-1 ${t.sub}`}>Dopo: <span className={t.text}>{next.title}</span> alle {next.start}</p>}
+      {/* "Adesso": the hero card with the score ring */}
+      <div className="glass-hero rounded-[30px] p-5 space-y-4">
+        <div className="flex items-center gap-[18px]">
+          <button onClick={() => setShowParts(v => !v)} aria-label="Dettaglio del punteggio" className="rounded-full">
+            <ScoreRing score={score} t={t} size={100} sub={`media ${weekly ?? '–'}`} />
+          </button>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <span className={`text-[11px] uppercase tracking-[0.08em] tabular ${t.sub}`}>Adesso · {fromMin(nowMin)}</span>
+            <span className={`text-[19px] font-semibold leading-tight tracking-[-0.02em] flex items-center gap-2 ${t.text}`}>
+              {current && <AreaDot area={current.area} className="w-2.5 h-2.5" />}{current ? current.title : 'Tempo libero'}
+            </span>
+            {current && <span className={`text-[13px] ${t.sub}`}>fino alle {current.end} · ancora {formatDuration(blockRange(current)[1] - nowMin)}</span>}
+            {next && <span className={`text-[13px] ${t.sub}`}>Dopo: {next.title} {next.start}</span>}
           </div>
-          <div className="flex gap-2">
-            {current && (current.area === 'study' || current.area === 'project') && (
-              <button onClick={() => onStartFocus(current.title, current.area === 'project' ? 'project' : 'school')} className="btn-primary text-sm flex items-center gap-2">
-                <Play className="w-4 h-4" /> Avvia Focus
-              </button>
-            )}
-            <button onClick={() => setDisruptOpen(true)} className={`px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2 ${t.soft} ${t.text} ${t.hover}`}>
-              <Zap className="w-4 h-4 text-amber-400" /> Imprevisto
-            </button>
-          </div>
+        </div>
+        <div className="flex gap-2.5">
+          <button onClick={() => onStartFocus(current && (current.area === 'study' || current.area === 'project') ? current.title : '', current?.area === 'project' ? 'project' : 'school')}
+            className="btn-primary flex-1 h-[50px] text-base whitespace-nowrap !px-3 flex items-center justify-center gap-2">
+            <Play className="w-4 h-4" /> Inizia focus
+          </button>
+          <button onClick={() => setDisruptOpen(true)} className="btn-secondary flex-1 h-[50px] text-base whitespace-nowrap !px-3 flex items-center justify-center gap-2">
+            <Zap className="w-4 h-4" style={{ color: 'var(--warning)' }} /> Imprevisto
+          </button>
         </div>
       </div>
 
@@ -386,7 +382,7 @@ function TodayLeftovers({ m, dayKey, tomorrowKey, setLog, t }: {
             <div key={p.id} className={`flex items-center gap-3 p-2 rounded-xl ${t.soft}`}>
               <button onClick={() => setLog(dayKey, l => ({ ...l, priorities: (l.priorities || []).map(x => (x.id === p.id ? { ...x, done: !x.done } : x)) }))}
                 role="checkbox" aria-checked={p.done} aria-label={`Completa: ${p.text}`}
-                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${p.done ? 'bg-emerald-500 border-emerald-500 text-white' : t.dark ? 'border-white/30' : 'border-black/25'}`}>
+                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${p.done ? 'bg-[#C8F25A] border-[#C8F25A] text-[#0A0B0C]' : t.dark ? 'border-white/30' : 'border-black/25'}`}>
                 {p.done && <Check className="w-3 h-3" strokeWidth={3} />}
               </button>
               <span className={`flex-1 text-sm ${p.done ? `line-through ${t.sub}` : t.text}`}>{p.text}</span>
@@ -413,7 +409,7 @@ function PriorityRow({ area, item, onSave, onToggle, t, onStartFocus, tomorrow }
     return (
       <div className={`flex items-center gap-3 p-2.5 rounded-xl ${t.soft}`}>
         <button onClick={onToggle} role="checkbox" aria-checked={item.done} aria-label={`Completa: ${item.text}`}
-          className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${item.done ? 'bg-emerald-500 border-emerald-500 text-white' : t.dark ? 'border-white/30' : 'border-black/25'}`}>
+          className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${item.done ? 'bg-[#C8F25A] border-[#C8F25A] text-[#0A0B0C]' : t.dark ? 'border-white/30' : 'border-black/25'}`}>
           {item.done && <Check className="w-4 h-4" strokeWidth={3} />}
         </button>
         <span className="text-[11px] font-semibold uppercase tracking-wider w-16 flex-shrink-0" style={{ color }}>{area.label}</span>
@@ -514,10 +510,10 @@ function DayView({ m, today, now, nowMin, currentId, setLog, t, subjects, tasks 
   };
   const header = (
     <div className="space-y-3 mb-3">
-      <div className={`grid grid-cols-2 gap-1 p-1 rounded-xl ${t.soft}`} role="tablist">
+      <div className="grid grid-cols-2 gap-1 p-1 rounded-full" style={{ background: 'var(--glass-well)' }} role="tablist">
         {(['oggi', 'domani'] as const).map(w => (
           <button key={w} role="tab" aria-selected={which === w} onClick={() => setWhich(w)}
-            className={`py-1.5 rounded-lg text-sm font-medium transition-all ${which === w ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow' : t.sub}`}>
+            className={`h-10 rounded-full text-sm font-semibold transition-all duration-150 ${which === w ? 'glass-lens' : t.sub}`} style={which === w ? { color: 'var(--brand-ring)' } : undefined}>
             {w === 'oggi'
               ? <><span className="sm:hidden">Oggi</span><span className="hidden sm:inline">Oggi · cosa ho fatto</span></>
               : <><span className="sm:hidden">Domani </span><span className="hidden sm:inline">Domani · </span>{dayTypeOf(m, addDays(today, 1)).emoji} {dayTypeOf(m, addDays(today, 1)).name}</>}
@@ -601,11 +597,15 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
           const isNow = block.id === currentId;
           return (
             <li key={block.id} className="relative">
-              <div className={`flex items-center gap-3 py-2 pl-1 pr-1 rounded-xl transition-colors ${isNow ? (t.dark ? 'bg-indigo-500/15 ring-1 ring-indigo-400/40' : 'bg-indigo-50 ring-1 ring-indigo-200') : ''} ${past && !st ? 'opacity-60' : ''}`}>
-                <span className={`w-12 text-xs tabular-nums text-right flex-shrink-0 ${t.sub}`}>{block.start}</span>
-                <span className="w-1 self-stretch rounded-full flex-shrink-0" style={{ background: AREAS[block.area].color, opacity: 0.85 }} />
+              <div className="flex items-center gap-3 py-1">
+                <span className={`w-[42px] text-[13px] tabular flex-shrink-0 ${t.sub}`}>{block.start}</span>
+                <div className={`flex-1 min-w-0 min-h-[52px] rounded-[18px] flex items-center gap-3 pl-3.5 pr-1.5 transition-all duration-150 ${
+                  isFree(block) && !isNow ? 'border border-dashed' : 'glass-card !rounded-[18px]'
+                } ${past && st === 'done' ? 'opacity-55' : past && !st ? 'opacity-60' : ''}`}
+                  style={{ ...(isNow ? { borderColor: 'var(--brand)', boxShadow: 'var(--shadow-spec), var(--focus-ring)' } : {}), ...(isFree(block) && !isNow ? { borderColor: 'var(--border)' } : {}) }}>
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: AREAS[block.area].color, boxShadow: `0 0 10px ${AREAS[block.area].color}` }} />
                 <button onClick={() => !block.taskId && setOpen(open === block.id ? null : block.id)} className="flex-1 min-w-0 text-left">
-                  <span className={`block text-sm truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
+                  <span className={`block text-[15px] truncate ${st === 'done' ? `line-through ${t.sub}` : t.text}`}>{block.title}</span>
                   <span className={`block text-[11px] ${t.sub}`}>{block.taskId ? (() => {
                     const clash = blocks.find(o => o.id !== block.id && !o.taskId && !isFree(o) && ['school', 'study', 'sport', 'project'].includes(o.area) && blockRange(o)[0] < e && blockRange(o)[1] > s);
                     return clash ? <span className="text-amber-400">⚠ si sovrappone a {clash.title}: spostalo o chiedi al Coach</span> : block.placed ? 'Impegno · messo nel tempo libero' : 'Impegno';
@@ -618,9 +618,12 @@ function Timeline({ m, today, blocks, log, now, nowMin, currentId, setLog, t, su
                 )}
                 {block.taskId ? <span className="text-base flex-shrink-0" title="Impegno: si modifica nella sezione Impegni">📌</span> : isToday && <button onClick={() => setStatus(block.id, st === 'done' ? (past ? 'skipped' : null) : 'done')} role="checkbox" aria-checked={st === 'done'}
                   aria-label={`Fatto: ${block.title}`} title={auto ? 'Fatto in automatico: tocca se non l\'hai fatto' : undefined}
-                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${st === 'done' ? STATUS_STYLE.done : t.dark ? 'border-white/25 hover:border-white/50' : 'border-black/20 hover:border-black/40'}`}>
-                  {st === 'done' && <Check className="w-4 h-4" strokeWidth={3} />}
+                  className="w-11 h-11 flex items-center justify-center flex-shrink-0">
+                  <span className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-150 ${st === 'done' ? STATUS_STYLE.done : t.dark ? 'border-white/25 hover:border-white/50' : 'border-black/20 hover:border-black/40'}`}>
+                    {st === 'done' && <Check className="w-4 h-4" strokeWidth={3} />}
+                  </span>
                 </button>}
+                </div>
               </div>
               {open === block.id && (
                 <div className="flex flex-wrap gap-1.5 pl-16 pb-2 animate-scale-in">
@@ -675,7 +678,7 @@ export function BlockEditor({ block, onSave, onDelete, onClose, t, isNew, subjec
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <form onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); if (b.title.trim()) onSave({ ...b, title: b.title.trim() }); }}
         role="dialog" aria-modal="true" aria-label="Attività"
-        className={`w-full max-w-sm p-5 space-y-4 animate-scale-in ${t.dark ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+        className={`w-full max-w-sm p-5 space-y-4 animate-scale-in ${t.dark ? 'glass-float' : 'glass-card-light'}`}>
         <h3 className={`font-semibold ${t.text}`}>{isNew ? 'Nuova attività' : 'Modifica attività'}</h3>
         <input value={b.title} onChange={e => setB({ ...b, title: e.target.value })} placeholder="Es. Studio matematica" className={`${t.input} w-full`} autoFocus required />
         <div className="flex items-center gap-2">
@@ -727,8 +730,8 @@ function Habits({ m, today, log, setLog, t }: { m: MindsetData; today: string; l
           const mark = log.habits?.[h.id];
           return (
             <button key={h.id} onClick={() => cycle(h.id)}
-              className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all ${mark === 'full' ? 'bg-emerald-500/15 ring-1 ring-emerald-400/40' : mark === 'min' ? 'bg-sky-500/10 ring-1 ring-sky-400/30' : `${t.soft} ${t.hover}`}`}>
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${mark === 'full' ? 'bg-emerald-500 text-white' : mark === 'min' ? 'bg-sky-500 text-white' : t.dark ? 'border-2 border-white/25' : 'border-2 border-black/20'}`}>
+              className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all glass-card !rounded-[18px] ${mark ? 'ring-1 ring-[var(--brand)]' : ''}`}>
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${mark === 'full' ? 'bg-[#C8F25A] text-[#0A0B0C]' : mark === 'min' ? 'border-2 border-[var(--brand-ring)] text-[var(--brand-ring)]' : t.dark ? 'border-2 border-white/25' : 'border-2 border-black/20'}`}>
                 {mark === 'full' ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : mark === 'min' ? 'MIN' : ''}
               </span>
               <span className="min-w-0">
@@ -819,7 +822,7 @@ function DisruptionDialog({ blocks, log, nowMin, onSave, onClose, t }: {
   return (
     <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Imprevisto"
-        className={`w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-in ${t.dark ? 'glass-card bg-gray-900/90' : 'glass-card-light'}`}>
+        className={`w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-in ${t.dark ? 'glass-float' : 'glass-card-light'}`}>
         <div>
           <h3 className={`font-semibold ${t.text}`}>Cos'è successo?</h3>
           <p className={`text-xs mt-1 ${t.sub}`}>Mi serve per imparare quanto spesso capita e organizzare meglio le prossime giornate.</p>
