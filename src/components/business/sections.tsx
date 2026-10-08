@@ -125,7 +125,7 @@ function SectionPage({ def, onOpen }: { def: PageDef; onOpen: (tab: BusinessTab)
         <h2 className="text-[34px] leading-[1.1] font-bold tracking-[-0.035em]" style={{ color: 'var(--text)' }}>{def.title}</h2>
         <p className="mt-2 max-w-xl text-[15px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{def.lead}</p>
       </div>
-      <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:gap-4 md:grid-cols-2">
         {def.panels.map(p => (
           <section key={p.title} id={p.id} className={`glass-card p-5 flex flex-col gap-3 ${p.wide ? 'md:col-span-2' : ''}`}>
             <div className="flex items-center gap-2.5">

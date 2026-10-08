@@ -736,7 +736,7 @@ function App() {
             onAddTask={(task) => updateData({ ...data, tasks: [...data.tasks, task] })}
           />
         )}
-        {currentSection === 'business' && isDeveloper(user.email) && <Business />}
+        {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}
         {currentSection === 'mindset' && isDeveloper(user.email) && (
           <Mindset
             mindset={data.mindset}

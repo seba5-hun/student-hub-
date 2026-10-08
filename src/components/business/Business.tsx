@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Sun, CalendarDays, Building2, FolderKanban, Users, Wallet, FileText, Lightbulb, Workflow, MessageCircle, Bell, LayoutGrid, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Sun, CalendarDays, Building2, FolderKanban, Users, Wallet, FileText, Lightbulb, Workflow, MessageCircle, Bell, LayoutGrid, X, Settings2, Loader2 } from 'lucide-react';
 import { BusinessTab, SECTION_PAGES } from './sections';
+import { BizRole, BusinessSetupError, Org, Person, listOrgs, listPeople } from '../../lib/business';
+import { SetupNeeded, CreateOrg } from './Setup';
+import Team from './Team';
+import Settings from './Settings';
+import { ErrorNote } from './ui';
 
 // MYND Business (only on the admin account for now). Ten sections: on the phone a floating
 // bar with the four most used plus "Altro", on tablets a row of pills, on desktop a side list.
@@ -26,10 +31,43 @@ const savedTab = (): BusinessTab => {
   } catch { return 'oggi'; }
 };
 
-export default function Business() {
+type Load =
+  | { state: 'loading' }
+  | { state: 'setup' }
+  | { state: 'error'; message: string }
+  | { state: 'none' }
+  | { state: 'ready'; org: Org; people: Person[] };
+
+export default function Business({ userId, userEmail }: { userId: string; userEmail: string }) {
   const [tab, setTab] = useState<BusinessTab>(savedTab);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [load, setLoad] = useState<Load>({ state: 'loading' });
   const pending = 0; // items waiting in "Da confermare" (from phase 4)
+
+  const reload = useCallback(async () => {
+    try {
+      const orgs = await listOrgs();
+      if (orgs.length === 0) { setLoad({ state: 'none' }); return; }
+      const org = orgs[0];
+      setLoad({ state: 'ready', org, people: await listPeople(org.id) });
+    } catch (err) {
+      if (err instanceof BusinessSetupError) setLoad({ state: 'setup' });
+      else setLoad({ state: 'error', message: err instanceof Error ? err.message : String(err) });
+    }
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+
+  const org = load.state === 'ready' ? load.org : null;
+  const people = load.state === 'ready' ? load.people : [];
+  const me = people.find(p => p.user_id === userId) || null;
+  const myRole: BizRole = me?.role || 'dipendente';
+  const canManage = myRole === 'titolare' || myRole === 'admin';
+  // Sections the owner switched off for the company (Oggi always stays).
+  const hidden = org?.settings?.hidden_sections || [];
+  const tabs = TABS.filter(x => x.id === 'oggi' || !hidden.includes(x.id));
+  const phoneBar = PHONE_BAR.filter(id => tabs.some(x => x.id === id));
+  useEffect(() => { if (!tabs.some(x => x.id === tab)) setTab('oggi'); }, [tabs, tab]);
 
   useEffect(() => { try { localStorage.setItem(TAB_KEY, tab); } catch { /* ignore */ } }, [tab]);
   useEffect(() => {
@@ -45,13 +83,39 @@ export default function Business() {
     window.setTimeout(() => document.getElementById('da-confermare')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250);
   };
   const Page = SECTION_PAGES[tab];
-  const barIndex = PHONE_BAR.indexOf(tab);
-  const lensIndex = barIndex >= 0 ? barIndex : PHONE_BAR.length; // "Altro" holds the other sections
+  const barIndex = phoneBar.indexOf(tab);
+  const lensIndex = barIndex >= 0 ? barIndex : phoneBar.length; // "Altro" holds the other sections
+
+  if (load.state !== 'ready') {
+    return (
+      <div className="pb-10">
+        <h1 className="text-xs font-medium uppercase tracking-[0.08em] mb-4" style={{ color: 'var(--text-muted)' }}>Business</h1>
+        {load.state === 'loading' && <div className="py-24 flex justify-center"><Loader2 className="w-7 h-7 animate-spin" style={{ color: 'var(--text-subtle)' }} /></div>}
+        {load.state === 'setup' && <SetupNeeded onRetry={() => { setLoad({ state: 'loading' }); reload(); }} />}
+        {load.state === 'none' && <CreateOrg defaultName={userEmail.split('@')[0]} onCreated={reload} />}
+        {load.state === 'error' && (
+          <div className="max-w-xl space-y-4">
+            <ErrorNote text={load.message} />
+            <button onClick={() => { setLoad({ state: 'loading' }); reload(); }} className="btn-secondary h-11 px-5">Riprova</button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="pb-28 sm:pb-0">
       <div className="flex items-center justify-between gap-3 mb-4">
-        <h1 className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: 'var(--text-muted)' }}>Business</h1>
+        <h1 className="text-xs font-medium uppercase tracking-[0.08em] truncate" style={{ color: 'var(--text-muted)' }}>
+          Business<span style={{ color: 'var(--text-subtle)' }}> · {load.org.name}</span>
+        </h1>
+        <div className="flex items-center gap-2 flex-shrink-0">
+        {canManage && (
+          <button onClick={() => setSettingsOpen(true)} aria-label="Impostazioni azienda" title="Impostazioni azienda"
+            className="w-11 h-11 flex items-center justify-center rounded-full glass-card !rounded-full">
+            <Settings2 className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </button>
+        )}
         <button onClick={openPending} aria-label={`Da confermare: ${pending}`} title="Da confermare"
           className="relative w-11 h-11 -mr-1.5 flex items-center justify-center rounded-full glass-card !rounded-full">
           <Bell className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -60,11 +124,12 @@ export default function Business() {
               style={{ background: 'var(--brand-fill)', color: 'var(--on-brand)' }}>{pending}</span>
           )}
         </button>
+        </div>
       </div>
 
       {/* Tablet: all the sections in a row of pills */}
       <nav aria-label="Sezioni Business" className="hidden sm:flex lg:hidden gap-1.5 overflow-x-auto pb-1 mb-5 -mx-1 px-1">
-        {TABS.map(x => (
+        {tabs.map(x => (
           <button key={x.id} onClick={() => go(x.id)} aria-current={tab === x.id ? 'page' : undefined}
             className={`flex-shrink-0 h-10 px-4 rounded-full text-sm font-medium flex items-center gap-2 transition-colors ${tab === x.id ? 'glass-lens' : 'glass-card !rounded-full'}`}
             style={{ color: tab === x.id ? 'var(--brand-ring)' : 'var(--text-muted)' }}>
@@ -77,7 +142,7 @@ export default function Business() {
         {/* Desktop: side list */}
         <nav aria-label="Sezioni Business" className="hidden lg:block">
           <div className="glass-card p-2 space-y-0.5 sticky" style={{ top: 'calc(3.5rem + env(safe-area-inset-top) + 16px)' }}>
-            {TABS.map(x => (
+            {tabs.map(x => (
               <button key={x.id} onClick={() => go(x.id)} aria-current={tab === x.id ? 'page' : undefined}
                 className={`w-full h-11 px-3.5 rounded-2xl flex items-center gap-3 text-[15px] font-medium transition-colors duration-150 ${tab === x.id ? 'glass-lens' : 'hover:bg-white/5'}`}
                 style={{ color: tab === x.id ? 'var(--brand-ring)' : 'var(--text-muted)' }}>
@@ -88,7 +153,9 @@ export default function Business() {
         </nav>
 
         <div key={tab} className="animate-section-in min-w-0">
-          <Page onOpen={go} />
+          {tab === 'team'
+            ? <Team orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} onChanged={reload} />
+            : <Page onOpen={go} />}
         </div>
       </div>
 
@@ -97,8 +164,8 @@ export default function Business() {
         style={{ bottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
         <div className="relative flex-1 flex">
           <span aria-hidden className="glass-lens absolute top-0 bottom-0 rounded-full transition-transform duration-[250ms]"
-            style={{ width: `${100 / (PHONE_BAR.length + 1)}%`, transform: `translateX(${lensIndex * 100}%)`, transitionTimingFunction: 'var(--ease-spring)' }} />
-          {PHONE_BAR.map(id => {
+            style={{ width: `${100 / (phoneBar.length + 1)}%`, transform: `translateX(${lensIndex * 100}%)`, transitionTimingFunction: 'var(--ease-spring)' }} />
+          {phoneBar.map(id => {
             const x = TABS.find(t => t.id === id)!;
             return (
               <button key={id} onClick={() => go(id)} aria-current={tab === id ? 'page' : undefined}
@@ -111,10 +178,15 @@ export default function Business() {
           <button onClick={() => setMoreOpen(true)} aria-haspopup="dialog" aria-expanded={moreOpen}
             className="relative flex-1 flex flex-col items-center justify-center gap-[3px] rounded-full text-[10px] font-semibold transition-colors duration-150"
             style={{ color: barIndex < 0 ? 'var(--brand-ring)' : 'var(--text-muted)' }}>
-            <LayoutGrid className="w-[22px] h-[22px]" strokeWidth={1.75} /> {barIndex < 0 ? TABS.find(t => t.id === tab)!.label : 'Altro'}
+            <LayoutGrid className="w-[22px] h-[22px]" strokeWidth={1.75} /> {barIndex < 0 ? tabs.find(t => t.id === tab)?.label || 'Altro' : 'Altro'}
           </button>
         </div>
       </nav>
+
+      {settingsOpen && (
+        <Settings org={load.org} people={load.people} sections={TABS} onClose={() => setSettingsOpen(false)}
+          onSaved={() => { setSettingsOpen(false); reload(); }} />
+      )}
 
       {moreOpen && (
         <div className="sm:hidden fixed inset-0 z-[60] sidebar-overlay flex items-end" onClick={() => setMoreOpen(false)}>
@@ -127,7 +199,7 @@ export default function Business() {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {TABS.filter(x => !PHONE_BAR.includes(x.id)).map(x => (
+              {tabs.filter(x => !phoneBar.includes(x.id)).map(x => (
                 <button key={x.id} onClick={() => go(x.id)} aria-current={tab === x.id ? 'page' : undefined}
                   className={`h-[84px] rounded-2xl flex flex-col items-center justify-center gap-2 text-[13px] font-medium ${tab === x.id ? 'glass-lens' : 'glass-card !rounded-2xl'}`}
                   style={{ color: tab === x.id ? 'var(--brand-ring)' : 'var(--text)' }}>
