@@ -3,6 +3,20 @@
 Stato: **bozza da approvare**. Nessuna riga di codice dell'app è stata modificata.
 Questo documento sostituisce il prompt "MYND — Business Space" e tiene conto delle decisioni prese in chat.
 
+> **Aggiornamento (8 ottobre).** Queste decisioni prevalgono sul resto del documento:
+> - **Tre prodotti separati, ognuno con il proprio login:**
+>   - MYND Student è il sito attuale (`myndspace.world`);
+>   - MYND Business è un'**app a parte** (cartella `business/`, progetto Vercel e database Supabase propri, indirizzo tipo `business.myndspace.world`);
+>   - Performance per ora resta dov'è e verrà separata più avanti.
+>
+>   Niente selettore di spazio: il logo resta quello.
+> - **Business e Performance sono accessibili solo all'account admin** `flowbase.service@gmail.com`, con il controllo fatto anche nel database, non solo nell'app.
+> - **Nomi delle sezioni** confermati (modificabili in seguito).
+> - **AI:** durante lo sviluppo si usano le stesse AI gratuite di Student (Gemini, OpenRouter, Groq), scelte con lo stesso selettore. Il codice resta indipendente dal fornitore, così prima di vendere si passa a un'AI con contratto che non usa i dati (vedi 9).
+> - **Email in arrivo:** Cloudflare Email Routing (fase 6, con guida passo passo).
+> - **Azienda di prova:** l'azienda di Seba, con un team in cui l'unico membro è lui.
+> - **Sviluppo senza toccare il sito:** Business si sviluppa nella sua cartella e non entra nella build del sito attuale. Sarà pubblicato su un indirizzo proprio solo quando lo decidi.
+
 ---
 
 ## 0. Decisioni già prese
