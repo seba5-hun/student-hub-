@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage } from '../lib/supabase';
 import { track } from '../lib/analytics';
@@ -69,6 +69,87 @@ export function PrimaryButton({ children, disabled, loading, arrow, type = 'subm
         </>
       )}
     </button>
+  );
+}
+
+// "Slide to start": the dark knob is dragged to the right end of the lime bar. Until the user
+// touches it, the knob glides to the middle and back to show the gesture. Keyboard: Enter/→.
+const KNOB = 44;
+const PAD = 6;
+export function SwipeToStart({ label, onComplete }: { label: string; onComplete: () => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [travel, setTravel] = useState(0);
+  const [x, setX] = useState(0);
+  const xRef = useRef(0);
+  const drag = useRef<{ px: number; x: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const measure = () => setTravel(Math.max(0, el.clientWidth - KNOB - 2 * PAD));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const move = (v: number) => { xRef.current = v; setX(v); };
+  const finish = () => {
+    if (done) return;
+    setTouched(true);
+    setDone(true);
+    move(travel);
+    window.setTimeout(onComplete, 260);
+  };
+  const release = () => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    setDragging(false);
+    if (travel > 0 && xRef.current >= travel * 0.8) finish();
+    else if (!d.moved) { move(travel * 0.35); window.setTimeout(() => move(0), 260); } // a tap: show the way
+    else move(0);
+  };
+  const progress = travel > 0 ? x / travel : 0;
+
+  return (
+    <div ref={trackRef} className="relative w-full h-14 rounded-full select-none overflow-hidden"
+      style={{ background: 'var(--btn-primary)', boxShadow: 'var(--btn-primary-shadow)', border: '1px solid rgba(255,255,255,.5)', ['--travel' as string]: `${travel}px` }}>
+      <span className="absolute inset-0 flex items-center justify-center gap-2 text-[17px] font-semibold pointer-events-none"
+        style={{ color: 'var(--on-brand)', paddingLeft: KNOB, opacity: Math.max(0, 1 - progress * 1.6), transition: dragging ? 'none' : 'opacity 250ms' }}>
+        {label}<span aria-hidden className="tracking-[-0.2em] opacity-50">›››</span>
+      </span>
+      <button type="button" aria-label={label}
+        className={`absolute rounded-full flex items-center justify-center text-lg cursor-grab active:cursor-grabbing ${!touched && travel > 0 ? 'swipe-hint' : ''}`}
+        style={{
+          top: PAD - 1, left: PAD - 1, width: KNOB, height: KNOB, background: '#0A0B0C', color: '#C8F25A', touchAction: 'none',
+          transform: touched ? `translate3d(${x}px,0,0)` : undefined,
+          transition: dragging ? 'none' : 'transform 320ms cubic-bezier(.3,1.3,.5,1)',
+        }}
+        onPointerDown={e => {
+          if (done) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          drag.current = { px: e.clientX, x: xRef.current, moved: false };
+          setTouched(true);
+          setDragging(true);
+        }}
+        onPointerMove={e => {
+          const d = drag.current;
+          if (!d) return;
+          const dx = e.clientX - d.px;
+          if (Math.abs(dx) > 4) d.moved = true;
+          move(Math.min(travel, Math.max(0, d.x + dx)));
+        }}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onClick={e => { if (e.detail === 0) finish(); }}
+        onKeyDown={e => { if (e.key === 'ArrowRight') { e.preventDefault(); finish(); } }}>
+        →
+      </button>
+    </div>
   );
 }
 
@@ -236,7 +317,7 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
     return (
       <ManifestoScreen glow="left" footer={
         <div className="flex flex-col gap-3">
-          <PrimaryButton type="button" arrow onClick={() => setMode('register')}>Inizia</PrimaryButton>
+          <SwipeToStart label="Scorri per iniziare" onComplete={() => setMode('register')} />
           <button type="button" onClick={() => setMode('login')} className="h-12 text-base">Ho già un account</button>
         </div>
       }>
