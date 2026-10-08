@@ -4,6 +4,8 @@ import { BusinessTab, SECTION_PAGES } from './sections';
 import { BizRole, BusinessSetupError, Org, Person, listOrgs, listPeople } from '../../lib/business';
 import { SetupNeeded, CreateOrg } from './Setup';
 import Team from './Team';
+import Clienti from './Clienti';
+import Progetti from './Progetti';
 import Settings from './Settings';
 import { ErrorNote } from './ui';
 
@@ -43,6 +45,9 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
   const [moreOpen, setMoreOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [load, setLoad] = useState<Load>({ state: 'loading' });
+  // A project opened from another section (e.g. from a client's page).
+  const [projectFocus, setProjectFocus] = useState<string | null>(null);
+  const clearFocus = useCallback(() => setProjectFocus(null), []);
   const pending = 0; // items waiting in "Da confermare" (from phase 4)
 
   const reload = useCallback(async () => {
@@ -153,8 +158,9 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
         </nav>
 
         <div key={tab} className="animate-section-in min-w-0">
-          {tab === 'team'
-            ? <Team orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} onChanged={reload} />
+          {tab === 'team' ? <Team orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} onChanged={reload} />
+            : tab === 'clienti' ? <Clienti orgId={load.org.id} people={load.people} myRole={myRole} onOpenProject={id => { setProjectFocus(id); go('progetti'); }} />
+            : tab === 'progetti' ? <Progetti orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} focusId={projectFocus} onFocusUsed={clearFocus} />
             : <Page onOpen={go} />}
         </div>
       </div>

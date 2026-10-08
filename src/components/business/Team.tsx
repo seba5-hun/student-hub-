@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, X } from 'lucide-react';
-import { BizRole, Person, PersonInput, ROLE_LABEL, ROLE_HINT, Skill, addPerson, updatePerson, removePerson } from '../../lib/business';
+import { useCallback, useEffect, useState } from 'react';
+import { Plus, Pencil, Trash2, Loader2, X, ListChecks } from 'lucide-react';
+import { BizRole, Person, PersonInput, ROLE_LABEL, ROLE_HINT, Skill, Project, Task, addPerson, updatePerson, removePerson, listTasks, listProjects, saveTask, setTaskStatus, deleteTask, taskPriority } from '../../lib/business';
+import { toDateKey } from '../../lib/store';
+import { TaskRow, TaskSheet } from './Tasks';
 import { useDialog } from '../Dialog';
-import { Sheet, TextField, Label, ErrorNote, PageTitle } from './ui';
+import { Sheet, TextField, Label, ErrorNote, PageTitle, Empty } from './ui';
 
 const ROLES: BizRole[] = ['titolare', 'admin', 'manager', 'dipendente', 'finanza', 'esterno'];
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]!.toUpperCase()).join('');
@@ -27,6 +29,8 @@ export default function Team({ orgId, people, myRole, myPersonId, onChanged }: {
         action={canManage && (
           <button onClick={() => setEditing('new')} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5 flex-shrink-0"><Plus className="w-4 h-4" /> Persona</button>
         )} />
+
+      {myPersonId && <MyTasks orgId={orgId} people={people} myPersonId={myPersonId} />}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:gap-4 md:grid-cols-2">
         {people.map(p => (
@@ -175,5 +179,53 @@ function PersonSheet({ orgId, person, myRole, onClose, onSaved }: {
       </div>
       <ErrorNote text={error} />
     </Sheet>
+  );
+}
+
+// "I tuoi compiti": the open tasks of the person using the app, in order of priority,
+// each with the reason it is where it is.
+function MyTasks({ orgId, people, myPersonId }: { orgId: string; people: Person[]; myPersonId: string }) {
+  const dialog = useDialog();
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [sheet, setSheet] = useState<Task | 'new' | null>(null);
+  const today = toDateKey(new Date());
+  const load = useCallback(async () => {
+    try {
+      const [t, p] = await Promise.all([listTasks(orgId), listProjects(orgId)]);
+      setTasks(t.filter(x => x.assignee_person_id === myPersonId)); setProjects(p);
+    } catch { setTasks([]); }
+  }, [orgId, myPersonId]);
+  useEffect(() => { load(); }, [load]);
+  const project = (t: Task) => projects.find(p => p.id === t.project_id);
+  const open = (tasks || []).filter(t => t.status !== 'fatto')
+    .sort((a, b) => taskPriority(b, today, project(b)).score - taskPriority(a, today, project(a)).score);
+  const doneToday = (tasks || []).filter(t => t.status === 'fatto' && t.completed_at && toDateKey(new Date(t.completed_at)) === today);
+
+  return (
+    <section className="glass-card p-5 space-y-3">
+      <div className="flex items-center gap-2.5">
+        <ListChecks className="w-[18px] h-[18px]" strokeWidth={1.75} style={{ color: 'var(--text-muted)' }} />
+        <h3 className="text-[15px] font-semibold flex-1" style={{ color: 'var(--text)' }}>I tuoi compiti</h3>
+        <button onClick={() => setSheet('new')} aria-label="Nuovo compito" className="w-9 h-9 -mr-2 rounded-full flex items-center justify-center hover:bg-white/5"><Plus className="w-4 h-4" /></button>
+      </div>
+      {tasks === null ? null : open.length === 0 && doneToday.length === 0 ? <Empty>Niente da fare. Aggiungi un compito o assegnatelo da un progetto.</Empty> : (
+        <ul className="space-y-1.5">
+          {[...open, ...doneToday].map(t => (
+            <TaskRow key={t.id} task={t} people={people} project={project(t)} today={today} showProject canToggle
+              onToggle={async () => {
+                try { await setTaskStatus(t.id, t.status === 'fatto' ? 'da_fare' : 'fatto'); load(); }
+                catch (err) { dialog.alert({ title: 'Non è stato possibile', message: err instanceof Error ? err.message : String(err) }); }
+              }}
+              onOpen={() => setSheet(t)} />
+          ))}
+        </ul>
+      )}
+      {sheet && (
+        <TaskSheet task={sheet === 'new' ? null : sheet} projects={projects} people={people} defaultAssignee={myPersonId} onClose={() => setSheet(null)}
+          onSave={async input => { await saveTask(orgId, input, sheet === 'new' ? undefined : sheet.id); setSheet(null); load(); }}
+          onDelete={sheet !== 'new' ? async () => { await deleteTask(sheet.id); setSheet(null); load(); } : undefined} />
+      )}
+    </section>
   );
 }
