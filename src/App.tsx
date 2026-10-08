@@ -18,6 +18,7 @@ const loaders = {
   guida: () => import('./components/GuidaStudioAI'),
   admin: () => import('./components/AdminPanel'),
   mindset: () => import('./components/mindset/Mindset'),
+  business: () => import('./components/business/Business'),
 };
 const Impegni = lazy(loaders.impegni);
 const Voti = lazy(loaders.voti);
@@ -28,6 +29,7 @@ const Calendario = lazy(loaders.calendario);
 const GuidaStudioAI = lazy(loaders.guida);
 const AdminPanel = lazy(loaders.admin);
 const Mindset = lazy(loaders.mindset);
+const Business = lazy(loaders.business);
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -734,6 +736,7 @@ function App() {
             onAddTask={(task) => updateData({ ...data, tasks: [...data.tasks, task] })}
           />
         )}
+        {currentSection === 'business' && isDeveloper(user.email) && <Business />}
         {currentSection === 'mindset' && isDeveloper(user.email) && (
           <Mindset
             mindset={data.mindset}
