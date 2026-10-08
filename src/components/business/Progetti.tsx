@@ -43,7 +43,7 @@ export default function Progetti({ orgId, people, myRole, myPersonId, focusId, o
   if (open) {
     return (
       <ProjectDetail project={open} orgId={orgId} people={people} clients={clients} projects={projects || []} myRole={myRole} myPersonId={myPersonId}
-        tasks={tasks.filter(t => t.project_id === open.id)} today={today} onBack={() => setOpenId(null)} onChanged={load}
+        tasks={tasks.filter(t => t.project_id === open.id)} allTasks={tasks} today={today} onBack={() => setOpenId(null)} onChanged={load}
         onDeleted={() => { setOpenId(null); load(); }} />
     );
   }
@@ -111,9 +111,9 @@ function HealthBadge({ score, status }: { score: number; status: ProjectStatus }
 
 // ───────────── Scheda del progetto ─────────────
 
-function ProjectDetail({ project: p, orgId, people, clients, projects, myRole, myPersonId, tasks, today, onBack, onChanged, onDeleted }: {
+function ProjectDetail({ project: p, orgId, people, clients, projects, myRole, myPersonId, tasks, allTasks, today, onBack, onChanged, onDeleted }: {
   project: Project; orgId: string; people: Person[]; clients: Counterparty[]; projects: Project[]; myRole: BizRole; myPersonId: string | null;
-  tasks: Task[]; today: string; onBack: () => void; onChanged: () => void; onDeleted: () => void;
+  tasks: Task[]; allTasks: Task[]; today: string; onBack: () => void; onChanged: () => void; onDeleted: () => void;
 }) {
   const dialog = useDialog();
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -249,7 +249,7 @@ function ProjectDetail({ project: p, orgId, people, clients, projects, myRole, m
 
       {editing && <ProjectSheet orgId={orgId} project={p} people={people} clients={clients} myPersonId={myPersonId} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onChanged(); }} />}
       {taskSheet && (
-        <TaskSheet task={taskSheet === 'new' ? null : taskSheet} projects={projects} people={people} defaultProjectId={p.id} onClose={() => setTaskSheet(null)}
+        <TaskSheet task={taskSheet === 'new' ? null : taskSheet} projects={projects} people={people} allTasks={allTasks} defaultProjectId={p.id} onClose={() => setTaskSheet(null)}
           onSave={async input => { await saveTask(orgId, input, taskSheet === 'new' ? undefined : taskSheet.id); setTaskSheet(null); onChanged(); }}
           onDelete={taskSheet !== 'new' ? async () => { await deleteTask(taskSheet.id); setTaskSheet(null); onChanged(); } : undefined} />
       )}

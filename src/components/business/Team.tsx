@@ -222,7 +222,7 @@ function MyTasks({ orgId, people, myPersonId }: { orgId: string; people: Person[
         </ul>
       )}
       {sheet && (
-        <TaskSheet task={sheet === 'new' ? null : sheet} projects={projects} people={people} defaultAssignee={myPersonId} onClose={() => setSheet(null)}
+        <TaskSheet task={sheet === 'new' ? null : sheet} projects={projects} people={people} allTasks={tasks || []} defaultAssignee={myPersonId} onClose={() => setSheet(null)}
           onSave={async input => { await saveTask(orgId, input, sheet === 'new' ? undefined : sheet.id); setSheet(null); load(); }}
           onDelete={sheet !== 'new' ? async () => { await deleteTask(sheet.id); setSheet(null); load(); } : undefined} />
       )}

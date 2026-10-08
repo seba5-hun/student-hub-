@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Mail, Phone, FileSignature, Users, FolderKanban, AlertTriangle, Minus } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Mail, Phone, FileSignature, Users, FolderKanban, AlertTriangle, Minus, Sparkles } from 'lucide-react';
 import {
   BizRole, Person, Counterparty, CounterpartyInput, CpKind, KIND_LABEL, Contact, Contract, ContractTerm, EveryUnit, Project, STATUS_LABEL,
   listCounterparties, saveCounterparty, deleteCounterparty, listContacts, saveContact, deleteContact, listContracts, saveContract, deleteContract,
@@ -9,7 +9,7 @@ import { toDateKey } from '../../lib/store';
 import { useDialog } from '../Dialog';
 import { Sheet, TextField, TextArea, SelectField, ErrorNote, PageTitle, BackButton, Chip, Empty, Label, Switch, shortDate } from './ui';
 
-interface Props { orgId: string; people: Person[]; myRole: BizRole; onOpenProject: (id: string) => void }
+interface Props { orgId: string; people: Person[]; myRole: BizRole; onOpenProject: (id: string) => void; focusId?: string | null; onFocusUsed?: () => void; onAskCoach?: () => void }
 
 const KIND_PLURAL: Record<CpKind, string> = { cliente: 'Clienti', partner: 'Partner', fornitore: 'Fornitori' };
 const CLIENT_EDITORS: BizRole[] = ['titolare', 'admin', 'manager'];
@@ -17,7 +17,7 @@ const CONTRACT_READERS: BizRole[] = ['titolare', 'admin', 'manager', 'finanza'];
 const money = (v: number | null) => (v == null ? '' : v.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }));
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
 
-export default function Clienti({ orgId, people, myRole, onOpenProject }: Props) {
+export default function Clienti({ orgId, people, myRole, onOpenProject, focusId, onFocusUsed, onAskCoach }: Props) {
   const dialog = useDialog();
   const canEdit = CLIENT_EDITORS.includes(myRole);
   const canSeeContracts = CONTRACT_READERS.includes(myRole);
@@ -27,7 +27,8 @@ export default function Clienti({ orgId, people, myRole, onOpenProject }: Props)
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<CpKind | 'tutti'>('tutti');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(focusId || null);
+  useEffect(() => { if (focusId) { setOpenId(focusId); onFocusUsed?.(); } }, [focusId, onFocusUsed]);
   const [editing, setEditing] = useState<Counterparty | 'new' | null>(null);
   const today = toDateKey(new Date());
 
@@ -85,7 +86,13 @@ export default function Clienti({ orgId, people, myRole, onOpenProject }: Props)
   return (
     <div className="space-y-6">
       <PageTitle title="Clienti." lead="Clienti, partner e fornitori: contratti, obblighi e diritti, e cosa scade."
-        action={canEdit && <button onClick={() => setEditing('new')} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5 flex-shrink-0"><Plus className="w-4 h-4" /> Nuovo</button>} />
+        action={canEdit && (
+          <div className="flex gap-2 flex-shrink-0">
+            {onAskCoach && <button onClick={onAskCoach} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5"><Sparkles className="w-4 h-4" /> Con il Coach</button>}
+            <button onClick={() => setEditing('new')} aria-label="Nuovo a mano" className="btn-secondary h-11 px-4 inline-flex items-center gap-1.5"><Plus className="w-4 h-4" /><span className="hidden sm:inline"> A mano</span></button>
+          </div>
+        )} />
+      {canEdit && onAskCoach && <p className="text-sm -mt-3" style={{ color: 'var(--text-subtle)' }}>Scrivi al Coach nome, referente e accordi (o allega il contratto): crea lui cliente, contratto, obblighi, scadenze e compiti.</p>}
       <ErrorNote text={error} />
       {kinds.length > 1 && (
         <div className="flex gap-1.5 flex-wrap" role="tablist" aria-label="Filtro">

@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { AuditEntry, Org, Person, describeAudit, listAudit, updateOrg } from '../../lib/business';
+import { AuditEntry, BizRole, Org, Person, describeAudit, listAudit, updateOrg } from '../../lib/business';
+import { seedDemo, clearDemo } from '../../lib/businessData';
 import { Sheet, TextField, Label, ErrorNote } from './ui';
 
 // Company settings (owner and admin): details, sections shown to the team, activity log.
-export default function Settings({ org, people, sections, onClose, onSaved }: {
-  org: Org; people: Person[]; sections: { id: string; label: string }[]; onClose: () => void; onSaved: () => void;
+export default function Settings({ org, people, sections, myRole, onClose, onSaved }: {
+  org: Org; people: Person[]; sections: { id: string; label: string }[]; myRole: BizRole; onClose: () => void; onSaved: () => void;
 }) {
+  const [demoBusy, setDemoBusy] = useState('');
+  const demo = async (kind: 'seed' | 'clear') => {
+    setDemoBusy(kind); setError('');
+    try { if (kind === 'seed') await seedDemo(org.id); else await clearDemo(org.id); onSaved(); }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)); setDemoBusy(''); }
+  };
   const [name, setName] = useState(org.name);
   const [sector, setSector] = useState(org.sector || '');
   const [vat, setVat] = useState(org.vat || '');
@@ -62,6 +69,17 @@ export default function Settings({ org, people, sections, onClose, onSaved }: {
           })}
         </ul>
       </div>
+
+      {myRole === 'titolare' && (
+        <div>
+          <Label>Dati di prova</Label>
+          <p className="text-xs mb-2" style={{ color: 'var(--text-subtle)' }}>Un’azienda di esempio (sponsor, clienti, contratti, progetti, fatture, agenda) per provare tutto. I tuoi dati veri non vengono toccati.</p>
+          <div className="flex gap-2 flex-wrap">
+            <button type="button" onClick={() => demo('seed')} disabled={!!demoBusy} className="btn-secondary h-11 px-4 inline-flex items-center gap-2">{demoBusy === 'seed' && <Loader2 className="w-4 h-4 animate-spin" />} Carica i dati di prova</button>
+            <button type="button" onClick={() => demo('clear')} disabled={!!demoBusy} className="h-11 px-4 rounded-full text-sm font-medium inline-flex items-center gap-2" style={{ color: 'var(--danger)' }}>{demoBusy === 'clear' && <Loader2 className="w-4 h-4 animate-spin" />} Togli i dati di prova</button>
+          </div>
+        </div>
+      )}
 
       <div>
         <Label>Attività recenti</Label>

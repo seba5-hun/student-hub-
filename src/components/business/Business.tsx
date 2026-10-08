@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sun, CalendarDays, Building2, FolderKanban, Users, Wallet, FileText, Lightbulb, Workflow, MessageCircle, Bell, LayoutGrid, X, Settings2, Loader2 } from 'lucide-react';
 import { BusinessTab, SECTION_PAGES } from './sections';
 import { BizRole, BusinessSetupError, Org, Person, listOrgs, listPeople } from '../../lib/business';
@@ -7,6 +7,16 @@ import Team from './Team';
 import Clienti from './Clienti';
 import Progetti from './Progetti';
 import Settings from './Settings';
+import Oggi from './Oggi';
+import Agenda from './Agenda';
+import Finanza from './Finanza';
+import Documenti from './Documenti';
+import Insights from './Insights';
+import Automazioni from './Automazioni';
+import Coach, { CoachPrefill } from './Coach';
+import { BizSnapshot, loadSnapshot, listAutomations, addRun, markAutomationRun } from '../../lib/businessData';
+import { automationTasks, AUTOMATION_TEMPLATES, dayKey } from '../../lib/businessIntel';
+import { saveTask } from '../../lib/business';
 import { ErrorNote } from './ui';
 
 // MYND Business (only on the admin account for now). Ten sections: on the phone a floating
@@ -48,7 +58,10 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
   // A project opened from another section (e.g. from a client's page).
   const [projectFocus, setProjectFocus] = useState<string | null>(null);
   const clearFocus = useCallback(() => setProjectFocus(null), []);
-  const pending = 0; // items waiting in "Da confermare" (from phase 4)
+  const [snap, setSnap] = useState<BizSnapshot | null>(null);
+  const [coachPrefill, setCoachPrefill] = useState<CoachPrefill | null>(null);
+  const [clientFocus, setClientFocus] = useState<string | null>(null);
+  const autoRan = useRef(false);
 
   const reload = useCallback(async () => {
     try {
@@ -68,6 +81,51 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
   const me = people.find(p => p.user_id === userId) || null;
   const myRole: BizRole = me?.role || 'dipendente';
   const canManage = myRole === 'titolare' || myRole === 'admin';
+  const canFinance = ['titolare', 'admin', 'finanza'].includes(myRole);
+  const canContracts = ['titolare', 'admin', 'manager', 'finanza'].includes(myRole);
+  const pending = snap?.proposals.length || 0;
+
+  // Everything the person can see, in one go: used by Oggi, Agenda, Finanza, Documenti, Insights, Coach.
+  const orgId = org?.id;
+  const refresh = useCallback(async () => {
+    if (!orgId) return;
+    try { setSnap(await loadSnapshot(orgId, people, canFinance, canContracts)); } catch { /* the sections show their own errors */ }
+  }, [orgId, people, canFinance, canContracts]);
+  useEffect(() => { refresh(); }, [refresh, tab]);
+
+  // Automations run when Business opens (there is no server yet): owners and admins only,
+  // and each task carries a key so it is never created twice.
+  const runAutomations = useCallback(async (): Promise<number> => {
+    if (!orgId || !snap?.part2 || !canManage) return 0;
+    const autos = (await listAutomations(orgId)).filter(a => a.active);
+    if (!autos.length) return 0;
+    const today = dayKey(new Date());
+    const todo = automationTasks(autos.map(a => a.template), snap, today, me?.id || null);
+    for (const t of todo) {
+      await saveTask(orgId, { title: t.title, notes: `Creato dall'automazione. [auto:${t.key}]`, project_id: t.projectId, assignee_person_id: t.assignee, due_date: t.due, estimate_minutes: 30, importance: 4 });
+    }
+    for (const a of autos) {
+      const mine = todo.filter(t => t.template === a.template);
+      await markAutomationRun(a.id).catch(() => {});
+      if (mine.length) await addRun(orgId, a.id, `${AUTOMATION_TEMPLATES.find(x => x.template === a.template)?.name}: ${mine.map(t => `“${t.title}”`).join(', ')}`).catch(() => {});
+    }
+    if (todo.length) refresh();
+    return todo.length;
+  }, [orgId, snap, canManage, me?.id, refresh]);
+  useEffect(() => {
+    if (autoRan.current || !snap?.part2) return;
+    autoRan.current = true;
+    runAutomations().catch(() => {});
+  }, [snap, runAutomations]);
+
+  const askCoach = useCallback((p: CoachPrefill) => { setCoachPrefill(p); setTab('coach'); setMoreOpen(false); window.scrollTo({ top: 0 }); }, []);
+  const clearPrefill = useCallback(() => setCoachPrefill(null), []);
+  const clearClientFocus = useCallback(() => setClientFocus(null), []);
+  const openFrom = (t: BusinessTab, focusId?: string) => {
+    if (t === 'progetti' && focusId) setProjectFocus(focusId);
+    if (t === 'clienti' && focusId) setClientFocus(focusId);
+    go(t);
+  };
   // Sections the owner switched off for the company (Oggi always stays).
   const hidden = org?.settings?.hidden_sections || [];
   const tabs = TABS.filter(x => x.id === 'oggi' || !hidden.includes(x.id));
@@ -158,9 +216,18 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
         </nav>
 
         <div key={tab} className="animate-section-in min-w-0">
-          {tab === 'team' ? <Team orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} onChanged={reload} />
-            : tab === 'clienti' ? <Clienti orgId={load.org.id} people={load.people} myRole={myRole} onOpenProject={id => { setProjectFocus(id); go('progetti'); }} />
+          {tab === 'oggi' ? <Oggi org={load.org} me={me} myRole={myRole} snap={snap} onOpen={openFrom} onAskCoach={text => askCoach({ text, send: true })} onChanged={refresh} />
+            : tab === 'agenda' ? <Agenda org={load.org} snap={snap} people={load.people} canEdit={myRole !== 'esterno'} onOpen={openFrom} onChanged={refresh} />
+            : tab === 'team' ? <Team orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} onChanged={reload} />
+            : tab === 'clienti' ? <Clienti orgId={load.org.id} people={load.people} myRole={myRole} focusId={clientFocus} onFocusUsed={clearClientFocus}
+                onOpenProject={id => { setProjectFocus(id); go('progetti'); }} onAskCoach={() => askCoach({ text: 'Nuovo cliente: ' })} />
             : tab === 'progetti' ? <Progetti orgId={load.org.id} people={load.people} myRole={myRole} myPersonId={me?.id || null} focusId={projectFocus} onFocusUsed={clearFocus} />
+            : tab === 'finanza' ? <Finanza org={load.org} myRole={myRole} snap={snap} onChanged={() => { refresh(); reload(); }} onAskCoach={askCoach} />
+            : tab === 'documenti' ? <Documenti org={load.org} myRole={myRole} snap={snap} onChanged={refresh} onAskCoach={askCoach} />
+            : tab === 'insights' ? <Insights snap={snap} canFinance={canFinance} />
+            : tab === 'automazioni' ? <Automazioni org={load.org} myRole={myRole} onRunNow={runAutomations} />
+            : tab === 'coach' && snap ? <Coach org={load.org} me={me} snap={snap} cash={typeof load.org.settings?.cash_balance === 'number' ? load.org.settings.cash_balance : null}
+                prefill={coachPrefill} onPrefillUsed={clearPrefill} onChanged={refresh} />
             : <Page onOpen={go} />}
         </div>
       </div>
@@ -190,8 +257,8 @@ export default function Business({ userId, userEmail }: { userId: string; userEm
       </nav>
 
       {settingsOpen && (
-        <Settings org={load.org} people={load.people} sections={TABS} onClose={() => setSettingsOpen(false)}
-          onSaved={() => { setSettingsOpen(false); reload(); }} />
+        <Settings org={load.org} people={load.people} sections={TABS} myRole={myRole} onClose={() => setSettingsOpen(false)}
+          onSaved={() => { setSettingsOpen(false); reload(); refresh(); }} />
       )}
 
       {moreOpen && (

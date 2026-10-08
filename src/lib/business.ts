@@ -27,7 +27,7 @@ export interface Org {
   name: string;
   sector: string | null;
   vat: string | null;
-  settings: { hidden_sections?: string[] };
+  settings: { hidden_sections?: string[]; cash_balance?: number; cash_balance_date?: string };
   created_at: string;
 }
 export interface Person {
@@ -72,6 +72,18 @@ function fail(error: PgError): never {
   if (code === '23505') throw new Error('Esiste già una persona con questa email nel team.');
   if (code === '23514' || code === 'P0001') throw new Error(error?.message || 'Modifica non valida.');
   throw new Error(error?.message || 'Qualcosa non ha funzionato. Riprova.');
+}
+
+// Updates the row with this id, or inserts it and returns the new id.
+async function upsertRow(table: string, values: Record<string, unknown>, id?: string): Promise<string> {
+  if (id) {
+    const { error } = await db().from(table).update(values).eq('id', id);
+    if (error) fail(error);
+    return id;
+  }
+  const { data, error } = await db().from(table).insert(values).select('id').single();
+  if (error) fail(error);
+  return (data as { id: string }).id;
 }
 
 export async function listOrgs(): Promise<Org[]> {
@@ -236,11 +248,8 @@ export async function listContacts(counterpartyId: string): Promise<Contact[]> {
   if (error) fail(error);
   return (data || []) as Contact[];
 }
-export async function saveContact(orgId: string, counterpartyId: string, input: ContactInput, id?: string): Promise<void> {
-  const { error } = id
-    ? await db().from('biz_contacts').update(input).eq('id', id)
-    : await db().from('biz_contacts').insert({ ...input, org_id: orgId, counterparty_id: counterpartyId });
-  if (error) fail(error);
+export async function saveContact(orgId: string, counterpartyId: string, input: ContactInput, id?: string): Promise<string> {
+  return upsertRow('biz_contacts', id ? input : { ...input, org_id: orgId, counterparty_id: counterpartyId }, id);
 }
 export async function deleteContact(id: string): Promise<void> {
   const { error } = await db().from('biz_contacts').delete().eq('id', id);
@@ -254,11 +263,8 @@ export async function listContracts(orgId: string, counterpartyId?: string): Pro
   if (error) fail(error);
   return (data || []) as Contract[];
 }
-export async function saveContract(orgId: string, counterpartyId: string, input: ContractInput, id?: string): Promise<void> {
-  const { error } = id
-    ? await db().from('biz_contracts').update(input).eq('id', id)
-    : await db().from('biz_contracts').insert({ ...input, org_id: orgId, counterparty_id: counterpartyId });
-  if (error) fail(error);
+export async function saveContract(orgId: string, counterpartyId: string, input: ContractInput, id?: string): Promise<string> {
+  return upsertRow('biz_contracts', id ? input : { ...input, org_id: orgId, counterparty_id: counterpartyId }, id);
 }
 export async function deleteContract(id: string): Promise<void> {
   const { error } = await db().from('biz_contracts').delete().eq('id', id);
@@ -270,11 +276,8 @@ export async function listTerms(orgId: string): Promise<ContractTerm[]> {
   if (error) fail(error);
   return (data || []) as ContractTerm[];
 }
-export async function saveTerm(orgId: string, contractId: string, input: TermInput, id?: string): Promise<void> {
-  const { error } = id
-    ? await db().from('biz_contract_terms').update(input).eq('id', id)
-    : await db().from('biz_contract_terms').insert({ ...input, org_id: orgId, contract_id: contractId });
-  if (error) fail(error);
+export async function saveTerm(orgId: string, contractId: string, input: TermInput, id?: string): Promise<string> {
+  return upsertRow('biz_contract_terms', id ? input : { ...input, org_id: orgId, contract_id: contractId }, id);
 }
 export async function setTermUsed(id: string, used: number): Promise<void> {
   const { error } = await db().from('biz_contract_terms').update({ used: Math.max(0, used) }).eq('id', id);
@@ -393,11 +396,8 @@ export async function listTasks(orgId: string): Promise<Task[]> {
   if (error) fail(error);
   return (data || []) as Task[];
 }
-export async function saveTask(orgId: string, input: TaskInput, id?: string): Promise<void> {
-  const { error } = id
-    ? await db().from('biz_tasks').update(input).eq('id', id)
-    : await db().from('biz_tasks').insert({ ...input, org_id: orgId });
-  if (error) fail(error);
+export async function saveTask(orgId: string, input: TaskInput, id?: string): Promise<string> {
+  return upsertRow('biz_tasks', id ? input : { ...input, org_id: orgId }, id);
 }
 export async function setTaskStatus(id: string, status: TaskStatus): Promise<void> {
   const { error } = await db().from('biz_tasks').update({ status, completed_at: status === 'fatto' ? new Date().toISOString() : null }).eq('id', id);
