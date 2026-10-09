@@ -39,7 +39,11 @@ export const configError = checkConfig();
 function makeClient(): SupabaseClient | null {
   if (configError) return null;
   try {
-    return createClient(url, anonKey);
+    // The login stays on the device (localStorage) and is renewed by itself: the password is
+    // asked only the first time on each device, or after "Esci".
+    return createClient(url, anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
   } catch (err) {
     console.error('Supabase init error:', err);
     return null;
@@ -47,6 +51,23 @@ function makeClient(): SupabaseClient | null {
 }
 
 export const supabase: SupabaseClient | null = makeClient();
+
+// Whether "Continua con Google" is switched on in Supabase (Authentication → Providers).
+export async function googleLoginEnabled(): Promise<boolean> {
+  if (configError) return false;
+  try {
+    const cached = sessionStorage.getItem('mynd_google_login');
+    if (cached) return cached === '1';
+  } catch { /* ignore */ }
+  try {
+    const res = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: anonKey } });
+    const on = res.ok && !!(await res.json())?.external?.google;
+    try { sessionStorage.setItem('mynd_google_login', on ? '1' : '0'); } catch { /* ignore */ }
+    return on;
+  } catch {
+    return false;
+  }
+}
 
 const TABLE = 'user_data';
 
