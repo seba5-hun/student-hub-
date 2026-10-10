@@ -57,12 +57,13 @@ export async function googleLoginEnabled(): Promise<boolean> {
   if (configError) return false;
   try {
     const cached = sessionStorage.getItem('mynd_google_login');
-    if (cached) return cached === '1';
+    if (cached === '1') return true;
   } catch { /* ignore */ }
   try {
     const res = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: anonKey } });
     const on = res.ok && !!(await res.json())?.external?.google;
-    try { sessionStorage.setItem('mynd_google_login', on ? '1' : '0'); } catch { /* ignore */ }
+    // Only "on" is remembered: once Google is switched on in Supabase, the button shows at the next load.
+    try { if (on) sessionStorage.setItem('mynd_google_login', '1'); } catch { /* ignore */ }
     return on;
   } catch {
     return false;
