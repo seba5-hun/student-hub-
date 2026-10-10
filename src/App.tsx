@@ -559,8 +559,8 @@ function App() {
   // Confetti on task completion
   const handleTasksUpdate = useCallback((tasks: UserData['tasks']) => {
     if (!data) return;
-    const prevDone = data.tasks.filter(t => t.done).length;
-    const newDone = tasks.filter(t => t.done).length;
+    const prevDone = data.tasks.filter(t => t.done && !t.cancelled).length;
+    const newDone = tasks.filter(t => t.done && !t.cancelled).length;
     if (newDone > prevDone) {
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
     }

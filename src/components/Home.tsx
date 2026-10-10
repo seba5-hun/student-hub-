@@ -125,7 +125,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
               <SummaryItem icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} label="Migliore" value={bestSubject ? bestSubject[0] : '—'} sub={bestSubject ? `${bestSubject[1]}` : ''} darkMode={darkMode} />
               <SummaryItem icon={<TrendingDown className="w-4 h-4 text-red-400" />} label="Più debole" value={worstSubject ? worstSubject[0] : '—'} sub={worstSubject ? `${worstSubject[1]}` : ''} darkMode={darkMode} />
               <SummaryItem icon={<Award className="w-4 h-4 text-amber-400" />} label="Più studiata" value={mostStudied ? mostStudied[0] : '—'} sub={mostStudied ? `${Math.round(mostStudied[1] / 60)}h` : ''} darkMode={darkMode} />
-              <SummaryItem icon={<CheckCircle2 className="w-4 h-4 text-indigo-400" />} label="Completati" value={`${tasks.filter(t => t.done).length}`} sub="totale" darkMode={darkMode} />
+              <SummaryItem icon={<CheckCircle2 className="w-4 h-4 text-indigo-400" />} label="Completati" value={`${tasks.filter(t => t.done && !t.cancelled).length}`} sub="totale" darkMode={darkMode} />
             </div>
           </div>
         );

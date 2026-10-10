@@ -17,6 +17,11 @@ export interface Task {
   keepOpen?: boolean;  // reopened by the user after that: never auto-completed again
   subject?: string;
   googleCalendarId?: string;
+  // Postponed: the date it had first (shown as "rinviato dal …").
+  movedFrom?: string;
+  // It didn't happen (test cancelled, appointment called off): kept as done so that it leaves
+  // every list and the reminders, but it doesn't count as completed.
+  cancelled?: boolean;
 }
 
 export interface Grade {

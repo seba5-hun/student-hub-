@@ -38,6 +38,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   const tasksByDate = useMemo(() => {
     const map: Record<string, Task[]> = {};
     tasks.forEach(task => {
+      if (task.cancelled) return; // didn't happen: not on the calendar
       const startDate = new Date(task.date + 'T00:00:00');
       const endDate = task.endDate ? new Date(task.endDate + 'T00:00:00') : startDate;
       const current = new Date(startDate);

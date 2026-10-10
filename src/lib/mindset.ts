@@ -663,7 +663,7 @@ const onDay = (t: Task, key: string) => t.date === key || (!!t.endDate && t.date
 // The next test (in the following 3 days): the day's study goes to its subject.
 export function upcomingExam(tasks: Task[], key: string, includeDone = false): Task | null {
   const until = addDays(key, 3);
-  const list = tasks.filter(t => (includeDone || !t.done) && t.type === 'scolastico' && t.subject && t.date > key && t.date <= until && (EXAM.test(t.title) || t.importance >= 4))
+  const list = tasks.filter(t => !t.cancelled && (includeDone || !t.done) && t.type === 'scolastico' && t.subject && t.date > key && t.date <= until && (EXAM.test(t.title) || t.importance >= 4))
     .sort((a, b) => a.date.localeCompare(b.date) || b.importance - a.importance);
   return list[0] || null;
 }
@@ -672,7 +672,7 @@ export function upcomingExam(tasks: Task[], key: string, includeDone = false): T
 // the others as reminders) + study blocks without a subject pointed at the next test.
 export function dayWithTasks(m: MindsetData, key: string, tasks: Task[] = []): { blocks: Block[]; reminders: Task[]; exam: Task | null } {
   let blocks = blocksOf(m, key);
-  const dayTasks = tasks.filter(t => onDay(t, key));
+  const dayTasks = tasks.filter(t => !t.cancelled && onDay(t, key));
   const reminders: Task[] = [];
   // Already in the plan (e.g. the Coach put "Visita medica" in it): not added twice.
   const inPlan = (t: Task) => blocks.some(b => b.id === `task-${t.id}` || (!b.taskId && b.title.toLowerCase().includes(t.title.trim().toLowerCase())));
