@@ -7,10 +7,13 @@ import { getKey, setKey, isReady, providerLabel, transcribeFile } from '../lib/a
 import { KINDS, OnboardingDraft, TaskKind } from '../lib/onboarding';
 import { blobToBase64 } from '../lib/gemini';
 import { SECTIONS } from './Layout';
+import OnboardingArt from './OnboardingArt';
 import { useDialog } from './Dialog';
 
-// "App": a guided tour in slides. Feature slides explain a section, question slides collect the
-// student's data; nothing is saved until the last slide ("Carica tutto"). Every slide can be skipped.
+// "Crea la tua MYND": a guided tour in slides. Feature slides explain a section, question slides
+// collect the student's data (typed, or read from a photo by the AI); nothing is saved until the
+// last slide ("Carica tutto"). Every slide can be skipped. On a computer (and iPad held sideways)
+// each slide is a two-column page with its illustration; narrower screens put the illustration on top.
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -62,7 +65,7 @@ export default function Onboarding({ data, onClose, onNavigate }: Props) {
     if (touched) {
       const save = await dialog.confirm({
         title: 'Salvare quello che hai inserito?',
-        message: 'Le risposte date finora vengono caricate nell\'app. Puoi riaprire la guida quando vuoi dal pulsante App.',
+        message: 'Le risposte date finora vengono caricate nell\'app. Puoi riaprire la guida quando vuoi da "Crea la tua MYND" nella Home.',
         confirmLabel: 'Salva ed esci', cancelLabel: 'Esci senza salvare',
       });
       onClose(save ? draft : null);
@@ -71,64 +74,91 @@ export default function Onboarding({ data, onClose, onNavigate }: Props) {
 
   const finish = () => onClose(draft);
   const next = () => (last ? finish() : setIndex(i => i + 1));
+  const back = () => setIndex(i => Math.max(0, i - 1));
+
+  // Computer: the arrow keys move between slides (not while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || document.querySelector('[role=alertdialog]')) return;
+      if (e.key === 'ArrowRight' && !last) setIndex(i => i + 1);
+      if (e.key === 'ArrowLeft') setIndex(i => Math.max(0, i - 1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [last]);
+
+  const nav = (
+    <div className="flex gap-3">
+      {index > 0 && (
+        <button onClick={back} aria-label="Indietro" className="btn-secondary w-14 h-14 !rounded-full flex items-center justify-center flex-shrink-0">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+      )}
+      <button onClick={next} className="btn-primary flex-1 md:flex-none md:min-w-[240px] h-14 !rounded-full text-base font-semibold inline-flex items-center justify-center gap-2 px-8">
+        {last ? <>Carica tutto <Check className="w-5 h-5" /></> : index === 0 ? <>Iniziamo <ArrowRight className="w-5 h-5" /></> : <>Avanti <ArrowRight className="w-5 h-5" /></>}
+      </button>
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col animate-fade-in" style={{ background: 'var(--bg, #0A0B0C)' }} role="dialog" aria-modal="true" aria-label="Guida all'app">
+    <div className="fixed inset-0 z-[60] flex flex-col animate-fade-in" style={{ background: 'var(--bg, #0A0B0C)' }} role="dialog" aria-modal="true" aria-label="Crea la tua MYND">
       <div className="absolute inset-0 gradient-bg mesh-gradient -z-10" aria-hidden />
       <div className="safe-top flex-shrink-0">
-        <div className="max-w-xl mx-auto px-4 h-14 flex items-center gap-3">
-          <button onClick={close} aria-label="Chiudi la guida" className="w-11 h-11 -ml-1.5 rounded-full flex items-center justify-center" style={{ color: 'var(--text)' }}>
+        <div className="max-w-6xl mx-auto px-4 md:px-8 lg:px-12 h-14 md:h-20 flex items-center gap-3 md:gap-6">
+          <button onClick={close} aria-label="Chiudi la guida" className="w-11 h-11 -ml-1.5 rounded-full flex items-center justify-center flex-shrink-0" style={{ color: 'var(--text)' }}>
             <X className="w-5 h-5" />
           </button>
+          <span className="hidden md:block text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--text)' }}>Crea la tua M<span style={{ color: 'var(--brand-ring)' }}>Y</span>ND</span>
           <div className="flex-1 flex gap-1" aria-label={`Passo ${index + 1} di ${slides.length}`}>
             {slides.map((s, i) => (
-              <button key={s.id} onClick={() => setIndex(i)} aria-label={`Vai a: ${s.short}`} className="flex-1 h-6 flex items-center">
+              <button key={s.id} onClick={() => setIndex(i)} aria-label={`Vai a: ${s.short}`} title={s.short} className="flex-1 h-6 flex items-center">
                 <span className="block w-full h-1 rounded-full transition-colors" style={{ background: i <= index ? 'var(--brand-fill)' : 'var(--border)' }} />
               </button>
             ))}
           </div>
-          {!last && <button onClick={() => setIndex(i => i + 1)} className="h-11 px-2 text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Salta</button>}
+          <span className="hidden md:block text-sm tabular" style={{ color: 'var(--text-subtle)' }}>{index + 1}/{slides.length}</span>
+          {!last && <button onClick={() => setIndex(i => i + 1)} className="h-11 px-2 text-sm font-medium flex-shrink-0" style={{ color: 'var(--text-muted)' }}>Salta</button>}
         </div>
       </div>
 
       <div ref={scroller} className="flex-1 overflow-y-auto">
-        <div key={slide.id} className="max-w-xl mx-auto px-5 pt-6 pb-10 animate-section-in">
-          <div className="flex items-center gap-3 mb-5">
-            <span className="w-12 h-12 rounded-2xl glass-lens flex items-center justify-center" style={{ color: 'var(--brand-ring)' }}>{slide.icon}</span>
-            <span className="text-xs font-medium uppercase tracking-[0.12em]" style={{ color: 'var(--text-subtle)' }}>{slide.kicker}</span>
+        <div key={slide.id} className="max-w-xl md:max-w-2xl lg:max-w-6xl mx-auto px-5 md:px-8 lg:px-12 pt-3 pb-10 md:pt-6 lg:py-8 lg:min-h-full lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16 lg:items-center animate-section-in">
+          <div className={slide.body ? 'hidden md:block mb-8 lg:mb-0' : 'mb-6 md:mb-8 lg:mb-0'}>
+            <div className="glass-card !rounded-[32px] overflow-hidden flex items-center justify-center p-3 md:p-6 lg:p-8 h-[210px] sm:h-[260px] md:h-[320px] lg:h-auto lg:aspect-[8/7]">
+              <OnboardingArt id={slide.id} className="w-full h-full" />
+            </div>
           </div>
-          <h2 className="text-[34px] sm:text-[40px] font-bold leading-[1.05]" style={{ letterSpacing: '-0.04em', color: 'var(--text)' }}>{slide.title}</h2>
-          {slide.text && <p className="mt-3 text-[16px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>{slide.text}</p>}
-          {slide.points && (
-            <ul className="mt-6 space-y-3">
-              {slide.points.map(p => (
-                <li key={p} className="flex gap-3 text-[15px]" style={{ color: 'var(--text)' }}>
-                  <span className="mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center" style={{ background: 'var(--brand-fill)', color: 'var(--on-brand)' }}><Check className="w-3 h-3" strokeWidth={3} /></span>
-                  {p}
-                </li>
-              ))}
-            </ul>
-          )}
-          {slide.body && <div className="mt-6">{slide.body}</div>}
-          {slide.open && (
-            <button onClick={() => { onClose(touched ? draft : null); onNavigate(slide.open!); }} className="mt-6 text-sm underline" style={{ color: 'var(--text-muted)' }}>
-              Apri {slide.short} adesso
-            </button>
-          )}
+          <div className="min-w-0 lg:py-6">
+            <div className="flex items-center gap-3 mb-4 md:mb-5">
+              <span className="w-11 h-11 md:w-12 md:h-12 rounded-2xl glass-lens flex items-center justify-center" style={{ color: 'var(--brand-ring)' }}>{slide.icon}</span>
+              <span className="text-xs font-medium uppercase tracking-[0.12em]" style={{ color: 'var(--text-subtle)' }}>{slide.kicker}</span>
+            </div>
+            <h2 className="text-[32px] sm:text-[40px] lg:text-[48px] font-bold leading-[1.04]" style={{ letterSpacing: '-0.045em', color: 'var(--text)' }}>{slide.title}</h2>
+            {slide.text && <p className="mt-3 md:mt-4 text-[16px] lg:text-[17px] leading-relaxed max-w-[34rem]" style={{ color: 'var(--text-muted)' }}>{slide.text}</p>}
+            {slide.points && (
+              <ul className="mt-6 space-y-3">
+                {slide.points.map(p => (
+                  <li key={p} className="flex gap-3 text-[15px] lg:text-base" style={{ color: 'var(--text)' }}>
+                    <span className="mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center" style={{ background: 'var(--brand-fill)', color: 'var(--on-brand)' }}><Check className="w-3 h-3" strokeWidth={3} /></span>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {slide.body && <div className="mt-6">{slide.body}</div>}
+            {slide.open && (
+              <button onClick={() => { onClose(touched ? draft : null); onNavigate(slide.open!); }} className="mt-6 text-sm underline" style={{ color: 'var(--text-muted)' }}>
+                Apri {slide.short} adesso
+              </button>
+            )}
+            <div className="hidden md:block mt-10">{nav}</div>
+          </div>
         </div>
       </div>
 
-      <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="max-w-xl mx-auto px-5 py-4 flex gap-3">
-          {index > 0 && (
-            <button onClick={() => setIndex(i => i - 1)} aria-label="Indietro" className="btn-secondary w-14 h-14 !rounded-full flex items-center justify-center flex-shrink-0">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          <button onClick={next} className="btn-primary flex-1 h-14 !rounded-full text-base font-semibold inline-flex items-center justify-center gap-2">
-            {last ? <>Carica tutto <Check className="w-5 h-5" /></> : index === 0 ? <>Iniziamo <ArrowRight className="w-5 h-5" /></> : <>Avanti <ArrowRight className="w-5 h-5" /></>}
-          </button>
-        </div>
+      <div className="md:hidden flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="px-5 py-4">{nav}</div>
       </div>
     </div>
   );
@@ -150,6 +180,7 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
   const ic = (I: typeof Sparkles) => <I className="w-6 h-6" />;
   const aiReady = isReady() || !!d.geminiKey.trim();
   const hidden = d.hiddenSections.filter(id => SECTIONS.some(s => s.id === id)).map(id => SECTIONS.find(s => s.id === id)!.label);
+  const photo = { draftKey: d.geminiKey, onGoToAI: () => goTo('ai') };
   return [
     {
       id: 'intro', short: 'Benvenuto', kicker: 'Benvenuto', icon: ic(Rocket),
@@ -159,14 +190,20 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
         'Tutto insieme: impegni, voti, tempo di studio e materiali.',
         'Ogni giorno ti suggerisce cosa studiare, e perché.',
         'Un tutor AI che conosce i tuoi appunti.',
-        'In 2 minuti lo configuriamo insieme. Puoi saltare qualsiasi passaggio e riaprire la guida quando vuoi dal pulsante App in alto.',
+        'In pochi minuti lo configuriamo insieme: puoi saltare qualsiasi passaggio e riprendere quando vuoi da "Crea la tua MYND" nella Home.',
       ],
+    },
+    {
+      id: 'ai', short: 'Collega l\'AI', kicker: 'Primo passo · AI', icon: ic(Sparkles),
+      title: 'Colleghiamo l\'AI, gratis.',
+      text: 'Ti serve per due cose: leggere le foto in questa guida (materie, voti, verifiche) e il tutor della Guida Studio AI. Si crea in un minuto, senza carta di credito. Se preferisci, salta: puoi farlo anche dopo.',
+      body: <AIStep value={d.geminiKey} onChange={geminiKey => set({ geminiKey })} />,
     },
     {
       id: 'materie', short: 'Materie', kicker: 'Domanda · Materie', icon: ic(LayoutGrid),
       title: 'Quali sono le tue materie?',
       text: 'Scrivile una alla volta o tutte insieme separate da virgola, oppure fai una foto all\'orario o alla pagella. Ognuna prende un colore diverso: tocca il pallino per cambiarlo.',
-      body: <SubjectsStep subjects={d.subjects} onChange={subjects => set({ subjects })} draftKey={d.geminiKey} onGoToAI={() => goTo('ai')} />,
+      body: <SubjectsStep subjects={d.subjects} onChange={subjects => set({ subjects })} {...photo} />,
     },
     {
       id: 'impegni', short: 'Impegni', kicker: 'Funzione · Impegni', icon: ic(Target), open: 'impegni',
@@ -181,8 +218,8 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
     {
       id: 'impegni-q', short: 'Verifiche', kicker: 'Domanda · Impegni', icon: ic(Target),
       title: 'Hai verifiche o interrogazioni in arrivo?',
-      text: 'Aggiungi le prossime: MYND le userà subito per dirti cosa studiare.',
-      body: <TasksStep subjects={d.subjects} tasks={d.tasks} onChange={tasks => set({ tasks })} />,
+      text: 'Aggiungile a mano, oppure fai una foto al diario o al registro: l\'AI trova date e materie da sola.',
+      body: <TasksStep subjects={d.subjects} tasks={d.tasks} onPatch={set} {...photo} />,
     },
     {
       id: 'voti', short: 'Voti', kicker: 'Funzione · Voti', icon: ic(BarChart3), open: 'voti',
@@ -196,8 +233,8 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
     {
       id: 'voti-q', short: 'I tuoi voti', kicker: 'Domanda · Voti', icon: ic(BarChart3),
       title: 'Hai già preso dei voti quest\'anno?',
-      text: 'Aggiungi quelli che ricordi: bastano materia e voto.',
-      body: <GradesStep subjects={d.subjects} grades={d.grades} onChange={grades => set({ grades })} />,
+      text: 'Aggiungi quelli che ricordi, oppure fai una foto al registro elettronico o alla pagella: l\'AI li legge tutti.',
+      body: <GradesStep subjects={d.subjects} grades={d.grades} onPatch={set} {...photo} />,
     },
     {
       id: 'timer', short: 'Timer Studio', kicker: 'Funzione · Timer Studio', icon: ic(Clock), open: 'timer',
@@ -247,14 +284,8 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
       points: [
         'Chat salvate in cartelle per materia.',
         'Puoi allegare la foto di un esercizio.',
-        'Funziona gratis con una chiave Google Gemini.',
+        aiReady ? 'Usa l\'AI che hai collegato all\'inizio.' : 'Funziona gratis con la chiave Gemini (primo passo di questa guida).',
       ],
-    },
-    {
-      id: 'ai', short: 'Collega l\'AI', kicker: 'Domanda · AI', icon: ic(Sparkles),
-      title: 'Colleghiamo l\'AI, gratis.',
-      text: 'Serve una "chiave" gratuita di Google Gemini: si crea in un minuto e non serve la carta di credito.',
-      body: <AIStep value={d.geminiKey} onChange={geminiKey => set({ geminiKey })} />,
     },
     {
       id: 'sezioni', short: 'Menu', kicker: 'Domanda · Menu', icon: ic(LayoutGrid),
@@ -290,36 +321,64 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
 
 // ---- Question steps ----
 
+// The subject as already written in the list (same name, any case), or the new name capitalized.
+function matchSubject(subjects: SubjectDef[], name: string): string {
+  const clean = name.replace(/\s+/g, ' ').trim();
+  return subjects.find(s => s.name.toLowerCase() === clean.toLowerCase())?.name || capitalize(clean);
+}
+
+// "Read from a photo": the image goes to the free Gemini (the only AI used to read files), which
+// answers in plain lines; `onText` turns them into data and returns what it found.
+function PhotoButton({ label, prompt, onText, draftKey, onGoToAI }: {
+  label: string; prompt: () => string; onText: (text: string) => string; draftKey: string; onGoToAI: () => void;
+}) {
+  const [reading, setReading] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const hasKey = !!getKey('gemini') || !!draftKey.trim();
+
+  const read = async (file: File) => {
+    setReading(true); setNote(null);
+    try {
+      if (!getKey('gemini') && draftKey.trim()) setKey('gemini', draftKey.trim());
+      const out = await transcribeFile(await blobToBase64(file), file.type || 'image/jpeg', prompt());
+      const found = onText(out);
+      setNote(found ? { ok: true, text: found } : { ok: false, text: 'Non ho trovato niente in questa foto. Prova con una foto più nitida o scrivi a mano.' });
+    } catch (err) {
+      setNote({ ok: false, text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setReading(false);
+    }
+  };
+
+  return (
+    <div>
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) read(f); }} />
+      <button onClick={() => (hasKey ? fileRef.current?.click() : onGoToAI())} disabled={reading}
+        className="btn-secondary w-full h-12 !rounded-full inline-flex items-center justify-center gap-2 text-[15px]">
+        {reading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+        {reading ? 'Leggo la foto…' : label}
+      </button>
+      {!hasKey && <p className="text-xs mt-1.5" style={{ color: 'var(--text-subtle)' }}>Per leggere le foto serve l'AI gratuita: tocca il pulsante per collegarla, poi torna qui.</p>}
+      {note && <p className="text-xs mt-1.5" style={{ color: note.ok ? 'var(--brand-ring)' : 'var(--danger)' }}>{note.ok ? '✓ ' : ''}{note.text}</p>}
+    </div>
+  );
+}
+
+const OR = (
+  <div className="flex items-center gap-3 text-xs uppercase tracking-[0.12em]" style={{ color: 'var(--text-subtle)' }}>
+    <span className="flex-1 h-px" style={{ background: 'var(--border)' }} /> oppure <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+  </div>
+);
+
 function SubjectsStep({ subjects, onChange, draftKey, onGoToAI }: { subjects: SubjectDef[]; onChange: (s: SubjectDef[]) => void; draftKey: string; onGoToAI: () => void }) {
   const [text, setText] = useState('');
   const [picking, setPicking] = useState<string | null>(null);
-  const [reading, setReading] = useState(false);
-  const [error, setError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
-  const hasKey = !!getKey('gemini') || !!draftKey.trim();
 
   const add = () => {
     const names = splitNames(text);
     if (names.length) onChange(addNames(subjects, names));
     setText('');
-  };
-
-  const read = async (file: File) => {
-    setReading(true); setError('');
-    try {
-      if (!getKey('gemini') && draftKey.trim()) setKey('gemini', draftKey.trim());
-      const data = await blobToBase64(file);
-      const out = await transcribeFile(data, file.type || 'image/jpeg',
-        'Questa immagine o documento contiene un orario scolastico, una pagella o un elenco di materie. Scrivi SOLO i nomi delle materie scolastiche, ' +
-        'uno per riga, senza ripetizioni e senza orari, voti, giorni o nomi di professori. Usa il nome italiano normale (es. Matematica, Italiano, Storia).');
-      const names = splitNames(out);
-      if (!names.length) setError('Non ho trovato materie in questa foto. Prova con una foto più nitida o scrivile a mano.');
-      else onChange(addNames(subjects, names));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setReading(false);
-    }
   };
 
   return (
@@ -331,17 +390,15 @@ function SubjectsStep({ subjects, onChange, draftKey, onGoToAI }: { subjects: Su
           <Plus className="w-5 h-5" />
         </button>
       </div>
-
-      <div>
-        <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) read(f); }} />
-        <button onClick={() => (hasKey ? fileRef.current?.click() : onGoToAI())} disabled={reading}
-          className="btn-secondary w-full h-12 !rounded-full inline-flex items-center justify-center gap-2 text-[15px]">
-          {reading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-          {reading ? 'Leggo le materie…' : 'Leggile da una foto (orario o pagella)'}
-        </button>
-        {!hasKey && <p className="text-xs mt-1.5" style={{ color: 'var(--text-subtle)' }}>Per leggere le foto serve l'AI gratuita: tocca il pulsante per collegarla, poi torna qui.</p>}
-        {error && <p className="text-xs mt-1.5" style={{ color: 'var(--danger)' }}>{error}</p>}
-      </div>
+      <PhotoButton label="Leggile da una foto (orario o pagella)" draftKey={draftKey} onGoToAI={onGoToAI}
+        prompt={() => 'Questa immagine o documento contiene un orario scolastico, una pagella o un elenco di materie. Scrivi SOLO i nomi delle materie scolastiche, ' +
+          'uno per riga, senza ripetizioni e senza orari, voti, giorni o nomi di professori. Usa il nome italiano normale (es. Matematica, Italiano, Storia).'}
+        onText={out => {
+          const names = splitNames(out);
+          const added = names.filter(n => !subjects.some(s => s.name.toLowerCase() === n.toLowerCase()));
+          onChange(addNames(subjects, names));
+          return names.length ? `${added.length} materie aggiunte` : '';
+        }} />
 
       {subjects.length > 0 && (
         <div>
@@ -406,18 +463,44 @@ function RemovableList({ items, onRemove }: { items: { key: string; label: strin
 }
 
 const colorOf = (subjects: SubjectDef[], name: string) => subjects.find(s => s.name === name)?.color;
+const longDate = (k: string) => new Date(k + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-function TasksStep({ subjects, tasks, onChange }: { subjects: SubjectDef[]; tasks: OnboardingDraft['tasks']; onChange: (t: OnboardingDraft['tasks']) => void }) {
+type PhotoProps = { draftKey: string; onGoToAI: () => void };
+
+function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI }: PhotoProps & { subjects: SubjectDef[]; tasks: OnboardingDraft['tasks']; onPatch: (p: Partial<OnboardingDraft>) => void }) {
   const [kind, setKind] = useState<TaskKind>('verifica');
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState('');
   const add = () => {
     if (!date) return;
-    onChange([...tasks, { kind, subject: subject.trim(), date }]);
+    onPatch({ tasks: [...tasks, { kind, subject: subject.trim(), date }] });
     setSubject(''); setDate('');
+  };
+  // Lines "2026-12-15 | verifica | Matematica": only from today on, new subjects join the list.
+  const fromPhoto = (out: string) => {
+    const today = todayKey();
+    let list = subjects;
+    const found: OnboardingDraft['tasks'] = [];
+    for (const line of out.split('\n')) {
+      const m = line.match(/(\d{4}-\d{2}-\d{2})\s*\|\s*([^|]+?)\s*\|\s*(.*)$/);
+      if (!m || m[1] < today) continue;
+      const k = m[2].toLowerCase();
+      const name = m[3].replace(/[*_]/g, '').trim();
+      const subj = name && name.length <= 40 ? matchSubject(list, name) : '';
+      if (subj) list = addNames(list, [subj]);
+      const t = { kind: (k.includes('interrog') ? 'interrogazione' : k.includes('compit') ? 'compito' : 'verifica') as TaskKind, subject: subj, date: m[1] };
+      if (![...tasks, ...found].some(x => x.date === t.date && x.kind === t.kind && x.subject === t.subject)) found.push(t);
+    }
+    if (found.length) onPatch({ tasks: [...tasks, ...found], subjects: list });
+    return found.length ? `${found.length} ${found.length === 1 ? 'impegno trovato' : 'impegni trovati'}` : '';
   };
   return (
     <div className="space-y-4">
+      <PhotoButton label="Leggili da una foto (diario o registro)" draftKey={draftKey} onGoToAI={onGoToAI} onText={fromPhoto}
+        prompt={() => `Oggi è ${longDate(todayKey())} (${todayKey()}). Questa immagine contiene un diario, un registro elettronico, un calendario o un elenco con verifiche, ` +
+          'interrogazioni o compiti. Scrivi SOLO quelli da oggi in poi, uno per riga, nel formato: AAAA-MM-GG | tipo | materia — dove tipo è verifica, interrogazione o compito. ' +
+          'Se manca l\'anno usa quello che rende la data futura. Usa il nome italiano normale della materia. Nessun altro testo.'} />
+      {OR}
       <div className="flex gap-1 p-1 rounded-full w-fit" style={{ background: 'var(--glass-well)' }} role="radiogroup" aria-label="Tipo">
         {KINDS.map(k => (
           <button key={k.id} role="radio" aria-checked={kind === k.id} onClick={() => setKind(k.id)}
@@ -432,29 +515,51 @@ function TasksStep({ subjects, tasks, onChange }: { subjects: SubjectDef[]; task
         <Plus className="w-4 h-4" /> Aggiungi
       </button>
       <RemovableList
-        items={tasks.map((t, i) => ({
-          key: `${i}-${t.date}`,
+        items={[...tasks].sort((a, b) => a.date.localeCompare(b.date)).map(t => ({
+          key: `${t.date}-${t.kind}-${t.subject}`,
           label: `${KINDS.find(k => k.id === t.kind)!.label}${t.subject ? ` di ${t.subject}` : ''} · ${new Date(t.date + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}`,
           color: colorOf(subjects, t.subject),
         }))}
-        onRemove={i => onChange(tasks.filter((_, j) => j !== i))}
+        onRemove={i => { const sorted = [...tasks].sort((a, b) => a.date.localeCompare(b.date)); onPatch({ tasks: tasks.filter(x => x !== sorted[i]) }); }}
       />
     </div>
   );
 }
 
-function GradesStep({ subjects, grades, onChange }: { subjects: SubjectDef[]; grades: OnboardingDraft['grades']; onChange: (g: OnboardingDraft['grades']) => void }) {
+function GradesStep({ subjects, grades, onPatch, draftKey, onGoToAI }: PhotoProps & { subjects: SubjectDef[]; grades: OnboardingDraft['grades']; onPatch: (p: Partial<OnboardingDraft>) => void }) {
   const [subject, setSubject] = useState('');
   const [value, setValue] = useState('');
   const num = Number(value.replace(',', '.'));
   const valid = subject.trim() && value && num >= 1 && num <= 10;
   const add = () => {
     if (!valid) return;
-    onChange([...grades, { subject: subject.trim(), value: Math.round(num * 100) / 100 }]);
+    const name = matchSubject(subjects, subject);
+    onPatch({ grades: [...grades, { subject: name, value: Math.round(num * 100) / 100 }], subjects: addNames(subjects, [name]) });
     setValue('');
+  };
+  // Lines "Matematica | 7.5": new subjects join the list.
+  const fromPhoto = (out: string) => {
+    let list = subjects;
+    const found: OnboardingDraft['grades'] = [];
+    for (const line of out.split('\n')) {
+      const m = line.replace(/[*_]/g, '').match(/^[\s\-•·]*(.+?)\s*[|:;\t]\s*(\d{1,2}(?:[.,]\d{1,2})?)\s*$/);
+      if (!m) continue;
+      const v = Number(m[2].replace(',', '.'));
+      if (!(v >= 1 && v <= 10) || m[1].length > 40) continue;
+      const name = matchSubject(list, m[1]);
+      list = addNames(list, [name]);
+      found.push({ subject: name, value: Math.round(v * 100) / 100 });
+    }
+    if (found.length) onPatch({ grades: [...grades, ...found], subjects: list });
+    return found.length ? `${found.length} ${found.length === 1 ? 'voto trovato' : 'voti trovati'}` : '';
   };
   return (
     <div className="space-y-4">
+      <PhotoButton label="Leggili da una foto (registro o pagella)" draftKey={draftKey} onGoToAI={onGoToAI} onText={fromPhoto}
+        prompt={() => 'Questa immagine contiene dei voti scolastici (registro elettronico, pagella, diario o un elenco). Scrivi SOLO i voti, uno per riga, nel formato: ' +
+          'Materia | voto. Il voto è un numero da 1 a 10 con il punto per i decimali: 7+ = 7.25, 7- = 6.75, 7½ o 7/8 = 7.5, 6-- = 5.5. ' +
+          'Ignora medie, assenze, note, giudizi senza numero e voti di condotta. Usa il nome italiano normale della materia. Nessun altro testo.'} />
+      {OR}
       <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
         <SubjectPicker id="ob-grade-subject" subjects={subjects} value={subject} onChange={setSubject} />
         <input inputMode="decimal" value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }}
@@ -466,7 +571,7 @@ function GradesStep({ subjects, grades, onChange }: { subjects: SubjectDef[]; gr
       </button>
       <RemovableList
         items={grades.map((g, i) => ({ key: `${i}-${g.subject}-${g.value}`, label: `${g.subject} · ${String(g.value).replace('.', ',')}`, color: colorOf(subjects, g.subject) }))}
-        onRemove={i => onChange(grades.filter((_, j) => j !== i))}
+        onRemove={i => onPatch({ grades: grades.filter((_, j) => j !== i) })}
       />
     </div>
   );

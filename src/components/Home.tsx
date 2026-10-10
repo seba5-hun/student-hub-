@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw } from 'lucide-react';
+import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw, Wand2 } from 'lucide-react';
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
@@ -20,9 +20,11 @@ interface HomeProps {
   darkMode: boolean;
   onNavigate: (section: string) => void;
   onUpdateSettings?: (patch: Partial<UserData['settings']>) => void;
+  // "Crea la tua MYND": the guide that explains the app and sets up subjects, grades and the rest.
+  onOpenGuide?: () => void;
 }
 
-export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: HomeProps) {
+export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide }: HomeProps) {
   const { tasks, grades, sessions, settings } = data;
   const quote = useMemo(() => getRandomQuote(), []);
 
@@ -204,7 +206,14 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings }: H
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end pt-3">
+      <div className="flex items-center justify-between gap-2 pt-3">
+        {onOpenGuide && !editing ? (
+          <button onClick={onOpenGuide}
+            className={`text-sm font-semibold px-3 py-1.5 -ml-3 rounded-lg flex items-center gap-2 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+            style={{ color: 'var(--brand-ring)' }}>
+            <Wand2 className="w-4 h-4" /> Crea la tua MYND
+          </button>
+        ) : <span />}
         {editing ? (
           <button onClick={() => setEditing(false)} className="btn-primary text-sm flex items-center gap-2">
             <Check className="w-4 h-4" /> Fatto

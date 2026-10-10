@@ -539,11 +539,11 @@ function App() {
     }
   }, [data, user]);
 
-  // New accounts (nothing inserted yet) find the "App" guide open the first time.
-  const guideCandidate = !!data && !data.settings.onboardingSeen && data.tasks.length === 0 && data.grades.length === 0 && !(data.settings.subjects || []).length;
-  useEffect(() => {
-    if (guideCandidate && accountStatus === 'approved') setGuideOpen(true);
-  }, [guideCandidate, accountStatus]);
+  // New accounts (nothing inserted yet) see "Crea la tua MYND" before anything else: it is shown
+  // straight away, without the Home appearing first. Closing it marks it as seen.
+  const guideForNewUser = !!data && accountStatus === 'approved' && !data.settings.onboardingSeen
+    && data.tasks.length === 0 && data.grades.length === 0 && !(data.settings.subjects || []).length;
+  const showGuide = guideOpen || guideForNewUser;
 
   const closeGuide = useCallback((draft: OnboardingDraft | null) => {
     setGuideOpen(false);
@@ -700,7 +700,6 @@ function App() {
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
         adminBadge={adminPending}
-        onOpenGuide={() => setGuideOpen(true)}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -714,6 +713,7 @@ function App() {
             darkMode={darkMode}
             onNavigate={handleSectionChange}
             onUpdateSettings={(patch) => updateData(prev => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
+            onOpenGuide={() => setGuideOpen(true)}
           />
         )}
         {currentSection === 'impegni' && (
@@ -786,8 +786,8 @@ function App() {
         </Suspense>
       </Layout>
       <SaveIndicator />
-      {guideOpen && (
-        <Suspense fallback={null}>
+      {showGuide && (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] gradient-bg mesh-gradient" />}>
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
         </Suspense>
       )}
