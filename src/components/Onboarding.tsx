@@ -341,7 +341,9 @@ function PhotoButton({ label, prompt, onText, draftKey, onGoToAI }: {
     setReading(true); setNote(null);
     try {
       if (!getKey('gemini') && draftKey.trim()) setKey('gemini', draftKey.trim());
-      const out = await transcribeFile(await blobToBase64(file), file.type || 'image/jpeg', prompt());
+      const { lightenPhoto } = await import('../lib/archiveText');
+      const photo = await lightenPhoto(file, file.type || 'image/jpeg');
+      const out = await transcribeFile(await blobToBase64(photo.blob), photo.mimeType, prompt());
       const found = onText(out);
       setNote(found ? { ok: true, text: found } : { ok: false, text: 'Non ho trovato niente in questa foto. Prova con una foto più nitida o scrivi a mano.' });
     } catch (err) {

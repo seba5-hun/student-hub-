@@ -9,7 +9,7 @@
 //    previous has used up its free quota.
 
 import type Anthropic from '@anthropic-ai/sdk';
-import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart } from './gemini';
+import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart, GeminiRecitationError } from './gemini';
 
 export type AIProvider = 'free' | 'gemini' | 'groq' | 'claude' | 'openrouter' | 'openai';
 export type KeyProvider = Exclude<AIProvider, 'free'>;
@@ -531,14 +531,34 @@ export function canTranscribe(): boolean {
   return !!getKey('gemini');
 }
 
+// When Google refuses to copy a published text word for word, the page is turned into detailed
+// study notes instead: less literal, but the tutor still gets every fact, name and idea of the page.
+const NOTES_INSTEAD = [
+  '\n\nIMPORTANTE: questo testo è protetto da diritto d\'autore, quindi NON riportarlo parola per parola. ' +
+    'Al posto della trascrizione scrivi appunti di studio molto dettagliati, nella stessa lingua del testo, che seguano la pagina ' +
+    'paragrafo per paragrafo con parole tue: tutti i fatti, i nomi, le date, i concetti, i personaggi e i passaggi importanti. ' +
+    'Puoi citare tra virgolette solo frasi brevissime. Comincia con la riga "[Appunti dettagliati: il testo originale è protetto da diritto d\'autore]".',
+  '\n\nIMPORTANTE: il testo è protetto da diritto d\'autore. Non citarlo affatto: scrivi un riassunto per punti, con parole tue, ' +
+    'di tutto ciò che la pagina contiene (argomenti, fatti, nomi, date, concetti). Comincia con la riga "[Riassunto: il testo originale è protetto da diritto d\'autore]".',
+];
+
 export async function transcribeFile(data: string, mimeType: string, prompt: string, onWait?: (seconds: number) => void): Promise<string> {
   stopSignal = undefined; // reading archive files is never stopped by the chat's Stop button
   if (!getKey('gemini')) {
     throw new Error('Per leggere foto e PDF serve la chiave Gemini (gratis). Le AI a pagamento non vengono usate per leggere i file, così non consumi crediti.');
   }
-  const text = await generateContent(getKey('gemini'), [
-    { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
-  ], { temperature: 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 60_000, onWait });
-  if (!text.trim()) throw new Error('Gemini ha dato una risposta vuota.');
-  return text;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const text = await generateContent(getKey('gemini'), [
+        { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: attempt ? prompt + NOTES_INSTEAD[attempt - 1] : prompt }] },
+      ], { temperature: attempt ? 0.4 : 0.1, maxOutputTokens: 32768, fast: true, timeoutMs: 90_000, onWait, strictRecitation: true });
+      if (!text.trim()) throw new Error('Gemini ha dato una risposta vuota.');
+      return text;
+    } catch (err) {
+      if (!(err instanceof GeminiRecitationError)) throw err;
+      if (attempt >= NOTES_INSTEAD.length) {
+        throw new Error(`${err.message} Ho provato anche a farne degli appunti, senza riuscirci: prova a fotografare una parte più piccola della pagina, oppure carica i tuoi appunti.`);
+      }
+    }
+  }
 }

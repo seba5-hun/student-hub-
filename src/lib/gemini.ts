@@ -67,6 +67,14 @@ async function availableModels(apiKey: string): Promise<string[]> {
   }
 }
 
+// Google refuses to copy word for word long passages of published texts (a book page, song lyrics):
+// the answer comes back empty with finishReason "RECITATION". The caller can ask again differently.
+export class GeminiRecitationError extends Error {
+  constructor() {
+    super('Google non permette di copiare parola per parola questo testo perché è protetto da diritto d\'autore (per esempio la pagina di un libro pubblicato).');
+  }
+}
+
 export async function generateContent(
   apiKey: string,
   contents: GeminiContent[],
@@ -78,6 +86,8 @@ export async function generateContent(
     timeoutMs?: number;
     // Called when the free per-minute limit makes it wait (seconds), so the app can say so.
     onWait?: (seconds: number) => void;
+    // Transcriptions: an answer cut by the copyright filter is an error, not a (partial) result.
+    strictRecitation?: boolean;
   } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
@@ -102,6 +112,7 @@ export async function generateContent(
   let lastError = '';
   const tried = new Set<string>();
   const retired = new Set<string>();
+  const emptyAnswers: string[] = [];
   // Google's "high demand" errors usually pass in a few seconds: go through the models up to
   // three times, waiting a little longer each round.
   for (let round = 0; round < 3; round++) {
@@ -183,19 +194,33 @@ export async function generateContent(
       } finally {
         done();
       }
-      const text: string = (data.candidates?.[0]?.content?.parts || [])
+      const candidate = data.candidates?.[0];
+      const finish: string = candidate?.finishReason || '';
+      const text: string = (candidate?.content?.parts || [])
+        // Parts marked "thought" are the model's reasoning, not the answer.
+        .filter((p: { thought?: boolean }) => !p.thought)
         .map((p: { text?: string }) => p.text || '')
         .join('')
         .trim();
-      if (!text && data.promptFeedback?.blockReason) {
-        throw new Error('Google ha bloccato la richiesta per i suoi filtri di sicurezza. Prova a riformularla.');
-      }
       quotaPausedUntil.delete(model);
+      if (finish === 'RECITATION' && (!text || options.strictRecitation)) throw new GeminiRecitationError();
+      if (!text) {
+        if (data.promptFeedback?.blockReason || /SAFETY|PROHIBITED|BLOCKLIST|SPII/.test(finish)) {
+          throw new Error('Google ha bloccato la richiesta per i suoi filtri di sicurezza. Prova a riformularla.');
+        }
+        // Empty for another reason (the reasoning used up the space, a hiccup on Google's side):
+        // the next model tries.
+        emptyAnswers.push(`${model}${finish ? ` (${finish})` : ''}`);
+        continue;
+      }
       return text;
     }
     if (!overloaded) break;
   }
   modelCache = null;
+  if (emptyAnswers.length && !lastError) {
+    throw new Error(`Gemini ha risposto senza testo (${emptyAnswers.join(', ')}). Di solito è un problema momentaneo di Google: riprova tra poco.`);
+  }
   if (/limite della versione gratuita/.test(lastError)) throw new Error(lastError);
   if (/non ha risposto entro/.test(lastError)) throw new Error(`Gemini è troppo lento in questo momento. ${lastError}`);
   throw new Error(

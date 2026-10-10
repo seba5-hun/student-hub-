@@ -14,6 +14,8 @@ type ReadKind = 'text' | 'pdf' | 'image' | 'unsupported';
 const GEMINI_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'];
 // Requests to the AI are limited to ~20 MB and base64 adds a third: heavier photos are shrunk.
 const AI_INLINE_LIMIT = 14 * 1024 * 1024;
+// Photos above this size are shrunk before being sent.
+const LIGHT_PHOTO = 1.5 * 1024 * 1024;
 
 export class MissingApiKeyError extends Error {
   constructor() {
@@ -61,16 +63,24 @@ function splitPage(text: string): { text: string; page?: string } {
   return { text: text.slice(match[0].length).trim(), page };
 }
 
+// Phone photos (3-10 MB) are made lighter before going to the AI: about 2000 px is plenty to read
+// a page, and the AI answers much faster and more reliably. PDFs already arrive one light page at a time.
+export async function lightenPhoto(blob: Blob, mimeType: string): Promise<{ blob: Blob; mimeType: string }> {
+  if (blob.size <= LIGHT_PHOTO || !mimeType.startsWith('image/')) return { blob, mimeType };
+  const { shrinkImage } = await import('./imagesToPdf');
+  try {
+    let small = await shrinkImage(blob, 2000, 0.85);
+    if (small.size > AI_INLINE_LIMIT) small = await shrinkImage(blob, 1600, 0.7);
+    if (small.size < blob.size) return { blob: small, mimeType: 'image/jpeg' };
+  } catch {
+    // A format this browser can't open (HEIC outside Safari): sent as it is, the AI reads it.
+  }
+  return { blob, mimeType };
+}
+
 async function transcribeWithAI(blob: Blob, mimeType: string, withPage = false, onWait?: (seconds: number) => void): Promise<string> {
   if (!canTranscribe()) throw new MissingApiKeyError();
-  // No size limit for the student: a photo too heavy for the AI is shrunk first (PDFs are
-  // already sent one page at a time, each a light image).
-  if (blob.size > AI_INLINE_LIMIT && mimeType.startsWith('image/')) {
-    const { shrinkImage } = await import('./imagesToPdf');
-    blob = await shrinkImage(blob);
-    mimeType = 'image/jpeg';
-    if (blob.size > AI_INLINE_LIMIT) blob = await shrinkImage(blob, 1600, 0.7);
-  }
+  ({ blob, mimeType } = await lightenPhoto(blob, mimeType));
   if (blob.size > AI_INLINE_LIMIT) {
     throw new Error('Questo file è troppo pesante perché l\'AI lo legga così com\'è.');
   }
@@ -194,7 +204,20 @@ async function readPdf(blob: Blob, key: string): Promise<string> {
 async function extractText(blob: Blob, file: ArchiveFile): Promise<string> {
   const kind = readKind(file);
   if (kind === 'text') return (await blob.text()).trim();
-  if (kind === 'image') return transcribeWithAI(blob, imageMime(file), true);
+  if (kind === 'image') {
+    // Busy servers and free-tier limits usually pass in a few seconds: up to 3 tries, like PDF pages.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await wait(attempt * 5000);
+      try {
+        return await transcribeWithAI(blob, imageMime(file), true);
+      } catch (err) {
+        if (err instanceof MissingApiKeyError || (err instanceof Error && /API key non valida|diritto d'autore|troppo pesante/.test(err.message))) throw err;
+        lastError = err;
+      }
+    }
+    throw lastError;
+  }
   if (kind === 'pdf') return readPdf(blob, file.path);
   throw new Error('Formato non leggibile dall\'AI');
 }
