@@ -4,6 +4,9 @@ import {
   AIProvider, KeyProvider, FREE_CHAIN, CLAUDE_MODELS, OPENROUTER_AUTO, OpenRouterModel, OpenAIModel, getKey, getModel, getProvider, listOpenRouterModels, listOpenAIModels,
   setKey, setModel, setProvider,
 } from '../lib/ai';
+import { AUTO_KEY_STEPS, AutoKeyStep, createGeminiKeyWithGoogle } from '../lib/geminiAutoKey';
+import { driveConfigured, loadGoogleIdentity } from '../lib/googleDrive';
+import { supabase } from '../lib/supabase';
 
 interface AISettingsProps {
   darkMode: boolean;
@@ -56,6 +59,46 @@ const KEY_HINT: Record<KeyProvider, { prefix: string; placeholder: string }> = {
 function price(perMillion: number): string {
   if (perMillion === 0) return '0';
   return perMillion < 0.1 ? perMillion.toFixed(3) : perMillion < 10 ? perMillion.toFixed(2) : perMillion.toFixed(0);
+}
+
+// One click: Google asks for permission and the app creates the free Gemini key in the user's account.
+function GeminiAutoKey({ darkMode, onKey }: { darkMode: boolean; onKey: (key: string) => void }) {
+  const [step, setStep] = useState<AutoKeyStep | null>(null);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  const [email, setEmail] = useState<string | undefined>();
+  useEffect(() => {
+    loadGoogleIdentity().catch(() => { /* the click shows the error */ });
+    supabase?.auth.getSession().then(({ data }) => setEmail(data.session?.user.email || undefined)).catch(() => { /* no hint */ });
+  }, []);
+  if (!driveConfigured) return null;
+  const run = () => {
+    if (step) return;
+    setError(''); setDone(false);
+    createGeminiKeyWithGoogle(setStep, email)
+      .then(key => { onKey(key); setDone(true); })
+      .catch(err => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setStep(null));
+  };
+  return (
+    <div className="space-y-1.5">
+      <button type="button" onClick={run} disabled={!!step}
+        className="w-full h-11 rounded-full bg-white text-[#1f1f1f] text-sm font-medium inline-flex items-center justify-center gap-2.5 border border-black/10 disabled:opacity-70">
+        {step ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+            <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+            <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+          </svg>
+        )}
+        {step ? AUTO_KEY_STEPS[step] : 'Crea la chiave Gemini con Google'}
+      </button>
+      {error ? <p className="text-xs text-red-400">{error}</p>
+        : done ? <p className="text-xs text-emerald-400">✓ Chiave creata nel tuo account Google e inserita qui sotto. Premi Salva. (Può servire un minuto prima che funzioni.)</p>
+        : <p className={`text-xs ${darkMode ? 'text-white/60' : 'text-gray-500'}`}>Gratis, senza carta: Google ti chiede il permesso e MYND crea la chiave nel tuo account (progetto "MYND AI"). Oppure creala a mano col link.</p>}
+    </div>
+  );
 }
 
 export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: AISettingsProps) {
@@ -251,6 +294,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
                   <p className={`text-sm font-semibold ${textColor}`}>{f.name} {keys[f.id].trim() && <span className="text-emerald-400 font-normal">✓</span>}</p>
                   <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline inline-flex items-center gap-1">Crea la chiave su {f.site} <ExternalLink className="w-3 h-3" /></a>
                 </div>
+                {f.id === 'gemini' && <div className="mb-2"><GeminiAutoKey darkMode={darkMode} onKey={k => setKeys(ks => ({ ...ks, gemini: k }))} /></div>}
                 <input type="password" value={keys[f.id]} onChange={e => setKeys(k => ({ ...k, [f.id]: e.target.value }))}
                   className={`${inputClass} w-full`} placeholder={KEY_HINT[f.id].placeholder} autoComplete="off" />
                 <p className={`text-xs mt-1 ${keys[f.id].trim() && !keys[f.id].trim().startsWith(KEY_HINT[f.id].prefix) ? 'text-amber-400' : subTextColor}`}>
@@ -261,6 +305,7 @@ export default function AISettings({ darkMode, onDone, onCancel, geminiGuide }: 
           </div>
         ) : (
           <div>
+            {provider === 'gemini' && <div className="mb-3"><GeminiAutoKey darkMode={darkMode} onKey={k => setKeys(ks => ({ ...ks, gemini: k }))} /></div>}
             <label className={`text-sm font-medium ${textColor}`}>Chiave API</label>
             <input type="password" value={keys[provider]} onChange={e => setKeys(k => ({ ...k, [provider]: e.target.value }))}
               className={`${inputClass} w-full mt-1`} placeholder={KEY_HINT[provider].placeholder} autoComplete="off" />

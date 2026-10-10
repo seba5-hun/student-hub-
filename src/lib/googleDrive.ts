@@ -8,6 +8,7 @@
 // see GUIDA_GOOGLE_DRIVE.md. Can be overridden with VITE_GOOGLE_CLIENT_ID.
 const DEFAULT_GOOGLE_CLIENT_ID = '1048106841609-ipbbd7vkt38j9brvdlshubh5tuesgsb4.apps.googleusercontent.com';
 const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || DEFAULT_GOOGLE_CLIENT_ID;
+export const GOOGLE_CLIENT_ID = CLIENT_ID;
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const API = 'https://www.googleapis.com/drive/v3';
@@ -24,7 +25,7 @@ interface Token { value: string; expires: number }
 interface TokenResponse { access_token?: string; expires_in?: number; error?: string; error_description?: string }
 interface TokenClient { requestAccessToken: (o?: { prompt?: string }) => void; callback: (r: TokenResponse) => void }
 interface GoogleOAuth2 {
-  initTokenClient: (o: { client_id: string; scope: string; callback: (r: TokenResponse) => void; error_callback?: (e: { type?: string; message?: string }) => void }) => TokenClient;
+  initTokenClient: (o: { client_id: string; scope: string; hint?: string; callback: (r: TokenResponse) => void; error_callback?: (e: { type?: string; message?: string }) => void }) => TokenClient;
   revoke: (token: string, done?: () => void) => void;
 }
 declare global {
