@@ -76,6 +76,8 @@ export interface UserSettings {
   homeLayout?: { order: string[]; hidden: string[] };
   // Menu sections the student has hidden.
   hiddenSections?: string[];
+  // The "App" guide was shown (opened by itself only once, for new accounts).
+  onboardingSeen?: boolean;
   // When the study statistics were reset: study synced from Mindset before it is not added back.
   sessionsResetAt?: string;
 }
@@ -99,7 +101,7 @@ export const SUBJECT_COLORS = ['#83AFDF', '#ABA1DD', '#6BBDAB', '#C9A46C', '#8CB
 // First palette color not used yet by the given subjects (cycles when all are taken).
 export function nextSubjectColor(subjects: SubjectDef[]): string {
   const used = subjects.map(s => s.color.toLowerCase());
-  return SUBJECT_COLORS.find(c => !used.includes(c)) || SUBJECT_COLORS[subjects.length % SUBJECT_COLORS.length];
+  return SUBJECT_COLORS.find(c => !used.includes(c.toLowerCase())) || SUBJECT_COLORS[subjects.length % SUBJECT_COLORS.length];
 }
 
 // Color of a subject: the one chosen by the student, otherwise a fixed one derived from the name.

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase, Wand2 } from 'lucide-react';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 import Logo from './Logo';
@@ -20,6 +20,8 @@ interface LayoutProps {
   showDeveloper?: boolean;
   // Accounts waiting for approval, shown next to "Admin" in the menu.
   adminBadge?: number;
+  // Opens the guided tour ("App") that explains the sections and sets up the data.
+  onOpenGuide?: () => void;
 }
 
 export const SECTIONS = [
@@ -40,7 +42,7 @@ const MINDSET_SECTION = { id: 'mindset', label: 'Performance', icon: Compass };
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0 }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onOpenGuide }: LayoutProps) {
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -102,6 +104,11 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </span>
             </button>
             <button onClick={() => onSectionChange('home')} aria-label="MYND, vai alla Home"><Logo size={17} /></button>
+            {onOpenGuide && (
+              <button onClick={onOpenGuide} aria-label="App: guida e configurazione" className="h-9 px-3.5 rounded-full glass-card !rounded-full inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: 'var(--brand-ring)' }}>
+                <Wand2 className="w-4 h-4" /> App
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

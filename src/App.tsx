@@ -19,6 +19,7 @@ const loaders = {
   admin: () => import('./components/AdminPanel'),
   mindset: () => import('./components/mindset/Mindset'),
   business: () => import('./components/business/Business'),
+  onboarding: () => import('./components/Onboarding'),
 };
 const Impegni = lazy(loaders.impegni);
 const Voti = lazy(loaders.voti);
@@ -30,6 +31,7 @@ const GuidaStudioAI = lazy(loaders.guida);
 const AdminPanel = lazy(loaders.admin);
 const Mindset = lazy(loaders.mindset);
 const Business = lazy(loaders.business);
+const Onboarding = lazy(loaders.onboarding);
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -46,6 +48,7 @@ function SectionFallback() {
   );
 }
 import { useDialog } from './components/Dialog';
+import { applyOnboarding, applyOnboardingKey, type OnboardingDraft } from './lib/onboarding';
 import { AccountStatus, fetchMyStatus, loadAdminUsers } from './lib/admin';
 import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
@@ -85,6 +88,7 @@ function App() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [loadError, setLoadError] = useState('');
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
+  const [guideOpen, setGuideOpen] = useState(false);
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
@@ -535,6 +539,23 @@ function App() {
     }
   }, [data, user]);
 
+  // New accounts (nothing inserted yet) find the "App" guide open the first time.
+  const guideCandidate = !!data && !data.settings.onboardingSeen && data.tasks.length === 0 && data.grades.length === 0 && !(data.settings.subjects || []).length;
+  useEffect(() => {
+    if (guideCandidate && accountStatus === 'approved') setGuideOpen(true);
+  }, [guideCandidate, accountStatus]);
+
+  const closeGuide = useCallback((draft: OnboardingDraft | null) => {
+    setGuideOpen(false);
+    if (draft) {
+      applyOnboardingKey(draft);
+      updateData(prev => applyOnboarding(prev, draft));
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
+    } else {
+      updateData(prev => (prev.settings.onboardingSeen ? prev : { ...prev, settings: { ...prev.settings, onboardingSeen: true } }));
+    }
+  }, [updateData]);
+
   // Confetti on task completion
   const handleTasksUpdate = useCallback((tasks: UserData['tasks']) => {
     if (!data) return;
@@ -679,6 +700,7 @@ function App() {
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
         adminBadge={adminPending}
+        onOpenGuide={() => setGuideOpen(true)}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -764,6 +786,11 @@ function App() {
         </Suspense>
       </Layout>
       <SaveIndicator />
+      {guideOpen && (
+        <Suspense fallback={null}>
+          <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
+        </Suspense>
+      )}
     </>
   );
 }
