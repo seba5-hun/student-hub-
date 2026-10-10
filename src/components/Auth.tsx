@@ -349,6 +349,9 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
         <div className="flex flex-col gap-3">
           <SwipeToStart label="Scorri per iniziare" onComplete={() => setMode('register')} />
           <button type="button" onClick={() => setMode('login')} className="h-12 text-base">Ho già un account</button>
+          <p className="text-xs text-center" style={{ color: 'var(--text-subtle)' }}>
+            <a href="/info.html" className="underline">Cos'è MYND</a> · <a href="/privacy.html" className="underline">Privacy</a> · <a href="/termini.html" className="underline">Termini</a>
+          </p>
         </div>
       }>
         <h1 className="flex flex-col font-bold" style={{ fontSize: 'clamp(52px, 17vw, 68px)', letterSpacing: '-0.05em', lineHeight: 0.98 }} aria-label="Make Your Next Decision.">

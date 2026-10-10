@@ -34,14 +34,15 @@
     <a class="back" href="/"><span>←</span> <b class="logo">M<i>Y</i>ND</b></a>
     <div class="card">
       <h1>Privacy.</h1>
-      <p class="muted">Ultimo aggiornamento: 2 ottobre 2026</p>
+      <p class="muted">Ultimo aggiornamento: 10 ottobre 2026</p>
 
-      <p>MYND (prima "Student Hub") è un'app per organizzare lo studio: impegni, voti, timer, archivio dei materiali e un tutor AI.
+      <p>MYND (prima "Student Hub") è un'app per organizzare studio, sport, sonno e progetti: impegni, voti, timer, archivio dei materiali e un coach AI.
       Questa pagina spiega quali dati usa e come.</p>
 
       <h2>Dati che salviamo</h2>
       <ul>
-        <li><b>Account</b>: indirizzo email e password (gestita in forma cifrata dal servizio di autenticazione Supabase).</li>
+        <li><b>Account</b>: indirizzo email e password (gestita in forma cifrata dal servizio di autenticazione Supabase).
+        Se accedi con Google, riceviamo solo nome, indirizzo email e foto del profilo.</li>
         <li><b>Dati di studio</b>: impegni, voti, sessioni di studio, materie, note e impostazioni che inserisci tu.</li>
         <li><b>Archivio</b>: i file che carichi e il loro testo trascritto, usato dal tutor AI.</li>
         <li><b>Chat</b> con la Guida Studio AI.</li>
@@ -63,8 +64,26 @@
       </ul>
       <p>L'uso delle informazioni ricevute dalle API di Google rispetta le
       <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
-      inclusi i requisiti di Uso Limitato (Limited Use). I dati di Google Drive non vengono venduti, non sono usati
-      per pubblicità e non vengono usati per addestrare modelli di intelligenza artificiale.</p>
+      
+      <h2>Accesso con Google</h2>
+      <p>Se premi "Continua con Google", Google ci comunica solo il tuo <b>nome</b>, il tuo <b>indirizzo email</b> e la
+      <b>foto del profilo</b> (permessi openid, email, profile), usati per creare e riconoscere il tuo account MYND.
+      Non riceviamo la tua password di Google.</p>
+
+      <h2>Creazione della chiave Gemini con Google</h2>
+      <p>Nella scelta dell'intelligenza artificiale puoi premere "Crea la chiave Gemini con Google" invece di crearla a mano
+      su AI Studio. Solo in quel momento, e solo se lo confermi, MYND chiede a Google il permesso <b>cloud-platform</b>
+      (gestire Google Cloud nel tuo account) e lo usa esclusivamente per:</p>
+      <ul>
+        <li>trovare o creare nel tuo account un progetto Google Cloud chiamato "MYND AI", senza fatturazione;</li>
+        <li>attivare in quel progetto l'API Gemini (Generative Language API);</li>
+        <li>creare o riusare una chiave chiamata "MYND", limitata alla sola API Gemini, e leggerla.</li>
+      </ul>
+      <p>MYND non legge, non modifica e non elimina nessun altro progetto, risorsa o dato del tuo Google Cloud, e non attiva
+      la fatturazione. Il permesso viene usato direttamente dal tuo browser, non viene salvato sui nostri server e scade
+      entro un'ora. La chiave creata resta salvata solo nel tuo browser. Puoi eliminare il progetto "MYND AI" in qualsiasi
+      momento da <a href="https://console.cloud.google.com" target="_blank" rel="noopener">console.cloud.google.com</a>
+      e revocare il permesso da <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</p>
 
       <h2>Tutor AI (Google Gemini, Groq, ChatGPT, Claude, OpenRouter)</h2>
       <p>Quando usi la Guida Studio AI o fai leggere un file, le tue domande, le foto e il testo del materiale scelto
@@ -72,6 +91,14 @@
       Claude oppure OpenRouter e il modello selezionato), con la <b>tua</b> chiave API e direttamente dal tuo browser, per generare
       la risposta. Le chiavi restano salvate solo nel tuo browser. Ogni fornitore tratta i dati secondo la propria
       informativa; con i modelli gratuiti i dati possono essere usati per migliorare i servizi.</p>
+
+      <h2>Uso Limitato dei dati di Google</h2>
+      <p>L'uso e il trasferimento ad altre app delle informazioni ricevute dalle API di Google rispettano le
+      <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
+      inclusi i requisiti di Uso Limitato (Limited Use). I dati ricevuti da Google (account, Drive, Google Cloud) sono usati
+      solo per le funzioni descritte sopra e visibili nell'app; non vengono venduti, non sono usati per pubblicità, non vengono
+      letti da persone (salvo tuo consenso, per motivi di sicurezza o per obblighi di legge) e non vengono usati per
+      addestrare modelli di intelligenza artificiale.</p>
 
       <h2>Cosa non facciamo</h2>
       <ul>
@@ -83,6 +110,23 @@
       <p>Puoi esportare i tuoi dati dal menu dell'app, modificarli o cancellarli in qualsiasi momento. Per chiedere
       la cancellazione completa dell'account o per qualsiasi domanda scrivi a
       <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
+
+      <h2>Google user data — English summary</h2>
+      <p>MYND requests Google user data only for features the user starts: <b>Sign in with Google</b> (openid, email,
+      profile: to create and identify the account), <b>Google Drive</b> (drive.file: only files MYND itself uploads, in the
+      "Student Hub" folder) and <b>Create Gemini key with Google</b> (cloud-platform: only to find or create a project named
+      "MYND AI" without billing in the user's own account, enable the Gemini API in it, and create or read one API key named
+      "MYND" restricted to the Gemini API). MYND does not read, change or delete any other Google Cloud project or resource
+      and never enables billing. Access tokens are used in the user's browser, are never stored on our servers and expire
+      within one hour; the API key is kept only in the user's browser. MYND's use and transfer of information received from
+      Google APIs adheres to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
+      including the Limited Use requirements. Google user data is not sold, not used for advertising, not read by humans
+      (except with the user's consent, for security or legal reasons) and not used to train AI models. Users can revoke
+      access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>
+      and request deletion of their data at <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
+
+      <p class="muted"><a href="/termini.html">Termini di servizio</a> · <a href="/info.html">Cos'è MYND</a></p>
 
       <h2>Contatti</h2>
       <p>MYND — Sebastiano Zorzi · <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a></p>
