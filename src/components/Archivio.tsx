@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Plus, Trash2, Search, FolderOpen, FileText, ExternalLink, ChevronRight, ChevronDown,
   Upload, Image as ImageIcon, File as FileIcon, Link as LinkIcon, Pencil, Check, X, Loader2, Sparkles, RotateCw,
-  HardDrive, Cloud, ShieldCheck, CheckSquare, FolderInput, Minus, FileStack,
+  HardDrive, Cloud, ShieldCheck, CheckSquare, FolderInput, Minus, FileStack, Undo2, GripVertical,
 } from 'lucide-react';
 import { ArchiveItem, createId } from '../lib/store';
 import {
@@ -96,7 +96,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   // Selection mode: tick files (or whole topics/subjects) and act on all of them at once.
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [moving, setMoving] = useState<{ subject: string; topic: string } | null>(null);
+  // Moving files: the dialog ("Sposta"), the folder a file is being dragged over, the last move (can be undone).
+  const [moving, setMoving] = useState<{ ids: string[]; subject: string; topic: string } | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [lastMove, setLastMove] = useState<{ text: string; before: Map<string, { subject: string; topic: string }> } | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   // Photos joined into one light PDF: while uploading, and from photos already in the archive.
   const [mergePdf, setMergePdf] = useState(true);
@@ -437,29 +440,71 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
     return () => document.removeEventListener('keydown', esc);
   }, [selecting, moving]);
 
-  const startMove = () => {
-    const subjects = new Set(selectedItems.map(a => a.subject));
-    const topics = new Set(selectedItems.map(a => a.topic));
+  const startMoveOf = (items: ArchiveItem[]) => {
+    if (!items.length) return;
+    const subjs = new Set(items.map(a => a.subject));
+    const tops = new Set(items.map(a => a.topic));
     setMoving({
-      subject: subjects.size === 1 ? [...subjects][0] : '',
-      topic: subjects.size === 1 && topics.size === 1 ? [...topics][0] : '',
+      ids: items.map(a => a.id),
+      subject: subjs.size === 1 ? [...subjs][0] : '',
+      topic: subjs.size === 1 && tops.size === 1 ? [...tops][0] : '',
     });
   };
+  const startMove = () => startMoveOf(selectedItems);
+  const movingItems = useMemo(() => (moving ? archive.filter(a => moving.ids.includes(a.id)) : []), [archive, moving]);
   const moveTopics = useMemo(
     () => (moving ? [...new Set(archive.filter(a => a.subject.toLowerCase() === moving.subject.trim().toLowerCase()).map(a => a.topic))].sort() : []),
     [archive, moving],
   );
-  const confirmMove = () => {
-    if (!moving) return;
-    const typedSubject = moving.subject.trim();
-    const typedTopic = moving.topic.trim();
-    if (!typedSubject || !typedTopic) return;
-    // Reuse the existing spelling ("storia" goes into "Storia").
-    const subj = subjects.find(x => x.toLowerCase() === typedSubject.toLowerCase()) || typedSubject;
-    const top = archive.find(a => a.subject === subj && a.topic.toLowerCase() === typedTopic.toLowerCase())?.topic || typedTopic;
-    const ids = new Set(selectedItems.map(a => a.id));
-    onUpdate(prev => prev.map(a => (ids.has(a.id) ? { ...a, subject: subj, topic: top } : a)));
+
+  // Puts the files in subject › topic (no topic: each keeps its own). Existing spellings are reused
+  // ("storia" goes into "Storia"); the move can be undone from the notice that appears.
+  const moveItems = (ids: string[], typedSubject: string, typedTopic?: string) => {
+    const subj = subjects.find(x => x.toLowerCase() === typedSubject.trim().toLowerCase()) || typedSubject.trim();
+    const topicOf = (t: string) => archive.find(a => a.subject === subj && a.topic.toLowerCase() === t.trim().toLowerCase())?.topic || t.trim();
+    const items = archive.filter(a => ids.includes(a.id) && (a.subject !== subj || (typedTopic !== undefined && a.topic !== topicOf(typedTopic))));
+    if (!subj || !items.length) return;
+    const before = new Map(items.map(a => [a.id, { subject: a.subject, topic: a.topic }]));
+    const moved = new Set(items.map(a => a.id));
+    onUpdate(prev => prev.map(a => (moved.has(a.id) ? { ...a, subject: subj, topic: typedTopic !== undefined ? topicOf(typedTopic) : topicOf(a.topic) } : a)));
+    const top = typedTopic !== undefined ? topicOf(typedTopic) : items[0].topic;
     expand(subj, top);
+    setLastMove({ text: `${items.length === 1 ? `"${items[0].name}" spostato` : `${items.length} file spostati`} in ${subj}${typedTopic !== undefined ? ` › ${top}` : ''}.`, before });
+  };
+  const undoMove = () => {
+    if (!lastMove) return;
+    const { before } = lastMove;
+    onUpdate(prev => prev.map(a => (before.has(a.id) ? { ...a, ...before.get(a.id)! } : a)));
+    setLastMove(null);
+  };
+
+  // Drag and drop (computer and iPad): a file, the selected files or a whole topic onto a subject or a topic.
+  const DRAG_TYPE = 'application/x-mynd-archive';
+  const startDrag = (e: React.DragEvent, ids: string[]) => {
+    e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const dropProps = (key: string, onDrop: (ids: string[]) => void) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dropTarget !== key) setDropTarget(key);
+    },
+    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(t => (t === key ? null : t)); },
+    onDrop: (e: React.DragEvent) => {
+      const raw = e.dataTransfer.getData(DRAG_TYPE);
+      setDropTarget(null);
+      if (!raw) return;
+      e.preventDefault();
+      try { onDrop(JSON.parse(raw)); } catch { /* not ours */ }
+    },
+  });
+  const dropStyle = (key: string) => (dropTarget === key ? 'ring-2 ring-[var(--brand-ring)] bg-[var(--brand-fill)]/10' : '');
+
+  const confirmMove = () => {
+    if (!moving || !moving.subject.trim() || !moving.topic.trim()) return;
+    moveItems(moving.ids, moving.subject, moving.topic);
     setMoving(null);
     setSelected(new Set());
   };
@@ -849,6 +894,15 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         </div>
       )}
 
+      {lastMove && (
+        <div className={`${cardClass} p-4 flex items-center gap-3 animate-scale-in`} role="status">
+          <FolderInput className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--brand-ring)' }} />
+          <p className={`text-sm flex-1 min-w-0 ${textColor}`}>{lastMove.text}</p>
+          <button onClick={undoMove} className="text-sm font-medium inline-flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ color: 'var(--brand-ring)' }}><Undo2 className="w-4 h-4" /> Annulla</button>
+          <button onClick={() => setLastMove(null)} className={subTextColor} aria-label="Chiudi"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {(waitingItems.length > 0 || needsKey) && (
         <div className={`${cardClass} p-4 flex flex-wrap items-center justify-between gap-3`}>
           <p className={`text-sm ${subTextColor}`}>
@@ -884,7 +938,8 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         {Object.keys(hierarchy).length === 0 && <div className={`${cardClass} p-8 text-center`}><p className={subTextColor}>Archivio vuoto</p></div>}
         {Object.entries(hierarchy).map(([subjectName, subjectTopics]) => (
           <div key={subjectName} className={`${cardClass} overflow-hidden`}>
-            <div className={`flex items-center ${selecting ? 'pl-4' : ''}`}>
+            <div className={`flex items-center rounded-t-[inherit] transition-colors ${selecting ? 'pl-4' : ''} ${dropStyle(`s:${subjectName}`)}`}
+              {...dropProps(`s:${subjectName}`, ids => moveItems(ids, subjectName))}>
             {selecting && tickBox(Object.values(subjectTopics).flat().map(a => a.id), `Seleziona tutto ${subjectName}`)}
             <button onClick={() => { const next = new Set(expandedSubjects); if (next.has(subjectName)) next.delete(subjectName); else next.add(subjectName); setExpandedSubjects(next); }}
               className={`flex-1 min-w-0 flex items-center gap-3 p-4 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
@@ -900,7 +955,9 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                   const topicKey = `${subjectName}::${topicName}`;
                   return (
                     <div key={topicKey}>
-                      <div className={`flex items-center ${selecting ? 'pl-8' : ''}`}>
+                      <div className={`flex items-center transition-colors ${selecting ? 'pl-8' : ''} ${dropStyle(`t:${topicKey}`)}`}
+                        draggable={!selecting} onDragStart={e => startDrag(e, items.map(a => a.id))} onDragEnd={() => setDropTarget(null)}
+                        {...dropProps(`t:${topicKey}`, ids => moveItems(ids, subjectName, topicName))}>
                       {selecting && tickBox(items.map(a => a.id), `Seleziona tutto ${topicName}`)}
                       <button onClick={() => { const next = new Set(expandedTopics); if (next.has(topicKey)) next.delete(topicKey); else next.add(topicKey); setExpandedTopics(next); }}
                         className={`flex-1 min-w-0 flex items-center gap-3 ${selecting ? 'px-3' : 'px-8'} py-3 ${darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
@@ -914,12 +971,16 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                           {items.map(item => (
                             <div key={item.id}
                               onClick={selecting ? () => toggleIds([item.id]) : undefined}
-                              className={`flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded-lg transition-colors ${selecting ? 'cursor-pointer select-none' : ''} ${
+                              draggable={editingId !== item.id}
+                              onDragStart={e => startDrag(e, selecting && selected.has(item.id) ? [...selected] : [item.id])}
+                              onDragEnd={() => setDropTarget(null)}
+                              className={`group flex flex-wrap items-center gap-x-3 gap-y-1 p-2 rounded-lg transition-colors ${selecting ? 'cursor-pointer select-none' : 'md:cursor-grab md:active:cursor-grabbing'} ${
                                 selecting && selected.has(item.id)
                                   ? (darkMode ? 'bg-indigo-500/20 ring-1 ring-indigo-400/40' : 'bg-indigo-50 ring-1 ring-indigo-200')
                                   : (darkMode ? 'hover:bg-white/5' : 'hover:bg-black/5')
                               }`}>
                               {selecting && tickBox([item.id], `Seleziona ${item.name}`)}
+                              <GripVertical className={`hidden md:block w-3.5 h-3.5 -mx-2 flex-shrink-0 opacity-0 group-hover:opacity-60 transition-opacity ${subTextColor}`} aria-hidden />
                               {itemIcon(item)}
                               {selecting ? (
                                 <span className={`text-sm ${textColor} flex-1 min-w-0 truncate`}>
@@ -944,6 +1005,9 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
                               )}
                               {selecting ? (item.file && <span className="pointer-events-none">{aiStatus(item)}</span>) : aiStatus(item)}
                               {!selecting && safeLink(item.link) && <a href={safeLink(item.link)!} target="_blank" rel="noopener noreferrer" className="text-indigo-400" aria-label="Apri link"><ExternalLink className="w-3.5 h-3.5" /></a>}
+                              {!selecting && editingId !== item.id && (
+                                <button onClick={() => startMoveOf([item])} className={subTextColor} aria-label={`Sposta ${item.name}`} title="Sposta in un'altra cartella"><FolderInput className="w-3.5 h-3.5" /></button>
+                              )}
                               {!selecting && editingId !== item.id && (
                                 <button onClick={() => { setEditingId(item.id); setEditingName(item.name); }} className={subTextColor} aria-label="Rinomina"><Pencil className="w-3.5 h-3.5" /></button>
                               )}
@@ -1005,13 +1069,21 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             onKeyDown={e => { if (e.key === 'Escape') setMoving(null); }}
             className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-float' : 'glass-card-light'}`}>
             <div>
-              <h2 className={`text-lg font-semibold ${textColor}`}>Sposta {selectedItems.length > 1 ? `${selectedItems.length} elementi` : `"${selectedItems[0]?.name}"`}</h2>
-              <p className={`mt-1 text-sm ${subTextColor}`}>Scegli una materia e un argomento esistenti, oppure scrivine di nuovi.</p>
+              <h2 className={`text-lg font-semibold ${textColor}`}>Sposta {movingItems.length > 1 ? `${movingItems.length} elementi` : `"${movingItems[0]?.name}"`}</h2>
+              <p className={`mt-1 text-sm ${subTextColor}`}>Scegli una materia e un argomento esistenti, oppure scrivine di nuovi. Dal computer puoi anche trascinare i file sulle cartelle.</p>
             </div>
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Materia</label>
               <input value={moving.subject} onChange={e => setMoving({ ...moving, subject: e.target.value })} list="archivio-move-subjects" className={`${inputClass} w-full`} placeholder="Es. Storia" autoFocus required />
               <datalist id="archivio-move-subjects">{subjects.map(x => <option key={x} value={x} />)}</datalist>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {subjects.slice(0, 12).map(x => (
+                  <button key={x} type="button" onClick={() => setMoving({ ...moving, subject: x, topic: moving.subject === x ? moving.topic : '' })}
+                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.subject === x ? 'bg-[var(--brand-fill)] text-[var(--on-brand)]' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
+                    {x}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Argomento</label>
@@ -1020,9 +1092,9 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             </div>
             {moveTopics.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {moveTopics.slice(0, 8).map(x => (
+                {moveTopics.slice(0, 12).map(x => (
                   <button key={x} type="button" onClick={() => setMoving({ ...moving, topic: x })}
-                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.topic === x ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
+                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${moving.topic === x ? 'bg-[var(--brand-fill)] text-[var(--on-brand)]' : (darkMode ? 'bg-white/10 text-white/80 hover:bg-white/15' : 'bg-black/5 text-gray-700 hover:bg-black/10')}`}>
                     {x}
                   </button>
                 ))}
