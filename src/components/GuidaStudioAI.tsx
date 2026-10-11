@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
+import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { Grade, Task, UserData, createId } from '../lib/store';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
 import { selectMaterial, MaterialDoc } from '../lib/retrieval';
@@ -7,6 +7,9 @@ import AISettings from './AISettings';
 import ModelPicker from './ModelPicker';
 import { loadTranscript } from '../lib/archiveText';
 import { useDialog } from './Dialog';
+import { findSources, SourceHit } from '../lib/sources';
+// The window with the page of the file is downloaded only when it is opened.
+const SourceViewer = lazy(() => import('./SourceViewer'));
 import { track } from '../lib/analytics';
 import { ChatSummary, StoredMessage, listChats, loadChat, saveChat, renameChat, deleteChat, syncLocalChats, chatErrorMessage, titleFrom } from '../lib/chats';
 
@@ -87,7 +90,7 @@ const SYSTEM_PROMPT = `Sei il tutor di studio di MYND: un insegnante paziente ed
 Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file, più i suoi voti e i suoi impegni.
 
 Come lavori:
-- Basati prima di tutto sul materiale e indica da quale file prendi le informazioni (es. «dal file "Capitolo 3"»). Se qualcosa non c'è, dillo chiaramente; poi, se è utile, aggiungi ciò che sai precisando che non viene dai suoi file. Non inventare pagine, date, citazioni o dati.
+- Basati prima di tutto sul materiale e indica da quale file prendi le informazioni e, quando nel materiale c'è il segno "--- Pagina N ---", anche la pagina (es. «dal file "Capitolo 3", pag. 12»). Se qualcosa non c'è, dillo chiaramente; poi, se è utile, aggiungi ciò che sai precisando che non viene dai suoi file. Non inventare pagine, date, citazioni o dati.
 - Prima di rispondere capisci cosa chiede davvero lo studente; se la domanda è ambigua, fai una breve domanda di chiarimento.
 - Spiega in modo chiaro e ordinato, partendo dai concetti base e arrivando ai dettagli, con esempi concreti. Adatta la lunghezza alla domanda: breve per le domande semplici, completo per riassunti e spiegazioni.
 - Per i riassunti usa titoli (##), elenchi puntati e i concetti chiave in **grassetto**.
@@ -128,6 +131,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [elapsed, setElapsed] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  // "Mostra nei file": the places of the files an answer comes from (hits null = still searching).
+  const [sources, setSources] = useState<{ hits: SourceHit[] | null } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -204,6 +209,32 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       return picked.text;
     };
   };
+
+  // Looks for the answer in the files selected above; if it isn't there, in the rest of the archive.
+  const readAll = archive.filter(a => a.file?.textStatus === 'done' && a.file.textPath);
+  const showSources = async (msg: Message) => {
+    setSources({ hits: null });
+    const search = async (items: typeof readAll) => findSources(msg.content, await Promise.all(items.map(async item => ({ item, text: await loadTranscript(item.file!.textPath!) }))));
+    try {
+      let hits = await search(readable);
+      if (!hits.length && readAll.length > readable.length) hits = await search(readAll.filter(a => !readable.includes(a)));
+      setSources({ hits });
+    } catch {
+      setSources({ hits: [] });
+    }
+  };
+  const sourcesButton = (msg: Message) => readAll.length > 0 && msg.content.length > 40 && (
+    <button onClick={() => showSources(msg)}
+      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold h-8 px-3 rounded-full transition-transform active:scale-95"
+      style={{ color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+      <MapPin className="w-3.5 h-3.5" /> Mostra nei file
+    </button>
+  );
+  const sourcesWindow = sources && (
+    <Suspense fallback={null}>
+      <SourceViewer hits={sources.hits} onClose={() => setSources(null)} onAsk={text => { setSources(null); setInput(text); }} />
+    </Suspense>
+  );
 
   const onSettingsDone = () => {
     setAiReady(isReady());
@@ -709,6 +740,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
               ) : (
                 <div key={msg.id} className={textColor}>
                   <FormattedText text={msg.content} large />
+                  {sourcesButton(msg)}
                 </div>
               )
             ))}
@@ -738,7 +770,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     );
   };
 
-  return fullscreen ? renderFullscreen() : (
+  return <>{sourcesWindow}{fullscreen ? renderFullscreen() : (
     <div className="flex gap-4 h-[calc(100vh-8rem)]">
     {mobileChatList}
     <aside className={`${cardClass} hidden lg:flex w-72 flex-shrink-0 flex-col p-3`}>
@@ -818,6 +850,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-800'}`}>
                   {messageImages(msg)}
                   <FormattedText text={msg.content} />
+                  {sourcesButton(msg)}
                 </div>
               )}
             {msg.role === 'user' && (
@@ -857,7 +890,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       </div>
     </div>
     </div>
-  );
+  )}</>;
 }
 
 const GUIDE_STEPS: { title: string; text: React.ReactNode }[] = [

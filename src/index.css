@@ -93,6 +93,20 @@ body {
 .mynd-word { display: block; animation: myndWordIn 500ms var(--ease-out) backwards; }
 .mynd-ignite { animation: myndIgnite 600ms var(--ease-out) 420ms backwards; }
 @media (prefers-reduced-motion: reduce) { .mynd-ignite { animation: none; } }
+/* "Mostra nei file": the passage of the answer on the page (marker-pen yellow) and in the text. */
+.mynd-source-mark {
+  background: rgba(214, 245, 90, 0.38);
+  mix-blend-mode: multiply;
+  box-shadow: 0 0 0 2px rgba(150, 190, 20, 0.55);
+  animation: myndSourceIn 700ms var(--ease-out) both;
+}
+.mynd-source-text { background: color-mix(in srgb, var(--brand-fill) 32%, transparent); }
+@keyframes myndSourceIn {
+  0% { opacity: 0; transform: scaleX(0.6); transform-origin: left center; }
+  60% { opacity: 1; box-shadow: 0 0 0 6px rgba(200, 242, 90, 0.35); }
+  100% { opacity: 1; transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) { .mynd-source-mark { animation: none; } }
 
 /* Welcome: the knob of "Scorri per iniziare" glides to the middle and back until it is touched. */
 @keyframes swipeHint {

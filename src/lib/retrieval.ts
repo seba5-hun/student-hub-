@@ -18,12 +18,12 @@ const STOPWORDS = new Set((
   'the and of to in is are what how why'
 ).split(/\s+/));
 
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
 // Words reduced to a short root, so "rivoluzione", "rivoluzionari" and "rivoluzionario" match.
-function terms(text: string): string[] {
+export function terms(text: string): string[] {
   return (normalize(text).match(/[a-z0-9]+/g) || [])
     .filter(w => w.length >= 3 && !STOPWORDS.has(w))
     .map(w => (w.length > 6 ? w.slice(0, 6) : w));

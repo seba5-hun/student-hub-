@@ -562,3 +562,21 @@ export async function transcribeFile(data: string, mimeType: string, prompt: str
     }
   }
 }
+
+// "Mostra nei file" on a photo or a scanned page: Gemini (free) says where the passage is on the
+// image, as a box with coordinates from 0 to 1000 [top, left, bottom, right]. Null when not found.
+export async function locateInImage(data: string, mimeType: string, passage: string): Promise<[number, number, number, number] | null> {
+  if (!getKey('gemini')) return null;
+  const prompt = 'Questa è la foto o la scansione di una pagina. Trova il punto della pagina in cui si trova questo passaggio ' +
+    '(o, se è scritto con altre parole, il punto in cui si parla esattamente di questo):\n«' + passage.slice(0, 900) + '»\n' +
+    'Rispondi SOLO con JSON nel formato {"box_2d": [ymin, xmin, ymax, xmax]}, coordinate intere da 0 a 1000 del riquadro che contiene ' +
+    'tutte le righe del passaggio. Se il passaggio non è nella pagina rispondi {"box_2d": null}.';
+  const text = await generateContent(getKey('gemini'), [
+    { role: 'user', parts: [{ inline_data: { mime_type: mimeType, data } }, { text: prompt }] },
+  ], { temperature: 0, maxOutputTokens: 2048, fast: true, timeoutMs: 45_000 });
+  const m = /"box_2d"\s*:\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]/.exec(text);
+  if (!m) return null;
+  const [y0, x0, y1, x1] = m.slice(1, 5).map(Number);
+  if (![y0, x0, y1, x1].every(v => v >= 0 && v <= 1000) || y1 <= y0 || x1 <= x0) return null;
+  return [y0, x0, y1, x1];
+}
