@@ -29,6 +29,8 @@ interface ArchivioProps {
   analyzing: string[];
   onAnalyze: (ids: string[]) => void;
   onOpenGuide: () => void;
+  // Demo (no account): the archive can be looked at, files can't be opened or uploaded.
+  demo?: boolean;
 }
 
 // Only http(s) links are opened; "www.sito.it" becomes "https://www.sito.it".
@@ -76,7 +78,7 @@ function pdfFileName(title: string): string {
   return `${title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Foto'}.pdf`;
 }
 
-export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide }: ArchivioProps) {
+export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide, demo = false }: ArchivioProps) {
   const dialog = useDialog();
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
@@ -325,6 +327,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   const openItem = async (item: ArchiveItem) => {
     if (!item.file) return;
+    if (demo) {
+      dialog.alert({ title: 'File di esempio', message: 'Nella demo i file non si aprono. Con il tuo account apri i tuoi PDF e le tue foto, e l\'AI li legge per te.' });
+      return;
+    }
     if (item.file.drive) {
       window.open(driveViewUrl(item.file.drive), '_blank', 'noopener');
       return;
@@ -343,6 +349,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
 
   // Removes the items from the archive, their files from storage and Drive files to Drive's bin.
   const removeItems = async (items: ArchiveItem[]) => {
+    if (demo) { const ids = new Set(items.map(i => i.id)); onUpdate(prev => prev.filter(a => !ids.has(a.id))); return; }
     const driveItems = items.filter(i => i.file?.drive);
     let leftOnDrive = 0;
     if (driveItems.length > 0) {
@@ -694,9 +701,11 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
               {selecting ? <><X className="w-4 h-4" /> Fine</> : <><CheckSquare className="w-4 h-4" /> Seleziona</>}
             </button>
           )}
-          <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus className="w-4 h-4" /> Nuovo
-          </button>
+          {!demo && (
+            <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus className="w-4 h-4" /> Nuovo
+            </button>
+          )}
         </div>
       </div>
 
@@ -709,7 +718,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
         </p>
       </div>
 
-      {(
+      {!demo && (
         <div className={`${cardClass} p-4 space-y-3`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className={`text-sm font-semibold ${textColor}`}>Dove salvare i file</h3>

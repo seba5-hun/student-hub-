@@ -3,11 +3,14 @@ import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage, googleLoginEnabled } from '../lib/supabase';
 import { loadGoogleSignIn, makeNonce, googleClientId, isStandaloneApp } from '../lib/googleSignIn';
 import { track } from '../lib/analytics';
-import { Loader2, Check, AlertCircle } from 'lucide-react';
+import { Loader2, Check, AlertCircle, Eye } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: AuthUser) => void;
   initialError?: string;
+  // "Dai un'occhiata": opens the app with example data, without an account.
+  onDemo?: () => void;
+  startMode?: 'register';
 }
 
 // The app returns here after the links in confirmation and reset emails.
@@ -277,8 +280,8 @@ export function Notice({ kind, title, text }: { kind: 'ok' | 'error'; title: str
 
 const WORDS: [string, string][] = [['M', 'ake'], ['Y', 'our'], ['N', 'ext'], ['D', 'ecision.']];
 
-export default function Auth({ onLogin, initialError = '' }: AuthProps) {
-  const [mode, setModeState] = useState<Mode>(() => (initialError || seenBefore() ? 'login' : 'welcome'));
+export default function Auth({ onLogin, initialError = '', onDemo, startMode }: AuthProps) {
+  const [mode, setModeState] = useState<Mode>(() => (startMode || (initialError || seenBefore() ? 'login' : 'welcome')));
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -404,6 +407,11 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
         <div className="flex flex-col gap-3">
           <SwipeToStart label="Scorri per iniziare" onComplete={() => setMode('register')} />
           <button type="button" onClick={() => setMode('login')} className="h-12 text-base">Ho già un account</button>
+          {onDemo && (
+            <button type="button" onClick={onDemo} className="h-11 -mt-2 text-[15px] font-medium inline-flex items-center justify-center gap-2" style={{ color: 'var(--brand-ring)' }}>
+              <Eye className="w-4 h-4" /> Dai un'occhiata, senza account
+            </button>
+          )}
           <p className="text-xs text-center" style={{ color: 'var(--text-subtle)' }}>
             <a href="/info.html" className="underline">Cos'è MYND</a> · <a href="/privacy.html" className="underline">Privacy</a> · <a href="/termini.html" className="underline">Termini</a>
           </p>
@@ -430,6 +438,11 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
         <ManifestoScreen back={() => setMode('welcome')} glow="none" footer={
           <div className="flex flex-col gap-3.5 items-center">
             <PrimaryButton loading={loading}>Accedi</PrimaryButton>
+            {onDemo && (
+              <button type="button" onClick={onDemo} className="text-sm font-medium inline-flex items-center gap-1.5" style={{ color: 'var(--brand-ring)' }}>
+                <Eye className="w-4 h-4" /> Dai un'occhiata senza account
+              </button>
+            )}
             <a href="/privacy.html" target="_blank" rel="noopener" className="text-xs" style={{ color: 'var(--text-subtle)' }}>Informativa sulla privacy</a>
           </div>
         }>

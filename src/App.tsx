@@ -32,6 +32,7 @@ const AdminPanel = lazy(loaders.admin);
 const Mindset = lazy(loaders.mindset);
 const Business = lazy(loaders.business);
 const Onboarding = lazy(loaders.onboarding);
+const DemoGuide = lazy(() => import('./components/DemoGuide'));
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -49,6 +50,7 @@ function SectionFallback() {
 }
 import { useDialog } from './components/Dialog';
 import { applyOnboarding, applyOnboardingKey, type OnboardingDraft } from './lib/onboarding';
+import { DEMO_USER, createDemoData, isDemoUser } from './lib/demoData';
 import { AccountStatus, fetchMyStatus, loadAdminUsers } from './lib/admin';
 import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
@@ -89,6 +91,10 @@ function App() {
   const [loadError, setLoadError] = useState('');
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [guideOpen, setGuideOpen] = useState(false);
+  // "Dai un'occhiata": the app with an example student, in memory only (nothing is saved).
+  const isDemo = isDemoUser(user);
+  // The access screen to show when coming back from the demo ("Crea il tuo account").
+  const [authStart, setAuthStart] = useState<'register' | undefined>();
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
@@ -112,11 +118,11 @@ function App() {
   // Usage statistics: who is using the app (or just the login page) and which section is open.
   useEffect(() => {
     if (!initialized) return;
-    setAnalyticsUser(user?.id ?? null);
+    setAnalyticsUser(user && !isDemoUser(user) ? user.id : null);
   }, [initialized, user]);
   useEffect(() => {
     if (!initialized) return;
-    setAnalyticsSection(user && data ? currentSection : isResetPassword ? 'reset-password' : 'accesso');
+    setAnalyticsSection(user && data ? (isDemoUser(user) ? `demo-${currentSection}` : currentSection) : isResetPassword ? 'reset-password' : 'accesso');
   }, [initialized, user, data, currentSection, isResetPassword]);
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
   const lastRemoteJson = useRef('');
@@ -231,6 +237,8 @@ function App() {
   // work that finishes later (file uploads, AI reading) so it doesn't overwrite newer edits.
   const updateData = useCallback((update: UserData | ((prev: UserData) => UserData)) => {
     if (!user) return;
+    // The demo is never saved.
+    if (isDemoUser(user)) { setData(prev => (prev ? (typeof update === 'function' ? update(prev) : update) : prev)); return; }
     const userId = user.id;
     lastLocalChange.current = Date.now();
     setData(prev => {
@@ -312,6 +320,7 @@ function App() {
   }, [updateData]);
 
   const analyzeFiles = useCallback(async (ids: string[]) => {
+    if (isDemoUser(userRef.current)) return; // demo files are examples, already "read"
     for (const id of ids) if (!analyzeQueue.current.includes(id)) analyzeQueue.current.push(id);
     setAnalyzing(prev => [...new Set([...prev, ...ids])]);
     if (analyzeRunning.current) return;
@@ -386,14 +395,14 @@ function App() {
         hiddenSubjects: (prev.settings.hiddenSubjects || []).filter(h => !same(h)),
       },
     }));
-    renameSubjectInChats(user.id, oldName, newName).catch(err => console.error('Chat folders not renamed:', err));
+    if (!isDemoUser(user)) renameSubjectInChats(user.id, oldName, newName).catch(err => console.error('Chat folders not renamed:', err));
   }, [user, updateData]);
 
   // Sync between devices: when the user comes back to the app (tab shown again, phone
   // unlocked) and every 30 seconds while it is open, load the changes made elsewhere.
   // Never while there are local changes not yet saved, so they can't be overwritten.
   useEffect(() => {
-    if (!user) return;
+    if (!user || isDemoUser(user)) return;
     const userId = user.id;
     const busy = () => !!pendingSave.current || savingNow.current || Date.now() - lastLocalChange.current < 3000;
     const refresh = async () => {
@@ -474,7 +483,25 @@ function App() {
     return () => window.clearInterval(id);
   }, [user, accountStatus, loadUser]);
 
+  const startDemo = () => {
+    setAccountStatus('approved');
+    setData(createDemoData());
+    setDarkMode(true);
+    setCurrentSection('home');
+    setGuideOpen(false);
+    setUser(DEMO_USER);
+    window.scrollTo({ top: 0 });
+  };
+  const exitDemo = (toSignup: boolean) => {
+    setUser(null);
+    setData(null);
+    setAccountStatus(null);
+    setCurrentSection('home');
+    setAuthStart(toSignup ? 'register' : undefined);
+  };
+
   const handleLogout = async () => {
+    if (isDemo) { exitDemo(false); return; }
     analyzeQueue.current = [];
     setAnalyzing([]);
     await flushSave();
@@ -513,7 +540,7 @@ function App() {
 
   // Browser notifications for tasks due today
   useEffect(() => {
-    if (!data || !user) return;
+    if (!data || !user || isDemoUser(user)) return;
     const today = todayKey();
     const todayTasks = data.tasks.filter(t => !t.done && t.date <= today && (t.endDate || t.date) >= today);
     
@@ -669,7 +696,7 @@ function App() {
 
   // Auth screen
   if (!user || !data) {
-    return <Auth onLogin={handleLogin} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
+    return <Auth key={authStart || 'auth'} onLogin={handleLogin} onDemo={startDemo} startMode={authStart} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }
 
   // Save indicator
@@ -706,6 +733,18 @@ function App() {
           }
         }}
       >
+        {isDemo && (
+          <div className="mt-3 rounded-2xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 animate-scale-in"
+            style={{ background: 'color-mix(in srgb, var(--brand-fill) 13%, transparent)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 35%, transparent)' }}>
+            <p className="text-sm flex-1 min-w-[14rem]" style={{ color: 'var(--text)' }}>
+              <b style={{ color: 'var(--brand-ring)' }}>Demo.</b> Stai guardando MYND con i dati di uno studente di esempio: prova tutto, niente viene salvato.
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => exitDemo(false)} className="text-sm px-3 h-9 rounded-full" style={{ color: 'var(--text-muted)' }}>Esci</button>
+              <button onClick={() => exitDemo(true)} className="btn-primary h-9 px-4 text-sm">Crea il tuo account</button>
+            </div>
+          </div>
+        )}
         <Suspense fallback={<SectionFallback />}>
         {currentSection === 'home' && (
           <Home
@@ -742,6 +781,7 @@ function App() {
             archive={data.archive}
             darkMode={darkMode}
             onUpdate={(update) => updateData(prev => ({ ...prev, archive: update(prev.archive) }))}
+            demo={isDemo}
             analyzing={analyzing}
             onAnalyze={analyzeFiles}
             onOpenGuide={() => handleSectionChange('guida-ai')}
@@ -773,7 +813,8 @@ function App() {
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
           <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} />
         )}
-        {currentSection === 'guida-ai' && (
+        {currentSection === 'guida-ai' && isDemo && <DemoGuide onSignup={() => exitDemo(true)} />}
+        {currentSection === 'guida-ai' && !isDemo && (
           <GuidaStudioAI
             userId={user.id}
             data={data}
