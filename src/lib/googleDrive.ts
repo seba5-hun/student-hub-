@@ -28,8 +28,14 @@ interface GoogleOAuth2 {
   initTokenClient: (o: { client_id: string; scope: string; hint?: string; callback: (r: TokenResponse) => void; error_callback?: (e: { type?: string; message?: string }) => void }) => TokenClient;
   revoke: (token: string, done?: () => void) => void;
 }
+// "Sign in with Google" (the official button): gives an ID token for the login, see googleSignIn.ts.
+export interface GoogleIdApi {
+  initialize: (o: Record<string, unknown> & { client_id: string; callback: (r: { credential?: string }) => void }) => void;
+  renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
+  cancel: () => void;
+}
 declare global {
-  interface Window { google?: { accounts?: { oauth2?: GoogleOAuth2 } } }
+  interface Window { google?: { accounts?: { oauth2?: GoogleOAuth2; id?: GoogleIdApi } } }
 }
 
 export class DriveNotConnectedError extends Error {

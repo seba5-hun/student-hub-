@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage, googleLoginEnabled } from '../lib/supabase';
+import { loadGoogleSignIn, makeNonce, googleClientId, isStandaloneApp } from '../lib/googleSignIn';
 import { track } from '../lib/analytics';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 
@@ -155,10 +156,52 @@ export function SwipeToStart({ label, onComplete }: { label: string; onComplete:
 
 // "Continua con Google": shown only when Google login is switched on in Supabase.
 // No password to remember; on the iPhone it uses the Google account already on the phone.
-function GoogleButton({ onError }: { onError: (msg: string) => void }) {
+function GoogleButton({ onError, onLogin }: { onError: (msg: string) => void; onLogin: (user: AuthUser) => void }) {
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
+  // gis: the official Google button (shows "myndspace.world"); redirect: the old button, used when
+  // Google's library can't load or in the iPhone home-screen app.
+  const [mode, setMode] = useState<'loading' | 'gis' | 'redirect'>('loading');
+  const box = useRef<HTMLDivElement>(null);
+  // Latest callbacks, read when Google answers (the button is set up once).
+  const handlers = useRef({ onError, onLogin });
+  handlers.current = { onError, onLogin };
   useEffect(() => { let alive = true; googleLoginEnabled().then(v => { if (alive) setOn(v); }); return () => { alive = false; }; }, []);
+  useEffect(() => {
+    if (!on || !supabase) return;
+    if (isStandaloneApp()) { setMode('redirect'); return; }
+    let alive = true;
+    const late = window.setTimeout(() => { if (alive) setMode(m => (m === 'loading' ? 'redirect' : m)); }, 6000);
+    (async () => {
+      try {
+        const [id, nonce] = await Promise.all([loadGoogleSignIn(), makeNonce()]);
+        if (!alive || !box.current) return;
+        id.initialize({
+          client_id: googleClientId,
+          nonce: nonce.hashed,
+          context: 'signin',
+          ux_mode: 'popup',
+          itp_support: true,
+          use_fedcm_for_button: true,
+          callback: async r => {
+            if (!r.credential) return;
+            setBusy(true);
+            const { data, error } = await supabase!.auth.signInWithIdToken({ provider: 'google', token: r.credential, nonce: nonce.raw });
+            if (error || !data.user) { handlers.current.onError(authErrorMessage(error || new Error('Accesso con Google non riuscito.'))); setBusy(false); return; }
+            handlers.current.onLogin({ id: data.user.id, email: data.user.email || '' });
+          },
+        });
+        id.renderButton(box.current, {
+          type: 'standard', theme: 'outline', size: 'large', shape: 'pill', text: 'continue_with',
+          logo_alignment: 'center', locale: 'it', width: Math.min(400, Math.max(220, box.current.offsetWidth)),
+        });
+        if (alive) setMode('gis');
+      } catch {
+        if (alive) setMode('redirect');
+      }
+    })();
+    return () => { alive = false; window.clearTimeout(late); };
+  }, [on]);
   if (!on || !supabase) return null;
   const go = async () => {
     setBusy(true);
@@ -167,14 +210,26 @@ function GoogleButton({ onError }: { onError: (msg: string) => void }) {
   };
   return (
     <div className="flex flex-col gap-5">
-      <button type="button" onClick={go} disabled={busy}
-        className="w-full h-14 rounded-full flex items-center justify-center gap-3 text-[16px] font-semibold disabled:opacity-60"
-        style={{ background: '#fff', color: '#1F1F1F', border: '1px solid rgba(0,0,0,.12)' }}>
-        {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-          <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
-        )}
-        Continua con Google
-      </button>
+      {mode !== 'redirect' && (
+        <div className="relative min-h-[44px] flex justify-center">
+          <div ref={box} className={`w-full flex justify-center transition-opacity ${mode === 'gis' && !busy ? 'opacity-100' : 'opacity-0'}`} />
+          {(mode === 'loading' || busy) && (
+            <div className="absolute inset-0 rounded-full flex items-center justify-center gap-2 text-sm" style={{ background: '#fff', color: '#1F1F1F' }}>
+              <Loader2 className="w-4 h-4 animate-spin" /> {busy ? 'Accesso in corso…' : 'Continua con Google'}
+            </div>
+          )}
+        </div>
+      )}
+      {mode === 'redirect' && (
+        <button type="button" onClick={go} disabled={busy}
+          className="w-full h-14 rounded-full flex items-center justify-center gap-3 text-[16px] font-semibold disabled:opacity-60"
+          style={{ background: '#fff', color: '#1F1F1F', border: '1px solid rgba(0,0,0,.12)' }}>
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+            <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+          )}
+          Continua con Google
+        </button>
+      )}
       <div className="flex items-center gap-3 text-xs uppercase tracking-[0.12em]" style={{ color: 'var(--text-subtle)' }}>
         <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />oppure<span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
       </div>
@@ -384,7 +439,7 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
               <p className="text-base" style={{ color: 'var(--text-muted)' }}>La prossima decisione è qui.</p>
             </div>
             <div className="flex flex-col gap-7">
-              <GoogleButton onError={setError} />
+              <GoogleButton onError={setError} onLogin={onLogin} />
               <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" />
               <Field label="Password" value={password} onChange={setPassword} autoComplete="current-password" toggle />
               <div className="flex justify-between items-center">
@@ -422,7 +477,7 @@ export default function Auth({ onLogin, initialError = '' }: AuthProps) {
               <p className="text-base" style={{ color: 'var(--text-muted)' }}>Bastano 30 secondi.</p>
             </div>
             <div className="flex flex-col gap-6">
-              <GoogleButton onError={setError} />
+              <GoogleButton onError={setError} onLogin={onLogin} />
               <Field label="Nome" value={name} onChange={setName} autoComplete="given-name" />
               <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" />
               <Field label="Password" value={password} onChange={setPassword} autoComplete="new-password" toggle />
