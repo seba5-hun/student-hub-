@@ -4,13 +4,17 @@ import { StudyProfile, StudentKind, LabelKey } from '../lib/store';
 import { PRESETS, KIND_ORDER, SECTION_KEYS, makeProfileApi, ADAPT_SYSTEM, parseAdaptAnswer, DEFAULT_PROFILE } from '../lib/profile';
 import { askTutor, isReady } from '../lib/ai';
 
-// "Adatta MYND a te": the kind of student, in a tap or described in words (the AI then picks names,
-// grade scale and what the tutor should know). A preview shows what changes before it is applied.
+// "Le tue MYND": a new version of the app (mode 'new': the default MYND stays as it is) or the
+// active one edited. The kind of student is chosen in a tap or described in words (the AI then
+// picks names, grade scale and what the tutor should know); a preview shows what changes.
 
 interface Props {
-  profile: StudyProfile | undefined;
+  mode: 'new' | 'edit';
+  profile: StudyProfile | undefined;   // of the version being edited
+  name?: string;                        // of the version being edited
+  suggestedName: string;                // "MYND 2" for a new one
   darkMode: boolean;
-  onSave: (profile: StudyProfile) => void;
+  onSave: (profile: StudyProfile, name: string) => void;
   onClose: () => void;
 }
 
@@ -21,9 +25,13 @@ const SECTION_NAMES: Partial<Record<LabelKey, string>> = {
 };
 const SCALE_TEXT = { 10: 'Voti da 1 a 10', 30: 'Voti in trentesimi (18–30 e lode), CFU e media ponderata', 100: 'Punteggi su 100 (simulazioni e test)' };
 
-export default function ProfileEditor({ profile, darkMode, onSave, onClose }: Props) {
-  const [draft, setDraft] = useState<StudyProfile>(profile || DEFAULT_PROFILE);
-  const [description, setDescription] = useState(profile?.description || '');
+export default function ProfileEditor({ mode, profile, name: currentName, suggestedName, darkMode, onSave, onClose }: Props) {
+  const start = mode === 'new' ? undefined : profile;
+  const [draft, setDraft] = useState<StudyProfile>(start || DEFAULT_PROFILE);
+  const [description, setDescription] = useState(start?.description || '');
+  const [name, setName] = useState(mode === 'edit' ? currentName || '' : '');
+  // A new version named by the kind of student when no name is typed ("Università").
+  const autoName = draft.kind !== 'superiori' && draft.kind !== 'altro' ? PRESETS[draft.kind].title : suggestedName;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [summary, setSummary] = useState('');
@@ -58,7 +66,7 @@ export default function ProfileEditor({ profile, darkMode, onSave, onClose }: Pr
     const labels = Object.fromEntries(Object.entries(draft.labels || {})
       .map(([k, v]) => [k, (v || '').trim()])
       .filter(([k, v]) => v && v !== PRESETS[draft.kind].labels[k as LabelKey]));
-    onSave({ ...draft, description: description.trim() || undefined, labels: Object.keys(labels).length ? labels : undefined });
+    onSave({ ...draft, description: description.trim() || undefined, labels: Object.keys(labels).length ? labels : undefined }, name.trim() || (mode === 'edit' ? currentName || autoName : autoName));
   };
 
   const changes = [...SECTION_KEYS, ...THING_KEYS]
@@ -67,15 +75,23 @@ export default function ProfileEditor({ profile, darkMode, onSave, onClose }: Pr
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Adatta MYND a te" onClick={e => e.stopPropagation()}
+      <div role="dialog" aria-modal="true" aria-label={mode === 'new' ? 'Crea una nuova MYND' : 'Modifica la tua MYND'} onClick={e => e.stopPropagation()}
         className={`w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto p-5 sm:p-7 rounded-t-3xl sm:rounded-3xl animate-scale-in ${darkMode ? 'glass-float' : 'glass-card-light'}`}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className={`text-2xl font-bold tracking-[-0.03em] ${text}`}>Adatta MYND a te.</h2>
-            <p className={`text-sm mt-1 ${sub}`}>Nomi delle sezioni, voti e tutor AI cambiano in base a come studi.</p>
+            <h2 className={`text-2xl font-bold tracking-[-0.03em] ${text}`}>{mode === 'new' ? 'Crea una nuova MYND.' : `Modifica «${currentName}».`}</h2>
+            <p className={`text-sm mt-1 ${sub}`}>{mode === 'new'
+              ? 'Una versione adattata a te: nomi, voti e tutor AI cambiano. La MYND predefinita resta com\'è e passi dall\'una all\'altra quando vuoi.'
+              : 'Nomi delle sezioni, voti e tutor AI di questa versione.'}</p>
           </div>
           <button onClick={onClose} aria-label="Chiudi" className={`p-2 rounded-full ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'} ${text}`}><X className="w-5 h-5" /></button>
         </div>
+
+        <label className="block mt-6">
+          <span className={`block text-xs font-semibold uppercase tracking-wide mb-2 ${sub}`}>Nome</span>
+          <input value={name} onChange={e => setName(e.target.value)} maxLength={30} placeholder={mode === 'edit' ? currentName : autoName}
+            className={`${input} w-full sm:w-72 text-sm py-2`} />
+        </label>
 
         <p className={`text-xs font-semibold uppercase tracking-wide mt-6 mb-2 ${sub}`}>Che studente sei?</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -141,7 +157,7 @@ export default function ProfileEditor({ profile, darkMode, onSave, onClose }: Pr
           </button>
           <div className="flex-1" />
           <button type="button" onClick={onClose} className={`px-4 py-2 rounded-xl text-sm ${darkMode ? 'bg-white/10 text-white/80' : 'bg-black/5 text-gray-700'}`}>Annulla</button>
-          <button type="button" onClick={save} className="btn-primary text-sm">Applica a MYND</button>
+          <button type="button" onClick={save} className="btn-primary text-sm">{mode === 'new' ? 'Crea e usa' : 'Salva'}</button>
         </div>
       </div>
     </div>

@@ -103,6 +103,22 @@ export interface UserSettings {
   // Which kind of student uses the app (school, university, online school, a test…): names of
   // the sections and of things, grade scale and the tutor adapt to it.
   profile?: StudyProfile;
+  // "Le tue MYND": versions of the app with their own adaptations (kind of student, names, Home
+  // panels, menu). The fields above are always the active version; the others are kept here.
+  layouts?: MyndLayout[];
+  activeLayout?: string;            // id of the active version (none: the default MYND)
+  defaultLayout?: LayoutSnapshot;   // Home and menu of the default MYND while another is active
+}
+
+export interface LayoutSnapshot {
+  profile?: StudyProfile;
+  homeLayout?: { order: string[]; hidden: string[] };
+  hiddenSections?: string[];
+}
+
+export interface MyndLayout extends LayoutSnapshot {
+  id: string;
+  name: string;
 }
 
 export type StudentKind = 'superiori' | 'medie' | 'universita' | 'online' | 'test' | 'altro';

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
 import { ProfileContext, makeProfileApi } from './lib/profile';
+import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
 import { ManifestoScreen, PrimaryButton } from './components/Auth';
@@ -94,8 +95,8 @@ function App() {
   const [loadError, setLoadError] = useState('');
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [guideOpen, setGuideOpen] = useState(false);
-  // "Adatta MYND a te": the kind of student (names, grade scale, tutor).
-  const [profileOpen, setProfileOpen] = useState(false);
+  // "Le tue MYND": a new version of the app, or the active one edited (names, grade scale, tutor).
+  const [profileEditor, setProfileEditor] = useState<'new' | 'edit' | null>(null);
   // "Dai un'occhiata": the app with an example student, in memory only (nothing is saved).
   const isDemo = isDemoUser(user);
   // The access screen to show when coming back from the demo ("Crea il tuo account").
@@ -705,6 +706,14 @@ function App() {
   }
 
   // Save indicator
+  // "Le tue MYND": switch, create, edit and delete versions of the app (the data stays the same).
+  const layoutActions = {
+    onSwitch: (id: string) => updateData(prev => ({ ...prev, settings: switchLayout(prev.settings, id) })),
+    onNew: () => setProfileEditor('new'),
+    onEdit: () => setProfileEditor('edit'),
+    onDelete: (id: string) => updateData(prev => ({ ...prev, settings: deleteLayout(prev.settings, id) })),
+  };
+
   const SaveIndicator = () => saveStatus === 'idle' ? null : (
     <div className="fixed right-4 z-50 animate-fade-in pointer-events-none" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
       <div className="glass-float rounded-full px-3 py-1.5 flex items-center gap-2">
@@ -758,7 +767,7 @@ function App() {
             onNavigate={handleSectionChange}
             onUpdateSettings={(patch) => updateData(prev => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
             onOpenGuide={() => setGuideOpen(true)}
-            onOpenProfile={() => setProfileOpen(true)}
+            layoutActions={layoutActions}
           />
         )}
         {currentSection === 'impegni' && (
@@ -829,7 +838,7 @@ function App() {
             analyzing={analyzing}
             onAnalyze={analyzeFiles}
             onOpenArchive={() => handleSectionChange('archivio')}
-            onOpenProfile={() => setProfileOpen(true)}
+            onOpenProfile={() => setProfileEditor(normalizeLayouts(data.settings).activeLayout ? 'edit' : 'new')}
           />
         )}
         </Suspense>
@@ -840,10 +849,16 @@ function App() {
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
         </Suspense>
       )}
-      {profileOpen && (
+      {profileEditor && (
         <Suspense fallback={null}>
-          <ProfileEditor profile={data.settings.profile} darkMode={darkMode} onClose={() => setProfileOpen(false)}
-            onSave={profile => { updateData(prev => ({ ...prev, settings: { ...prev.settings, profile } })); setProfileOpen(false); }} />
+          <ProfileEditor mode={profileEditor} profile={data.settings.profile} darkMode={darkMode}
+            name={listLayouts(data.settings).find(l => l.active)?.name} suggestedName={nextName(data.settings)}
+            onClose={() => setProfileEditor(null)}
+            onSave={(profile, name) => {
+              const mode = profileEditor;
+              updateData(prev => ({ ...prev, settings: mode === 'new' ? createLayout(prev.settings, name, profile) : updateActiveLayout(prev.settings, name, profile) }));
+              setProfileEditor(null);
+            }} />
         </Suspense>
       )}
     </ProfileContext.Provider>

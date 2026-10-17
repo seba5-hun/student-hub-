@@ -4,7 +4,8 @@ import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
 import { nextOfEachSeries } from '../lib/recurrence';
-import { useProfile, overallAverage, universityStats, PRESETS } from '../lib/profile';
+import { useProfile, overallAverage, universityStats } from '../lib/profile';
+import LayoutSwitcher, { LayoutActions } from './LayoutSwitcher';
 
 // Panels of the Home page, in their default order. `wide` panels take the full row.
 const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
@@ -24,11 +25,11 @@ interface HomeProps {
   onUpdateSettings?: (patch: Partial<UserData['settings']>) => void;
   // "Crea la tua MYND": the guide that explains the app and sets up subjects, grades and the rest.
   onOpenGuide?: () => void;
-  // "Adatta MYND a te": the kind of student.
-  onOpenProfile?: () => void;
+  // "Le tue MYND": the default MYND and the versions adapted by the student.
+  layoutActions?: LayoutActions;
 }
 
-export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, onOpenProfile }: HomeProps) {
+export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, layoutActions }: HomeProps) {
   const { tasks, grades, sessions, settings } = data;
   const prof = useProfile();
   const quote = useMemo(() => getRandomQuote(), []);
@@ -223,6 +224,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
             <Wand2 className="w-4 h-4" /> Crea la tua MYND
           </button>
         ) : <span />}
+        <div className="flex items-center gap-1">
+        {layoutActions && !editing && <LayoutSwitcher compact settings={settings} darkMode={darkMode} {...layoutActions} />}
         {editing ? (
           <button onClick={() => setEditing(false)} className="btn-primary text-sm flex items-center gap-2">
             <Check className="w-4 h-4" /> Fatto
@@ -233,21 +236,17 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
             <SlidersHorizontal className="w-4 h-4" /> Personalizza
           </button>
         )}
+        </div>
       </div>
 
       {editing && (
         <div className={`${cardClass} p-5 space-y-4 border border-dashed ${darkMode ? 'border-indigo-400/50' : 'border-indigo-500/40'}`}>
           <div>
-            {onOpenProfile && (
-              <button onClick={onOpenProfile} className={`w-full text-left mb-5 p-4 rounded-2xl flex items-center gap-4 transition-colors ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}
-                style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 35%, transparent)' }}>
-                <span className="text-2xl" aria-hidden>{prof.preset.emoji}</span>
-                <span className="flex-1 min-w-0">
-                  <span className={`block font-semibold ${textColor}`}>Adatta MYND a te</span>
-                  <span className={`block text-sm ${subTextColor}`}>Ora: {PRESETS[prof.profile.kind].title}. Scegli che studente sei o descrivilo: nomi, voti e tutor si adattano.</span>
-                </span>
-                <span className="text-sm font-semibold flex-shrink-0" style={{ color: 'var(--brand-ring)' }}>Cambia</span>
-              </button>
+            {layoutActions && (
+              <div className={`mb-5 p-4 rounded-2xl ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}
+                style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+                <LayoutSwitcher settings={settings} darkMode={darkMode} {...layoutActions} />
+              </div>
             )}
             <h3 className={`font-semibold ${textColor}`}>Personalizza la tua dashboard</h3>
             <p className={`text-sm ${subTextColor}`}>Usa le frecce per spostare i pannelli e l'occhio per nasconderli. Le scelte valgono su tutti i tuoi dispositivi.</p>

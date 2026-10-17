@@ -1,5 +1,6 @@
 import { SubjectDef, UserData, StudentKind, createId, todayKey } from './store';
 import { makeProfileApi } from './profile';
+import { normalizeLayouts } from './layouts';
 import { isReady, setKey, setProvider } from './ai';
 
 // Answers of the "App" guide (components/Onboarding.tsx) and how they are saved. Kept apart from
@@ -53,7 +54,8 @@ export function applyOnboarding(prev: UserData, d: OnboardingDraft): UserData {
     ...prev,
     tasks: [...prev.tasks, ...tasks],
     grades: [...prev.grades, ...grades],
-    settings: { ...prev.settings, subjects: d.subjects, hiddenSubjects, weeklyGoal: d.weeklyGoal, hiddenSections: d.hiddenSections, onboardingSeen: true, ...(profile ? { profile } : {}) },
+    // A kind of student other than the usual school one becomes a version of its own ("Le tue MYND").
+    settings: normalizeLayouts({ ...prev.settings, subjects: d.subjects, hiddenSubjects, weeklyGoal: d.weeklyGoal, hiddenSections: d.hiddenSections, onboardingSeen: true, ...(profile ? { profile } : {}) }),
   };
 }
 
