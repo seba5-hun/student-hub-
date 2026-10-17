@@ -41,6 +41,10 @@ export interface Grade {
   value: number;
   description: string;
   date: string;
+  // Scale of the value: 10 (school, default), 30 (university, 18–30) or 100 (scores of tests, %).
+  scale?: 10 | 30 | 100;
+  lode?: boolean;   // university: 30 e lode
+  cfu?: number;     // university: credits of the exam (for the weighted average)
 }
 
 export interface StudySession {
@@ -96,6 +100,22 @@ export interface UserSettings {
   onboardingSeen?: boolean;
   // When the study statistics were reset: study synced from Mindset before it is not added back.
   sessionsResetAt?: string;
+  // Which kind of student uses the app (school, university, online school, a test…): names of
+  // the sections and of things, grade scale and the tutor adapt to it.
+  profile?: StudyProfile;
+}
+
+export type StudentKind = 'superiori' | 'medie' | 'universita' | 'online' | 'test' | 'altro';
+export type LabelKey =
+  | 'impegni' | 'voti' | 'archivio' | 'cosa-studiare' | 'timer' | 'calendario' | 'guida-ai'
+  | 'subject' | 'subjects' | 'test' | 'tests' | 'oral' | 'homework' | 'grade' | 'grades' | 'studyType';
+
+export interface StudyProfile {
+  kind: StudentKind;
+  description?: string;                         // in the student's own words
+  focus?: string;                               // what the tutor should know (written by the AI)
+  labels?: Partial<Record<LabelKey, string>>;   // names changed from the ones of the kind
+  gradeScale?: 10 | 30 | 100;
 }
 
 // Every subject name used anywhere in the data (grades, study sessions, tasks, archive).
@@ -339,11 +359,27 @@ export function parseImportedData(json: string): UserData | null {
   }
 }
 
+// Every grade on the 1–10 scale, so averages and priorities work the same for all students:
+// 18–30 (university) → 6–10, a score out of 100 → /10.
+export function gradeOn10(g: Pick<Grade, 'value' | 'scale' | 'lode'>): number {
+  if (g.scale === 30) return g.lode ? 10 : g.value >= 18 ? 6 + (Math.min(g.value, 30) - 18) / 3 : g.value / 3;
+  if (g.scale === 100) return g.value / 10;
+  return g.value;
+}
+
+// Back from 1–10 to a scale (to show averages the way the student reads grades).
+export function fromOn10(v: number, scale: 10 | 30 | 100 = 10): number {
+  if (scale === 30) return v >= 6 ? 18 + (v - 6) * 3 : v * 3;
+  if (scale === 100) return v * 10;
+  return v;
+}
+
+// Averages per subject, on the 1–10 scale.
 export function getSubjectAverages(grades: Grade[]): Record<string, number> {
   const sums: Record<string, { total: number; count: number }> = {};
   grades.forEach(g => {
     if (!sums[g.subject]) sums[g.subject] = { total: 0, count: 0 };
-    sums[g.subject].total += g.value;
+    sums[g.subject].total += gradeOn10(g);
     sums[g.subject].count += 1;
   });
   const avgs: Record<string, number> = {};

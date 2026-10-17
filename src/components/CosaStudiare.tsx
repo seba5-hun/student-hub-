@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Brain, Calendar, TrendingDown, Clock, AlertTriangle, Zap } from 'lucide-react';
 import { UserData, getSubjectAverages, getSubjectStudyTime, parseDate, todayKey, effectiveImportance } from '../lib/store';
+import { useProfile } from '../lib/profile';
 
 interface CosaStudiareProps {
   data: UserData;
@@ -9,6 +10,7 @@ interface CosaStudiareProps {
 }
 
 export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: CosaStudiareProps) {
+  const prof = useProfile();
   const { tasks, grades, sessions } = data;
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
@@ -29,7 +31,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
         const daysUntil = Math.round((parseDate(task.date).getTime() - parseDate(todayKey()).getTime()) / 86400000);
         if (daysUntil >= 0 && daysUntil <= 7) {
           score += Math.max(0, 7 - daysUntil) * 2;
-          if (daysUntil <= 2) reasons.push(`Verifica tra ${daysUntil === 0 ? 'oggi' : daysUntil === 1 ? '1 giorno' : `${daysUntil} giorni`}`);
+          if (daysUntil <= 2) reasons.push(`${prof.L('test')} tra ${daysUntil === 0 ? 'oggi' : daysUntil === 1 ? '1 giorno' : `${daysUntil} giorni`}`);
         }
         score += effectiveImportance(task) * 1.5;
       });
@@ -37,7 +39,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
       const avg = subjectAvgs[subject];
       if (avg !== undefined && avg < 7) {
         score += (7 - avg) * 5;
-        reasons.push(`Media bassa (${avg.toFixed(1)})`);
+        reasons.push(`Media bassa (${prof.showAvg(avg)})`);
       }
 
       const totalEstimated = subjectTasks.reduce((sum, t) => sum + t.estimatedTime, 0);
@@ -67,7 +69,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
     }).filter(r => r.score > 0);
 
     return recs.sort((a, b) => b.score - a.score);
-  }, [tasks, grades, sessions]);
+  }, [tasks, grades, sessions, prof]);
 
   const focusOfTheDay = recommendations[0];
 
@@ -81,7 +83,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
 
   return (
     <div className="space-y-6">
-      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Cosa studiare.</h2>
+      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('cosa-studiare')}.</h2>
 
       {focusOfTheDay && (
         <div className={`${cardClass} p-6 border-l-4 border-l-indigo-500`}>
@@ -104,7 +106,7 @@ export default function CosaStudiare({ data, darkMode, onNavigateToTimer }: Cosa
       {!focusOfTheDay && (
         <div className={`${cardClass} p-8 text-center`}>
           <p className={`text-lg ${textColor}`}>🎉 Tutto in ordine!</p>
-          <p className={`text-sm ${subTextColor} mt-2`}>Nessuna materia richiede attenzione.</p>
+          <p className={`text-sm ${subTextColor} mt-2`}>Niente da recuperare: {prof.l('subjects')} tutte in ordine.</p>
         </div>
       )}
 

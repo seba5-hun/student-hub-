@@ -4,6 +4,7 @@ import { Task, IMPORTANCE_CONFIG, createId, formatDateWithDay, formatDate, forma
 import { buildSeries, describeRepeat, isSameOrLater, nextOfEachSeries } from '../lib/recurrence';
 import RepeatPicker, { NO_REPEAT, RepeatChoice, ruleFrom, choiceFrom } from './RepeatPicker';
 import { useDialog } from './Dialog';
+import { useProfile } from '../lib/profile';
 
 interface ImpegniProps {
   tasks: Task[];
@@ -14,6 +15,7 @@ interface ImpegniProps {
 }
 
 export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate, prefillDate }: ImpegniProps) {
+  const prof = useProfile();
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(prefillDate || '');
   const [endDate, setEndDate] = useState('');
@@ -113,7 +115,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
       estimatedTime: Math.max(0, estimatedTime || 0),
       subject: type === 'scolastico' && subject.trim() ? subject.trim() : undefined,
     };
-    const rule = ruleFrom(repeat, date);
+    const rule = ruleFrom(repeat, date, prof.termEnd);
     if (repeat.preset !== 'none' && repeat.endMode === 'until' && repeat.until && repeat.until < date) {
       setFormError('La ripetizione deve finire dopo la data di inizio.');
       return;
@@ -224,7 +226,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Impegni.</h2>
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('impegni')}.</h2>
         <button onClick={() => (showForm ? resetForm() : setShowForm(true))} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Nuovo
         </button>
@@ -236,7 +238,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Titolo</label>
-              <input value={title} onChange={e => setTitle(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="Es. Compito di matematica" required />
+              <input value={title} onChange={e => setTitle(e.target.value)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder={prof.preset.taskPlaceholder} required />
             </div>
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Data inizio</label>
@@ -256,14 +258,14 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
             <div>
               <label className={`block text-sm mb-1 ${subTextColor}`}>Tipo</label>
               <select value={type} onChange={e => setType(e.target.value as any)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'}>
-                <option value="scolastico">Scolastico</option>
+                <option value="scolastico">{prof.L('studyType')}</option>
                 <option value="personale">Personale</option>
               </select>
             </div>
             {type === 'scolastico' && (
               <div>
-                <label className={`block text-sm mb-1 ${subTextColor}`}>Materia (opzionale)</label>
-                <input value={subject} onChange={e => setSubject(e.target.value)} list="impegni-subjects" className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder="Es. Matematica" />
+                <label className={`block text-sm mb-1 ${subTextColor}`}>{prof.L('subject')} (opzionale)</label>
+                <input value={subject} onChange={e => setSubject(e.target.value)} list="impegni-subjects" className={darkMode ? 'input-glass w-full' : 'input-light w-full'} placeholder={prof.profile.kind === 'universita' ? 'Es. Analisi 1' : 'Es. Matematica'} />
                 <datalist id="impegni-subjects">
                   {subjectOptions.map(s => <option key={s} value={s} />)}
                 </datalist>

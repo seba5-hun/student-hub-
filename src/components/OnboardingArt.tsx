@@ -331,7 +331,30 @@ function Done() {
   );
 }
 
+// "Che studente sei?": three kinds, one chosen.
+function Who() {
+  const kinds = [['Scuola superiore', 'Verifiche · voti in decimi'], ['Università', 'Esami · CFU · trentesimi'], ['Test o concorso', 'Simulazioni · punteggi']];
+  return (
+    <g>
+      <Glow x={200} y={150} r={100} />
+      {kinds.map(([title, sub], i) => {
+        const on = i === 1;
+        return (
+          <g key={title}>
+            <Card x={70} y={40 + i * 76} w={260} h={62} r={18} />
+            {on && <Rect x={70} y={40 + i * 76} w={260} h={62} r={18} fill="none" stroke={C.ring} />}
+            <T x={94} y={67 + i * 76} size={15} weight={600} fill={on ? C.text : C.sub}>{title}</T>
+            <T x={94} y={86 + i * 76} size={11} fill={C.sub}>{sub}</T>
+            {on ? <Check x={302} y={71 + i * 76} r={11} /> : <circle cx={302} cy={71 + i * 76} r={10} style={{ fill: 'none', stroke: C.border, strokeWidth: 2 }} />}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 const ART: Record<string, () => React.ReactElement> = {
+  chi: Who,
   intro: Intro, ai: AI, materie: Subjects, impegni: Tasks, 'impegni-q': TasksQ, voti: Grades, 'voti-q': GradesQ,
   timer: Timer, 'timer-q': Goal, cosa: Focus, archivio: ArchiveArt, calendario: CalendarArt, guida: Tutor, sezioni: Menu, fine: Done,
 };

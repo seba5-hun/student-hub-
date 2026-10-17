@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
-import { Grade, Task, UserData, createId } from '../lib/store';
+import { Grade, Task, UserData, createId, gradeOn10 } from '../lib/store';
+import { useProfile, ProfileApi } from '../lib/profile';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
 import { selectMaterial, MaterialDoc } from '../lib/retrieval';
 import AISettings from './AISettings';
@@ -20,6 +21,8 @@ interface GuidaStudioAIProps {
   analyzing: string[];
   onAnalyze: (ids: string[]) => void;
   onOpenArchive: () => void;
+  // "Adatta MYND a te": the kind of student (the tutor adapts to it).
+  onOpenProfile?: () => void;
 }
 
 interface MessageImage {
@@ -58,6 +61,16 @@ const CHECK_PROMPT = 'Prima di rispondere allo studente, ricontrolla con attenzi
   'Se trovi errori, scrivi la soluzione corretta completa. Se è tutto giusto, riscrivi la soluzione completa così com\'è. ' +
   'Rispondi direttamente allo studente con la versione finale, senza parlare di questo controllo.';
 
+// The quick actions adapt to the kind of student (the oral exam at university, simulations for a test).
+function quickActionsFor(prof: ProfileApi) {
+  const base = QUICK_ACTIONS.map(a => a.label === '❓ Interrogami'
+    ? { ...a, prompt: `Interrogami sul materiale selezionato ${prof.preset.quiz}: fammi una domanda alla volta, aspetta la mia risposta, poi correggimi e spiegami cosa manca.` }
+    : a);
+  if (prof.profile.kind === 'universita') base.splice(2, 0, { label: '🎓 Simula l\'esame', prompt: 'Simula l\'esame sul materiale selezionato: prima 3 domande da scritto (anche esercizi, se la materia li prevede), poi passiamo all\'orale con domande di collegamento tra gli argomenti, una alla volta. Alla fine dammi un voto in trentesimi motivato e dimmi cosa ripassare.' });
+  if (prof.profile.kind === 'test') base.splice(2, 0, { label: '🎯 Quiz a crocette', prompt: 'Fammi un quiz di 10 domande a risposta multipla (4 opzioni, una sola giusta) sul materiale selezionato, come nel test vero. Mostrale tutte, aspetta le mie risposte, poi correggi, spiega ogni errore e dammi il punteggio su 100.' });
+  return base;
+}
+
 const QUICK_ACTIONS = [
   { label: '📝 Riassumi', prompt: 'Fammi un riassunto chiaro e ordinato del materiale selezionato: un titolo per ogni argomento, elenchi puntati, i concetti chiave in grassetto e alla fine 3 punti da ricordare assolutamente.' },
   { label: '❓ Interrogami', prompt: 'Interrogami sul materiale selezionato come farebbe un professore: fammi una domanda alla volta, aspetta la mia risposta, poi correggimi, spiegami cosa manca e dammi un voto.' },
@@ -66,15 +79,15 @@ const QUICK_ACTIONS = [
   { label: '🗂️ Flashcard', prompt: 'Crea 10 flashcard sui punti più importanti del materiale selezionato, nel formato "**D:** domanda" e sotto "**R:** risposta breve", dalle più facili alle più difficili.' },
 ];
 
-function studentContext(data: UserData): string {
+function studentContext(data: UserData, prof: ProfileApi): string {
   const { grades, tasks } = data;
   let context = '';
   if (grades.length > 0) {
     const bySubject: Record<string, number[]> = {};
-    grades.forEach((g: Grade) => { (bySubject[g.subject] ||= []).push(g.value); });
-    context += 'VOTI DELLO STUDENTE:\n';
+    grades.forEach((g: Grade) => { (bySubject[g.subject] ||= []).push(gradeOn10(g)); });
+    context += `${prof.L('grades').toUpperCase()} DELLO STUDENTE (scala ${prof.scale === 30 ? '18–30' : prof.scale === 100 ? '0–100' : '1–10'}):\n`;
     Object.entries(bySubject).forEach(([subject, values]) => {
-      context += `- ${subject}: media ${(values.reduce((a, b) => a + b, 0) / values.length).toFixed(1)}\n`;
+      context += `- ${subject}: media ${prof.showAvg(values.reduce((a, b) => a + b, 0) / values.length)}\n`;
     });
   }
   const activeTasks = tasks.filter((t: Task) => !t.done);
@@ -85,7 +98,9 @@ function studentContext(data: UserData): string {
   return context;
 }
 
-const SYSTEM_PROMPT = `Sei il tutor di studio di MYND: un insegnante paziente ed esperto che aiuta uno studente delle scuole superiori italiane. Rispondi sempre in italiano.
+// The tutor's instructions, for the kind of student (school, university, a test…) and what they wrote about themselves.
+const systemPromptFor = (prof: ProfileApi) => `Sei il tutor di studio di MYND: un insegnante paziente ed esperto. Rispondi sempre in italiano.
+${prof.tutorIntro}
 
 Hai a disposizione il MATERIALE DI STUDIO caricato dallo studente (trascrizioni di PDF, pagine del libro e appunti), diviso per file, più i suoi voti e i suoi impegni.
 
@@ -95,9 +110,9 @@ Come lavori:
 - Spiega in modo chiaro e ordinato, partendo dai concetti base e arrivando ai dettagli, con esempi concreti. Adatta la lunghezza alla domanda: breve per le domande semplici, completo per riassunti e spiegazioni.
 - Per i riassunti usa titoli (##), elenchi puntati e i concetti chiave in **grassetto**.
 - Negli esercizi (matematica, fisica, chimica…) mostra i passaggi uno per uno e controlla i calcoli prima di dare il risultato.
-- Nelle interrogazioni fai una domanda alla volta, aspetta la risposta, poi correggi in modo preciso: cosa è giusto, cosa manca, cosa è sbagliato, con un voto in decimi motivato.
+- Quando lo interroghi fai una domanda alla volta, aspetta la risposta, poi correggi in modo preciso: cosa è giusto, cosa manca, cosa è sbagliato, ${prof.preset.quiz}.
 - Se lo studente sbaglia, correggilo con gentilezza ma senza dargli ragione.
-- Tieni conto delle sue scadenze: se c'è una verifica vicina sulla materia, concentrati su ciò che è più probabile venga chiesto.`;
+- Tieni conto delle sue scadenze: se c'è ${/^[AEIOU]/.test(prof.L('test')) ? 'un\'' : 'una '}${prof.l('test')} vicina (o un altro impegno importante) su quell'argomento, concentrati su ciò che è più probabile venga chiesto.`;
 
 // Minimal formatting for the AI's answers: headings, bullet points and **bold**.
 function FormattedText({ text, large = false }: { text: string; large?: boolean }) {
@@ -119,7 +134,9 @@ function FormattedText({ text, large = false }: { text: string; large?: boolean 
   );
 }
 
-export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAnalyze, onOpenArchive }: GuidaStudioAIProps) {
+export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAnalyze, onOpenArchive, onOpenProfile }: GuidaStudioAIProps) {
+  const prof = useProfile();
+  const SYSTEM_PROMPT = systemPromptFor(prof);
   const dialog = useDialog();
   const [aiReady, setAiReady] = useState(isReady);
   const [showSettings, setShowSettings] = useState(() => !isReady());
@@ -427,7 +444,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       const material = materialBuilder(question);
       const buildContext = async (budget: number) => {
         const text = await material(budget);
-        let context = `${studentContext(data)}\nMATERIALE SELEZIONATO DALLO STUDENTE: ${scope}.`;
+        let context = `${studentContext(data, prof)}\nMATERIALE SELEZIONATO DALLO STUDENTE: ${scope}.`;
         context += text
           ? `\n${text}`
           : '\n(Nessun file letto dall\'AI in questa selezione: rispondi con le tue conoscenze e suggerisci di caricare il materiale nell\'Archivio.)';
@@ -562,7 +579,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   const quickActions = (wrapClass: string, buttonClass: string) => (
     <div className={`flex gap-2 ${wrapClass}`}>
-      {QUICK_ACTIONS.map(a => (
+      {quickActionsFor(prof).map(a => (
         <button key={a.label} onClick={() => sendMessage(a.prompt, a.label)} disabled={isLoading}
           className={`${buttonClass} rounded-full border whitespace-nowrap disabled:opacity-50 ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
           {a.label}
@@ -784,7 +801,15 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           </div>
           <div>
             <h2 className={`text-xl font-bold ${textColor}`}>Guida Studio AI</h2>
-            <p className={`text-xs ${subTextColor}`}>Studia sul tuo materiale • {aiName}</p>
+            <p className={`text-xs ${subTextColor} flex flex-wrap items-center gap-x-1`}>
+              Studia sul tuo materiale • {aiName}
+              {onOpenProfile && (
+                <button onClick={onOpenProfile} title="Adatta il tutor e MYND a come studi" className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium"
+                  style={{ color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' }}>
+                  {prof.preset.emoji} {prof.preset.title} · Adatta
+                </button>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1">

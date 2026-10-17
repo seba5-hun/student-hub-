@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import { ProfileContext, makeProfileApi } from './lib/profile';
 import confetti from 'canvas-confetti';
 import Auth from './components/Auth';
 import { ManifestoScreen, PrimaryButton } from './components/Auth';
@@ -33,6 +34,7 @@ const Mindset = lazy(loaders.mindset);
 const Business = lazy(loaders.business);
 const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
+const ProfileEditor = lazy(() => import('./components/ProfileEditor'));
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -85,12 +87,15 @@ type SaveStatus = 'idle' | 'saving' | 'error';
 function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [data, setData] = useState<UserData | null>(null);
+  const profileApi = useMemo(() => makeProfileApi(data?.settings.profile), [data?.settings.profile]);
   const [currentSection, setCurrentSection] = useState('home');
   const [darkMode, setDarkMode] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [loadError, setLoadError] = useState('');
   const [preselectedSubject, setPreselectedSubject] = useState<string | undefined>();
   const [guideOpen, setGuideOpen] = useState(false);
+  // "Adatta MYND a te": the kind of student (names, grade scale, tutor).
+  const [profileOpen, setProfileOpen] = useState(false);
   // "Dai un'occhiata": the app with an example student, in memory only (nothing is saved).
   const isDemo = isDemoUser(user);
   // The access screen to show when coming back from the demo ("Crea il tuo account").
@@ -710,7 +715,7 @@ function App() {
   );
 
   return (
-    <>
+    <ProfileContext.Provider value={profileApi}>
       <Layout
         currentSection={currentSection}
         onSectionChange={handleSectionChange}
@@ -753,6 +758,7 @@ function App() {
             onNavigate={handleSectionChange}
             onUpdateSettings={(patch) => updateData(prev => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
             onOpenGuide={() => setGuideOpen(true)}
+            onOpenProfile={() => setProfileOpen(true)}
           />
         )}
         {currentSection === 'impegni' && (
@@ -823,6 +829,7 @@ function App() {
             analyzing={analyzing}
             onAnalyze={analyzeFiles}
             onOpenArchive={() => handleSectionChange('archivio')}
+            onOpenProfile={() => setProfileOpen(true)}
           />
         )}
         </Suspense>
@@ -833,7 +840,13 @@ function App() {
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
         </Suspense>
       )}
-    </>
+      {profileOpen && (
+        <Suspense fallback={null}>
+          <ProfileEditor profile={data.settings.profile} darkMode={darkMode} onClose={() => setProfileOpen(false)}
+            onSave={profile => { updateData(prev => ({ ...prev, settings: { ...prev.settings, profile } })); setProfileOpen(false); }} />
+        </Suspense>
+      )}
+    </ProfileContext.Provider>
   );
 }
 

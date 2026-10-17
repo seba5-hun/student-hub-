@@ -2,6 +2,7 @@ import React from 'react';
 import { Repeat } from 'lucide-react';
 import { RepeatRule, formatDate, parseDate, toDateKey } from '../lib/store';
 import { occurrences, describeRepeat, schoolYearEnd, untilAfter, weekdayOf, WEEKDAY_SHORT, MAX_OCCURRENCES } from '../lib/recurrence';
+import { useProfile } from '../lib/profile';
 
 // "Ripeti" in the task forms, like the iPhone calendar: how often, on which days, and until when.
 
@@ -31,11 +32,13 @@ function schoolEndAfter(start: string): string {
   return toDateKey(d);
 }
 
-export function ruleFrom(choice: RepeatChoice, start: string): RepeatRule | null {
+// termEnd: end of the school year / semester of the kind of student (null: there is none).
+export function ruleFrom(choice: RepeatChoice, start: string, termEnd?: (from: string) => string | null): RepeatRule | null {
   if (choice.preset === 'none' || !start) return null;
-  const until = choice.endMode === 'school' ? schoolEndAfter(start)
-    : choice.endMode === 'for' ? untilAfter(start, choice.amount, choice.unit)
-    : choice.until || start;
+  const term = choice.endMode === 'school' ? (termEnd ? termEnd(start) : schoolEndAfter(start)) : null;
+  const until = choice.endMode === 'until' ? (choice.until || start)
+    : term && term > start ? term
+    : untilAfter(start, choice.amount, choice.unit);
   const freq = choice.preset === 'daily' ? 'daily' : choice.preset === 'monthly' ? 'monthly' : 'weekly';
   return {
     freq,
@@ -60,6 +63,10 @@ interface Props {
 }
 
 export default function RepeatPicker({ value, onChange, start, darkMode }: Props) {
+  const prof = useProfile();
+  const termLabel = prof.preset.termEndLabel;
+  // No end of school/semester for this student: "Per…" (3 months) instead.
+  const endMode = value.endMode === 'school' && !termLabel ? 'for' : value.endMode;
   const sub = darkMode ? 'text-white/60' : 'text-gray-500';
   const chip = (on: boolean) => `text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${on
     ? 'bg-[var(--brand-fill)] text-[var(--on-brand)] border-transparent'
@@ -75,7 +82,7 @@ export default function RepeatPicker({ value, onChange, start, darkMode }: Props
     set({ days: next.filter(x => x >= 0) });
   };
 
-  const rule = ruleFrom(value, start);
+  const rule = ruleFrom(value, start, prof.termEnd);
   const dates = rule ? occurrences(start, rule) : [];
 
   return (
@@ -114,11 +121,11 @@ export default function RepeatPicker({ value, onChange, start, darkMode }: Props
           <div>
             <p className={`text-xs mb-2 ${sub}`}>Fino a</p>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => set({ endMode: 'school' })} className={chip(value.endMode === 'school')}>Fine della scuola</button>
-              <button type="button" onClick={() => set({ endMode: 'for' })} className={chip(value.endMode === 'for')}>Per…</button>
-              <button type="button" onClick={() => set({ endMode: 'until', until: value.until || (rule?.until ?? start) })} className={chip(value.endMode === 'until')}>Fino al…</button>
+              {termLabel && <button type="button" onClick={() => set({ endMode: 'school' })} className={chip(endMode === 'school')}>{termLabel}</button>}
+              <button type="button" onClick={() => set({ endMode: 'for' })} className={chip(endMode === 'for')}>Per…</button>
+              <button type="button" onClick={() => set({ endMode: 'until', until: value.until || (rule?.until ?? start) })} className={chip(endMode === 'until')}>Fino al…</button>
             </div>
-            {value.endMode === 'for' && (
+            {endMode === 'for' && (
               <div className="flex items-center gap-2 mt-2">
                 <input type="number" min={1} max={value.unit === 'settimane' ? 104 : 24} value={value.amount} aria-label="Quante"
                   onChange={e => set({ amount: Math.max(1, parseInt(e.target.value, 10) || 1) })} className={`${input} w-20 text-sm py-1.5`} />
@@ -128,7 +135,7 @@ export default function RepeatPicker({ value, onChange, start, darkMode }: Props
                 </select>
               </div>
             )}
-            {value.endMode === 'until' && (
+            {endMode === 'until' && (
               <input type="date" value={value.until} min={start} onChange={e => set({ until: e.target.value })} aria-label="Ultimo giorno"
                 className={`${input} text-sm py-1.5 mt-2`} />
             )}

@@ -1,4 +1,5 @@
-import { SubjectDef, UserData, createId, todayKey } from './store';
+import { SubjectDef, UserData, StudentKind, createId, todayKey } from './store';
+import { makeProfileApi } from './profile';
 import { isReady, setKey, setProvider } from './ai';
 
 // Answers of the "App" guide (components/Onboarding.tsx) and how they are saved. Kept apart from
@@ -18,6 +19,14 @@ export interface OnboardingDraft {
   weeklyGoal: number;
   hiddenSections: string[];
   geminiKey: string;
+  // "Che studente sei?": names, grade scale and tutor adapt to it.
+  profileKind?: StudentKind;
+}
+
+// The name of a kind of task for this student ("Verifica" → "Esame" at university).
+export function kindLabel(kind: TaskKind, studentKind?: StudentKind): string {
+  const api = makeProfileApi({ kind: studentKind || 'superiori' });
+  return api.L(kind === 'verifica' ? 'test' : kind === 'interrogazione' ? 'oral' : 'homework');
 }
 
 // Merges the answers into the user's data (subjects removed in the tour are not re-added later).
@@ -30,16 +39,21 @@ export function applyOnboarding(prev: UserData, d: OnboardingDraft): UserData {
   const tasks = d.tasks.map(t => {
     const k = KINDS.find(x => x.id === t.kind)!;
     return {
-      id: createId(), title: t.subject ? `${k.label} di ${t.subject}` : k.label, date: t.date, type: 'scolastico' as const,
+      id: createId(), title: t.subject ? `${kindLabel(t.kind, d.profileKind)} di ${t.subject}` : kindLabel(t.kind, d.profileKind), date: t.date, type: 'scolastico' as const,
       importance: k.importance, estimatedTime: k.minutes, done: false, ...(t.subject ? { subject: t.subject } : {}),
     };
   });
-  const grades = d.grades.map(g => ({ id: createId(), subject: g.subject, value: g.value, description: '', date: todayKey() }));
+  const scale = makeProfileApi({ ...prev.settings.profile, kind: d.profileKind || prev.settings.profile?.kind || 'superiori' }).scale;
+  const grades = d.grades.map(g => ({ id: createId(), subject: g.subject, value: g.value, description: '', date: todayKey(), ...(scale !== 10 ? { scale } : {}) }));
+  // A new kind of student starts from that kind's names (the description, if any, is kept).
+  const profile = d.profileKind && d.profileKind !== prev.settings.profile?.kind
+    ? { kind: d.profileKind, description: prev.settings.profile?.description }
+    : prev.settings.profile;
   return {
     ...prev,
     tasks: [...prev.tasks, ...tasks],
     grades: [...prev.grades, ...grades],
-    settings: { ...prev.settings, subjects: d.subjects, hiddenSubjects, weeklyGoal: d.weeklyGoal, hiddenSections: d.hiddenSections, onboardingSeen: true },
+    settings: { ...prev.settings, subjects: d.subjects, hiddenSubjects, weeklyGoal: d.weeklyGoal, hiddenSections: d.hiddenSections, onboardingSeen: true, ...(profile ? { profile } : {}) },
   };
 }
 

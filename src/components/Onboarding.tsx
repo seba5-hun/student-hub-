@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  X, ArrowLeft, ArrowRight, Check, Sparkles, Target, BarChart3, Clock, BookMarked, Archive, Calendar, Camera, Loader2, Plus, ExternalLink, Rocket, LayoutGrid,
+  X, ArrowLeft, ArrowRight, Check, Sparkles, Target, BarChart3, Clock, BookMarked, Archive, Calendar, Camera, Loader2, Plus, ExternalLink, Rocket, LayoutGrid, GraduationCap,
 } from 'lucide-react';
 import { SubjectDef, SUBJECT_COLORS, UserData, nextSubjectColor, todayKey } from '../lib/store';
 import { getKey, setKey, isReady, providerLabel, transcribeFile } from '../lib/ai';
-import { KINDS, OnboardingDraft, TaskKind } from '../lib/onboarding';
+import { KINDS, OnboardingDraft, TaskKind, kindLabel } from '../lib/onboarding';
+import { PRESETS, KIND_ORDER, makeProfileApi } from '../lib/profile';
+import { StudentKind } from '../lib/store';
 import { blobToBase64 } from '../lib/gemini';
 import { SECTIONS } from './Layout';
 import OnboardingArt from './OnboardingArt';
@@ -49,6 +51,7 @@ export default function Onboarding({ data, onClose, onNavigate }: Props) {
     weeklyGoal: data.settings.weeklyGoal || 10,
     hiddenSections: data.settings.hiddenSections || [],
     geminiKey: '',
+    profileKind: data.settings.profile?.kind,
   }));
   const [touched, setTouched] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -181,6 +184,8 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
   const aiReady = isReady() || !!d.geminiKey.trim();
   const hidden = d.hiddenSections.filter(id => SECTIONS.some(s => s.id === id)).map(id => SECTIONS.find(s => s.id === id)!.label);
   const photo = { draftKey: d.geminiKey, onGoToAI: () => goTo('ai') };
+  const kind: StudentKind = d.profileKind || data.settings.profile?.kind || 'superiori';
+  const api = makeProfileApi({ ...data.settings.profile, kind });
   return [
     {
       id: 'intro', short: 'Benvenuto', kicker: 'Benvenuto', icon: ic(Rocket),
@@ -194,14 +199,20 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
       ],
     },
     {
+      id: 'chi', short: 'Chi sei', kicker: 'Domanda · Chi sei', icon: ic(GraduationCap),
+      title: 'Che studente sei?',
+      text: 'MYND adatta nomi, voti e tutor AI a come studi: all\'università ci sono esami, CFU e trentesimi, per un test le simulazioni. Potrai cambiarlo o descriverti meglio da Home → Personalizza.',
+      body: <KindStep value={d.profileKind} onChange={profileKind => set({ profileKind })} />,
+    },
+    {
       id: 'ai', short: 'Collega l\'AI', kicker: 'Primo passo · AI', icon: ic(Sparkles),
       title: 'Colleghiamo l\'AI, gratis.',
       text: 'Ti serve per due cose: leggere le foto in questa guida (materie, voti, verifiche) e il tutor della Guida Studio AI. Si crea in un minuto, senza carta di credito. Se preferisci, salta: puoi farlo anche dopo.',
       body: <AIStep value={d.geminiKey} onChange={geminiKey => set({ geminiKey })} />,
     },
     {
-      id: 'materie', short: 'Materie', kicker: 'Domanda · Materie', icon: ic(LayoutGrid),
-      title: 'Quali sono le tue materie?',
+      id: 'materie', short: api.L('subjects'), kicker: `Domanda · ${api.L('subjects')}`, icon: ic(LayoutGrid),
+      title: kind === 'universita' ? 'Quali corsi stai seguendo?' : api.L('subjects') === 'Materie' ? 'Quali sono le tue materie?' : `${api.L('subjects')}: quali studi?`,
       text: 'Scrivile una alla volta o tutte insieme separate da virgola, oppure fai una foto all\'orario o alla pagella. Ognuna prende un colore diverso: tocca il pallino per cambiarlo.',
       body: <SubjectsStep subjects={d.subjects} onChange={subjects => set({ subjects })} {...photo} />,
     },
@@ -216,10 +227,10 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
       ],
     },
     {
-      id: 'impegni-q', short: 'Verifiche', kicker: 'Domanda · Impegni', icon: ic(Target),
-      title: 'Hai verifiche o interrogazioni in arrivo?',
+      id: 'impegni-q', short: api.L('tests'), kicker: `Domanda · ${api.L('impegni')}`, icon: ic(Target),
+      title: kind === 'superiori' || kind === 'medie' ? 'Hai verifiche o interrogazioni in arrivo?' : `Hai ${api.l('tests')} in arrivo?`,
       text: 'Aggiungile a mano, oppure fai una foto al diario o al registro: l\'AI trova date e materie da sola.',
-      body: <TasksStep subjects={d.subjects} tasks={d.tasks} onPatch={set} {...photo} />,
+      body: <TasksStep subjects={d.subjects} tasks={d.tasks} onPatch={set} studentKind={kind} {...photo} />,
     },
     {
       id: 'voti', short: 'Voti', kicker: 'Funzione · Voti', icon: ic(BarChart3), open: 'voti',
@@ -232,9 +243,11 @@ function buildSlides(d: OnboardingDraft, set: (p: Partial<OnboardingDraft>) => v
     },
     {
       id: 'voti-q', short: 'I tuoi voti', kicker: 'Domanda · Voti', icon: ic(BarChart3),
-      title: 'Hai già preso dei voti quest\'anno?',
-      text: 'Aggiungi quelli che ricordi, oppure fai una foto al registro elettronico o alla pagella: l\'AI li legge tutti.',
-      body: <GradesStep subjects={d.subjects} grades={d.grades} onPatch={set} {...photo} />,
+      title: kind === 'universita' ? 'Quali esami hai già superato?' : kind === 'test' ? 'Hai già fatto delle simulazioni?' : 'Hai già preso dei voti quest\'anno?',
+      text: kind === 'universita' ? 'Aggiungi quelli che ricordi, oppure fai una foto al libretto online: l\'AI li legge tutti.'
+        : kind === 'test' ? 'Aggiungi i punteggi che ricordi, oppure fai una foto ai risultati: l\'AI li legge tutti.'
+        : 'Aggiungi quelli che ricordi, oppure fai una foto al registro elettronico o alla pagella: l\'AI li legge tutti.',
+      body: <GradesStep subjects={d.subjects} grades={d.grades} onPatch={set} scale={api.scale} {...photo} />,
     },
     {
       id: 'timer', short: 'Timer Studio', kicker: 'Funzione · Timer Studio', icon: ic(Clock), open: 'timer',
@@ -469,7 +482,7 @@ const longDate = (k: string) => new Date(k + 'T00:00:00').toLocaleDateString('it
 
 type PhotoProps = { draftKey: string; onGoToAI: () => void };
 
-function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI }: PhotoProps & { subjects: SubjectDef[]; tasks: OnboardingDraft['tasks']; onPatch: (p: Partial<OnboardingDraft>) => void }) {
+function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI, studentKind }: PhotoProps & { subjects: SubjectDef[]; tasks: OnboardingDraft['tasks']; onPatch: (p: Partial<OnboardingDraft>) => void; studentKind: StudentKind }) {
   const [kind, setKind] = useState<TaskKind>('verifica');
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState('');
@@ -506,7 +519,7 @@ function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI }: PhotoProps 
       <div className="flex gap-1 p-1 rounded-full w-fit" style={{ background: 'var(--glass-well)' }} role="radiogroup" aria-label="Tipo">
         {KINDS.map(k => (
           <button key={k.id} role="radio" aria-checked={kind === k.id} onClick={() => setKind(k.id)}
-            className={`h-10 px-4 rounded-full text-sm font-medium ${kind === k.id ? 'glass-lens' : ''}`} style={{ color: kind === k.id ? 'var(--brand-ring)' : 'var(--text-muted)' }}>{k.label}</button>
+            className={`h-10 px-4 rounded-full text-sm font-medium ${kind === k.id ? 'glass-lens' : ''}`} style={{ color: kind === k.id ? 'var(--brand-ring)' : 'var(--text-muted)' }}>{kindLabel(k.id, studentKind)}</button>
         ))}
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
@@ -519,7 +532,7 @@ function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI }: PhotoProps 
       <RemovableList
         items={[...tasks].sort((a, b) => a.date.localeCompare(b.date)).map(t => ({
           key: `${t.date}-${t.kind}-${t.subject}`,
-          label: `${KINDS.find(k => k.id === t.kind)!.label}${t.subject ? ` di ${t.subject}` : ''} · ${new Date(t.date + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}`,
+          label: `${kindLabel(t.kind, studentKind)}${t.subject ? ` di ${t.subject}` : ''} · ${new Date(t.date + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })}`,
           color: colorOf(subjects, t.subject),
         }))}
         onRemove={i => { const sorted = [...tasks].sort((a, b) => a.date.localeCompare(b.date)); onPatch({ tasks: tasks.filter(x => x !== sorted[i]) }); }}
@@ -528,11 +541,14 @@ function TasksStep({ subjects, tasks, onPatch, draftKey, onGoToAI }: PhotoProps 
   );
 }
 
-function GradesStep({ subjects, grades, onPatch, draftKey, onGoToAI }: PhotoProps & { subjects: SubjectDef[]; grades: OnboardingDraft['grades']; onPatch: (p: Partial<OnboardingDraft>) => void }) {
+function GradesStep({ subjects, grades, onPatch, draftKey, onGoToAI, scale }: PhotoProps & { subjects: SubjectDef[]; grades: OnboardingDraft['grades']; onPatch: (p: Partial<OnboardingDraft>) => void; scale: 10 | 30 | 100 }) {
   const [subject, setSubject] = useState('');
   const [value, setValue] = useState('');
   const num = Number(value.replace(',', '.'));
-  const valid = subject.trim() && value && num >= 1 && num <= 10;
+  // 1–10 at school, 18–30 at university (30 e lode = 30), 0–100 for test scores.
+  const [min, max] = scale === 30 ? [18, 30] : scale === 100 ? [0, 100] : [1, 10];
+  const inRange = (v: number) => v >= min && v <= max;
+  const valid = subject.trim() && value && inRange(num);
   const add = () => {
     if (!valid) return;
     const name = matchSubject(subjects, subject);
@@ -544,10 +560,10 @@ function GradesStep({ subjects, grades, onPatch, draftKey, onGoToAI }: PhotoProp
     let list = subjects;
     const found: OnboardingDraft['grades'] = [];
     for (const line of out.split('\n')) {
-      const m = line.replace(/[*_]/g, '').match(/^[\s\-•·]*(.+?)\s*[|:;\t]\s*(\d{1,2}(?:[.,]\d{1,2})?)\s*$/);
+      const m = line.replace(/[*_]/g, '').match(/^[\s\-•·]*(.+?)\s*[|:;\t]\s*(\d{1,3}(?:[.,]\d{1,2})?)\s*$/);
       if (!m) continue;
       const v = Number(m[2].replace(',', '.'));
-      if (!(v >= 1 && v <= 10) || m[1].length > 40) continue;
+      if (!inRange(v) || m[1].length > 40) continue;
       const name = matchSubject(list, m[1]);
       list = addNames(list, [name]);
       found.push({ subject: name, value: Math.round(v * 100) / 100 });
@@ -557,19 +573,24 @@ function GradesStep({ subjects, grades, onPatch, draftKey, onGoToAI }: PhotoProp
   };
   return (
     <div className="space-y-4">
-      <PhotoButton label="Leggili da una foto (registro o pagella)" draftKey={draftKey} onGoToAI={onGoToAI} onText={fromPhoto}
-        prompt={() => 'Questa immagine contiene dei voti scolastici (registro elettronico, pagella, diario o un elenco). Scrivi SOLO i voti, uno per riga, nel formato: ' +
+      <PhotoButton label={scale === 10 ? 'Leggili da una foto (registro o pagella)' : 'Leggili da una foto'} draftKey={draftKey} onGoToAI={onGoToAI} onText={fromPhoto}
+        prompt={() => scale === 30
+          ? 'Questa immagine contiene esami universitari superati (libretto, piattaforma dell\'ateneo o un elenco). Scrivi SOLO gli esami, uno per riga, nel formato: ' +
+            'Nome dell\'esame | voto. Il voto è un numero da 18 a 30 (30 e lode = 30). Ignora CFU, date e idoneità senza voto. Nessun altro testo.'
+          : scale === 100
+          ? 'Questa immagine contiene punteggi di simulazioni o test. Scrivi SOLO i punteggi, uno per riga, nel formato: Materia o prova | punteggio, con il punteggio in centesimi (da 0 a 100). Nessun altro testo.'
+          : 'Questa immagine contiene dei voti scolastici (registro elettronico, pagella, diario o un elenco). Scrivi SOLO i voti, uno per riga, nel formato: ' +
           'Materia | voto. Il voto è un numero da 1 a 10 con il punto per i decimali: 7+ = 7.25, 7- = 6.75, 7½ o 7/8 = 7.5, 6-- = 5.5. ' +
           'Ignora medie, assenze, note, giudizi senza numero e voti di condotta. Usa il nome italiano normale della materia. Nessun altro testo.'} />
       {OR}
       <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
         <SubjectPicker id="ob-grade-subject" subjects={subjects} value={subject} onChange={setSubject} />
         <input inputMode="decimal" value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }}
-          placeholder="Voto" aria-label="Voto da 1 a 10" className="input-glass w-full h-12 text-[15px] tabular" />
+          placeholder={scale === 100 ? 'Punti' : 'Voto'} aria-label={`Voto da ${min} a ${max}`} className="input-glass w-full h-12 text-[15px] tabular" />
       </div>
-      {value && !(num >= 1 && num <= 10) && <p className="text-xs" style={{ color: 'var(--danger)' }}>Scrivi un voto da 1 a 10 (anche 6,5).</p>}
+      {value && !inRange(num) && <p className="text-xs" style={{ color: 'var(--danger)' }}>{scale === 30 ? 'Scrivi un voto da 18 a 30.' : scale === 100 ? 'Scrivi un punteggio da 0 a 100.' : 'Scrivi un voto da 1 a 10 (anche 6,5).'}</p>}
       <button onClick={add} disabled={!valid} className="btn-secondary w-full h-12 !rounded-full inline-flex items-center justify-center gap-2 text-[15px] disabled:opacity-40">
-        <Plus className="w-4 h-4" /> Aggiungi voto
+        <Plus className="w-4 h-4" /> {scale === 100 ? 'Aggiungi punteggio' : scale === 30 ? 'Aggiungi esame' : 'Aggiungi voto'}
       </button>
       <RemovableList
         items={grades.map((g, i) => ({ key: `${i}-${g.subject}-${g.value}`, label: `${g.subject} · ${String(g.value).replace('.', ',')}`, color: colorOf(subjects, g.subject) }))}
@@ -644,5 +665,28 @@ function SectionsStep({ hidden, onChange }: { hidden: string[]; onChange: (h: st
         );
       })}
     </ul>
+  );
+}
+
+// "Che studente sei?": the kinds of student, one tap.
+function KindStep({ value, onChange }: { value?: StudentKind; onChange: (kind: StudentKind) => void }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label="Che studente sei">
+      {KIND_ORDER.filter(k => k !== 'altro').map(k => {
+        const p = PRESETS[k];
+        const on = (value || 'superiori') === k;
+        return (
+          <button key={k} type="button" role="radio" aria-checked={on} onClick={() => onChange(k)}
+            className={`text-left p-3.5 rounded-2xl flex items-start gap-3 transition-colors ${on ? 'glass-lens' : ''}`}
+            style={{ boxShadow: on ? 'inset 0 0 0 1.5px var(--brand-ring)' : 'inset 0 0 0 1px var(--border)' }}>
+            <span className="text-xl" aria-hidden>{p.emoji}</span>
+            <span className="min-w-0">
+              <span className="block text-[15px] font-semibold" style={{ color: on ? 'var(--brand-ring)' : 'var(--text)' }}>{p.title}</span>
+              <span className="block text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{p.blurb}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }

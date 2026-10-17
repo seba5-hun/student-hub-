@@ -18,6 +18,7 @@ import {
 import { canTranscribe } from '../lib/ai';
 import { useDialog } from './Dialog';
 import { track } from '../lib/analytics';
+import { useProfile } from '../lib/profile';
 
 interface ArchivioProps {
   userId: string;
@@ -79,6 +80,7 @@ function pdfFileName(title: string): string {
 }
 
 export default function Archivio({ userId, subjectNames = [], archive, darkMode, onUpdate, analyzing, onAnalyze, onOpenGuide, demo = false }: ArchivioProps) {
+  const prof = useProfile();
   const dialog = useDialog();
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
@@ -689,7 +691,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Archivio.</h2>
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('archivio')}.</h2>
         <div className="flex items-center gap-2">
           {archive.length > 0 && (
             <button onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting}
@@ -793,7 +795,7 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
           <h3 className={`font-semibold ${textColor}`}>Aggiungi all'archivio</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={`block text-sm mb-1 ${subTextColor}`}>Materia</label>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>{prof.L('subject')}</label>
               <input value={subject} onChange={e => setSubject(e.target.value)} list="archivio-subjects" className={`${inputClass} w-full`} placeholder="Es. Storia" required />
               <datalist id="archivio-subjects">{subjects.map(s => <option key={s} value={s} />)}</datalist>
             </div>
@@ -1079,10 +1081,10 @@ export default function Archivio({ userId, subjectNames = [], archive, darkMode,
             className={`w-full max-w-sm p-6 space-y-4 animate-scale-in ${darkMode ? 'glass-float' : 'glass-card-light'}`}>
             <div>
               <h2 className={`text-lg font-semibold ${textColor}`}>Sposta {movingItems.length > 1 ? `${movingItems.length} elementi` : `"${movingItems[0]?.name}"`}</h2>
-              <p className={`mt-1 text-sm ${subTextColor}`}>Scegli una materia e un argomento esistenti, oppure scrivine di nuovi. Dal computer puoi anche trascinare i file sulle cartelle.</p>
+              <p className={`mt-1 text-sm ${subTextColor}`}>Scegli dove spostarlo ({prof.l('subject')} e argomento): uno esistente, oppure scrivine di nuovi. Dal computer puoi anche trascinare i file sulle cartelle.</p>
             </div>
             <div>
-              <label className={`block text-sm mb-1 ${subTextColor}`}>Materia</label>
+              <label className={`block text-sm mb-1 ${subTextColor}`}>{prof.L('subject')}</label>
               <input value={moving.subject} onChange={e => setMoving({ ...moving, subject: e.target.value })} list="archivio-move-subjects" className={`${inputClass} w-full`} placeholder="Es. Storia" autoFocus required />
               <datalist id="archivio-move-subjects">{subjects.map(x => <option key={x} value={x} />)}</datalist>
               <div className="flex flex-wrap gap-1.5 mt-2">

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, X, Check } from 'lucide-react';
 import { SubjectDef, SUBJECT_COLORS, nextSubjectColor } from '../lib/store';
 import { useDialog } from './Dialog';
+import { useProfile } from '../lib/profile';
 
 interface SubjectManagerProps {
   subjects: SubjectDef[];
@@ -87,6 +88,7 @@ function SubjectRow({ subject, all, darkMode, open, onToggleColor, onColor, onRe
 
 // "Le mie materie": every subject is editable in place (name, color) and removable.
 export default function SubjectManager({ subjects, darkMode, onChange, onRename, onClose }: SubjectManagerProps) {
+  const prof = useProfile();
   const dialog = useDialog();
   const [openColor, setOpenColor] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
@@ -131,7 +133,7 @@ export default function SubjectManager({ subjects, darkMode, onChange, onRename,
       </div>
       <p className={`text-xs mb-3 ${subTextColor}`}>Tocca il nome per modificarlo, il pallino per cambiare colore.</p>
 
-      {subjects.length === 0 && <p className={`text-sm mb-3 ${subTextColor}`}>Nessuna materia: aggiungi quelle che studi qui sotto.</p>}
+      {subjects.length === 0 && <p className={`text-sm mb-3 ${subTextColor}`}>Elenco vuoto: aggiungi qui sotto {prof.l('subjects')} che studi.</p>}
       <ul className="space-y-1 mb-4">
         {subjects.map(s => (
           <SubjectRow
@@ -153,7 +155,7 @@ export default function SubjectManager({ subjects, darkMode, onChange, onRename,
           <button type="button" onClick={() => setPickNewColor(v => !v)} title="Scegli colore" aria-label="Colore della nuova materia"
             className="w-7 h-7 rounded-full flex-shrink-0 border-2 border-white/30 hover:scale-110 transition-transform" style={{ backgroundColor: newColor }} />
           <input value={newName} onChange={e => { setNewName(e.target.value); setNewError(''); }}
-            placeholder="Nuova materia (es. Matematica)" maxLength={40}
+            placeholder={`Aggiungi (es. ${prof.profile.kind === 'universita' ? 'Analisi 1' : 'Matematica'})`} maxLength={40}
             className={`flex-1 min-w-0 bg-transparent px-2 py-1 text-sm outline-none ${darkMode ? 'text-white placeholder-white/40' : 'text-gray-800 placeholder-gray-400'}`} />
           <button type="submit" disabled={!newName.trim()} className="btn-primary text-sm px-3 py-1.5 flex items-center gap-1 disabled:opacity-40">
             <Plus className="w-4 h-4" /> Aggiungi

@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, BarChart3, X } from 'lucide-react';
 import { StudySession, SubjectDef, subjectColor } from '../lib/store';
 import { PeriodKind, periodOf, sessionsIn, minutesBySubject, bucketsOf } from '../lib/studyPeriods';
+import { useProfile } from '../lib/profile';
 
 const KINDS: { id: PeriodKind; label: string; previous: string }[] = [
   { id: 'week', label: 'Settimana', previous: 'alla settimana scorsa' },
@@ -19,6 +20,7 @@ function hm(total: number): string {
 }
 
 export default function StudyStats({ sessions, subjectDefs, darkMode, onClose }: { sessions: StudySession[]; subjectDefs: SubjectDef[]; darkMode: boolean; onClose?: () => void }) {
+  const prof = useProfile();
   const [kind, setKind] = useState<PeriodKind>('week');
   const [offset, setOffset] = useState(0);
 
@@ -139,7 +141,7 @@ export default function StudyStats({ sessions, subjectDefs, darkMode, onClose }:
           </div>
 
           <div className="space-y-2">
-            <p className={`text-sm font-semibold ${textColor}`}>Per materia</p>
+            <p className={`text-sm font-semibold ${textColor}`}>Per {prof.l('subject')}</p>
             {stats.subjects.map(s => (
               <div key={s.name} className="flex items-center gap-3">
                 <span className={`w-28 sm:w-36 text-sm font-medium truncate ${textColor}`}>{s.name}</span>

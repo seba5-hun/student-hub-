@@ -5,6 +5,7 @@ import { downloadICS } from '../lib/calendar';
 import { useDialog } from './Dialog';
 import { buildSeries, describeRepeat } from '../lib/recurrence';
 import RepeatPicker, { NO_REPEAT, RepeatChoice, ruleFrom } from './RepeatPicker';
+import { useProfile } from '../lib/profile';
 
 interface CalendarioProps {
   tasks: Task[];
@@ -15,6 +16,7 @@ interface CalendarioProps {
 }
 
 export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onAddTasks }: CalendarioProps) {
+  const prof = useProfile();
   const dialog = useDialog();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onA
   const handleQuickAdd = () => {
     if (!quickAddTitle.trim() || !quickAddDate) return;
     const newTask: Task = { id: createId(), title: quickAddTitle.trim(), date: quickAddDate, type: quickAddType, importance: quickAddImportance, estimatedTime: 60, done: false, time: quickAddTime || undefined };
-    const rule = ruleFrom(quickAddRepeat, quickAddDate);
+    const rule = ruleFrom(quickAddRepeat, quickAddDate, prof.termEnd);
     if (rule && rule.until < quickAddDate) { dialog.alert({ title: 'Controlla la ripetizione', message: 'L\'ultimo giorno deve essere dopo la data dell\'impegno.' }); return; }
     if (rule) {
       const series = buildSeries(newTask, rule);
@@ -90,7 +92,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onA
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Calendario.</h2>
+        <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('calendario')}.</h2>
         <button onClick={() => openQuickAdd()} className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[var(--on-brand)] hover:scale-110 transition-transform shadow-lg">
           <Plus className="w-5 h-5" />
         </button>
@@ -152,7 +154,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onA
                     <div className="flex-1">
                       <p className={`text-sm font-medium ${task.done ? 'line-through opacity-60' : ''} ${textColor}`}>{task.title}</p>
                       {task.time && <span className="text-xs font-medium text-indigo-400 flex items-center gap-1"><Clock className="w-3 h-3" />{formatTaskTime(task)}</span>}
-                      <span className={`text-xs ${subTextColor}`}>{task.type} • {imp.label}</span>
+                      <span className={`text-xs ${subTextColor}`}>{task.type === 'scolastico' ? prof.L('studyType') : 'Personale'} • {imp.label}</span>
                       {task.repeat && (
                         <span className="text-xs font-medium flex items-center gap-1 mt-0.5" style={{ color: 'var(--brand-ring)' }}>
                           <Repeat className="w-3 h-3" />{describeRepeat(task.repeat, task.date)}
@@ -194,7 +196,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onA
                 <input type="time" value={quickAddTime} onChange={e => setQuickAddTime(e.target.value)} aria-label="Orario (opzionale)" title="Orario (opzionale)" className={`${darkMode ? 'input-glass' : 'input-light'} w-32`} />
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setQuickAddType('scolastico')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'scolastico' ? 'bg-indigo-500 text-[var(--on-brand)]' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>📚 Scolastico</button>
+                <button onClick={() => setQuickAddType('scolastico')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'scolastico' ? 'bg-indigo-500 text-[var(--on-brand)]' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>📚 {prof.L('studyType')}</button>
                 <button onClick={() => setQuickAddType('personale')} className={`flex-1 py-2 rounded-lg text-sm ${quickAddType === 'personale' ? 'bg-indigo-500 text-[var(--on-brand)]' : darkMode ? 'bg-white/10' : 'bg-black/5'}`}>👤 Personale</button>
               </div>
               <div className="flex gap-2">

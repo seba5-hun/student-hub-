@@ -5,6 +5,7 @@ import SubjectManager from './SubjectManager';
 import StudyStats from './StudyStats';
 import WeekDistribution from './WeekDistribution';
 import { StudySession, Grade, SubjectDef, subjectColor, createId, formatDate } from '../lib/store';
+import { useProfile } from '../lib/profile';
 
 interface TimerProps {
   sessions: StudySession[];
@@ -59,6 +60,7 @@ function saveTimerState(state: TimerState | null): void {
 }
 
 export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects, onRenameSubject }: TimerProps) {
+  const prof = useProfile();
   const dialog = useDialog();
   // Time is computed from timestamps (not by counting ticks), so it stays correct when the
   // tab is in background, and the state is saved so the timer survives changing section.
@@ -229,14 +231,14 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
 
   return (
     <div className="space-y-6">
-      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>Timer Studio.</h2>
+      <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('timer')}.</h2>
 
       <div className={`${cardClass} p-8 text-center`}>
         <div className="mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <label className={`text-sm ${subTextColor}`}>Materia</label>
+            <label className={`text-sm ${subTextColor}`}>{prof.L('subject')}</label>
             <button onClick={() => setShowSubjects(v => !v)} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-              <Palette className="w-3.5 h-3.5" /> Le mie materie
+              <Palette className="w-3.5 h-3.5" /> {prof.L('subjects')}
             </button>
           </div>
           <div className="flex items-center justify-center gap-2">
@@ -249,8 +251,8 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
           </div>
           <p className={`text-xs mt-2 ${subTextColor}`}>
             {isRunning
-              ? 'Puoi cambiare materia mentre il timer corre: il tempo si divide da solo.'
-              : 'Avvia anche senza materia: alla fine dividi il tempo tra le materie.'}
+              ? `Puoi cambiare ${prof.l('subject')} mentre il timer corre: il tempo si divide da solo.`
+              : `Avvia anche senza scegliere: alla fine dividi il tempo tra ${prof.l('subjects')}.`}
           </p>
           {ownNames.length === 0 && !showSubjects && (
             <button onClick={() => setShowSubjects(true)} className="mt-3 text-sm text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">

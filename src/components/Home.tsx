@@ -4,6 +4,7 @@ import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
 import { nextOfEachSeries } from '../lib/recurrence';
+import { useProfile, overallAverage, universityStats, PRESETS } from '../lib/profile';
 
 // Panels of the Home page, in their default order. `wide` panels take the full row.
 const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
@@ -23,15 +24,21 @@ interface HomeProps {
   onUpdateSettings?: (patch: Partial<UserData['settings']>) => void;
   // "Crea la tua MYND": the guide that explains the app and sets up subjects, grades and the rest.
   onOpenGuide?: () => void;
+  // "Adatta MYND a te": the kind of student.
+  onOpenProfile?: () => void;
 }
 
-export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide }: HomeProps) {
+export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, onOpenProfile }: HomeProps) {
   const { tasks, grades, sessions, settings } = data;
+  const prof = useProfile();
   const quote = useMemo(() => getRandomQuote(), []);
 
   // A repeated task counts once: its next occurrence.
   const activeTasks = nextOfEachSeries(tasks.filter(t => !t.done).sort(compareTasks));
-  const avgGrade = grades.length > 0 ? (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1) : '—';
+  // University: the weighted average of the exams (by CFU) when there is one.
+  const uni = prof.scale === 30 ? universityStats(grades) : null;
+  const avg10 = overallAverage(grades);
+  const avgGrade = uni?.weighted != null ? uni.weighted.toFixed(1).replace('.', ',') : avg10 !== null ? prof.showAvg(avg10) : '—';
   const totalHours = (sessions.reduce((s, ss) => s + ss.duration, 0) / 60).toFixed(1);
   const streak = getStudyStreak(sessions);
   const weeklyHours = getWeeklyStudyHours(sessions);
@@ -108,7 +115,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
         return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard icon={<Target className="w-5 h-5" />} label="Impegni attivi" value={activeTasks.length} color="indigo" darkMode={darkMode} />
-            <StatCard icon={<BookOpen className="w-5 h-5" />} label="Media voti" value={avgGrade} color="emerald" darkMode={darkMode} />
+            <StatCard icon={<BookOpen className="w-5 h-5" />} label={uni?.weighted != null ? 'Media ponderata' : `Media ${prof.l('grades')}`} value={avgGrade} color="emerald" darkMode={darkMode} />
             <StatCard icon={<Clock className="w-5 h-5" />} label="Ore studio" value={totalHours} color="amber" darkMode={darkMode} />
             <StatCard icon={<Flame className="w-5 h-5" />} label="Streak 🔥" value={streak} color="rose" darkMode={darkMode} />
           </div>
@@ -124,8 +131,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
           <div className={`${cardClass} p-6 h-full flex flex-col`}>
             <h3 className={`font-semibold mb-3 ${textColor}`}>Riepilogo</h3>
             <div className="grid grid-cols-2 gap-3 flex-1 content-center">
-              <SummaryItem icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} label="Migliore" value={bestSubject ? bestSubject[0] : '—'} sub={bestSubject ? `${bestSubject[1]}` : ''} darkMode={darkMode} />
-              <SummaryItem icon={<TrendingDown className="w-4 h-4 text-red-400" />} label="Più debole" value={worstSubject ? worstSubject[0] : '—'} sub={worstSubject ? `${worstSubject[1]}` : ''} darkMode={darkMode} />
+              <SummaryItem icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} label="Migliore" value={bestSubject ? bestSubject[0] : '—'} sub={bestSubject ? prof.showAvg(bestSubject[1]) : ''} darkMode={darkMode} />
+              <SummaryItem icon={<TrendingDown className="w-4 h-4 text-red-400" />} label="Più debole" value={worstSubject ? worstSubject[0] : '—'} sub={worstSubject ? prof.showAvg(worstSubject[1]) : ''} darkMode={darkMode} />
               <SummaryItem icon={<Award className="w-4 h-4 text-amber-400" />} label="Più studiata" value={mostStudied ? mostStudied[0] : '—'} sub={mostStudied ? `${Math.round(mostStudied[1] / 60)}h` : ''} darkMode={darkMode} />
               <SummaryItem icon={<CheckCircle2 className="w-4 h-4 text-indigo-400" />} label="Completati" value={`${tasks.filter(t => t.done && !t.cancelled).length}`} sub="totale" darkMode={darkMode} />
             </div>
@@ -161,7 +168,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
       case 'chart':
         return (
           <div className={`${cardClass} p-6 h-full flex flex-col`}>
-            <h3 className={`font-semibold mb-4 ${textColor}`}>Tempo studio per materia</h3>
+            <h3 className={`font-semibold mb-4 ${textColor}`}>Tempo studio per {prof.l('subject')}</h3>
             {studyChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={studyChartData}>
@@ -231,6 +238,17 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
       {editing && (
         <div className={`${cardClass} p-5 space-y-4 border border-dashed ${darkMode ? 'border-indigo-400/50' : 'border-indigo-500/40'}`}>
           <div>
+            {onOpenProfile && (
+              <button onClick={onOpenProfile} className={`w-full text-left mb-5 p-4 rounded-2xl flex items-center gap-4 transition-colors ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}
+                style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 35%, transparent)' }}>
+                <span className="text-2xl" aria-hidden>{prof.preset.emoji}</span>
+                <span className="flex-1 min-w-0">
+                  <span className={`block font-semibold ${textColor}`}>Adatta MYND a te</span>
+                  <span className={`block text-sm ${subTextColor}`}>Ora: {PRESETS[prof.profile.kind].title}. Scegli che studente sei o descrivilo: nomi, voti e tutor si adattano.</span>
+                </span>
+                <span className="text-sm font-semibold flex-shrink-0" style={{ color: 'var(--brand-ring)' }}>Cambia</span>
+              </button>
+            )}
             <h3 className={`font-semibold ${textColor}`}>Personalizza la tua dashboard</h3>
             <p className={`text-sm ${subTextColor}`}>Usa le frecce per spostare i pannelli e l'occhio per nasconderli. Le scelte valgono su tutti i tuoi dispositivi.</p>
           </div>
@@ -244,7 +262,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
                 {order.filter(id => hidden.includes(id)).map(id => (
                   <button key={id} onClick={() => showWidget(id)}
                     className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
-                    <Plus className="w-3.5 h-3.5" /> {WIDGETS.find(w => w.id === id)?.label}
+                    <Plus className="w-3.5 h-3.5" /> {id === 'chart' ? `Tempo di studio per ${prof.l('subject')}` : WIDGETS.find(w => w.id === id)?.label}
                   </button>
                 ))}
               </div>
@@ -259,9 +277,9 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
                 return (
                   <label key={sec.id} className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg cursor-pointer ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}>
                     <span className={`text-sm flex items-center gap-2 ${on ? textColor : subTextColor}`}>
-                      <sec.icon className="w-4 h-4" /> {sec.label}
+                      <sec.icon className="w-4 h-4" /> {prof.section(sec.id, sec.label)}
                     </span>
-                    <input type="checkbox" checked={on} onChange={() => toggleSection(sec.id)} className="sr-only" aria-label={`Mostra ${sec.label} nel menu`} />
+                    <input type="checkbox" checked={on} onChange={() => toggleSection(sec.id)} className="sr-only" aria-label={`Mostra ${prof.section(sec.id, sec.label)} nel menu`} />
                     <span className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${on ? 'bg-gradient-to-r from-indigo-500 to-purple-600' : darkMode ? 'bg-white/15' : 'bg-black/15'}`}>
                       <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${on ? 'left-5' : 'left-1'}`} />
                     </span>
