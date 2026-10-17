@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, Activity, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
+import { Users, Activity, Lightbulb, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
 import DeveloperDashboard, { formatDuration } from './DeveloperDashboard';
 import { AdminUser, AccountStatus, loadAdminUsers, setUserStatus, setRequireApproval } from '../lib/admin';
 import { useDialog } from './Dialog';
+import AdminSuggestions from './AdminSuggestions';
+import { loadSuggestions } from '../lib/suggestions';
 
 const STATUS_INFO: Record<AccountStatus, { label: string; badge: string }> = {
   pending: { label: 'In attesa', badge: 'bg-amber-500/20 text-amber-400' },
@@ -25,9 +27,13 @@ function formatDate(value: string | null): string {
   return `${d.toLocaleDateString('it-IT')} ${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-export default function AdminPanel({ darkMode, onPendingChange }: { darkMode: boolean; onPendingChange?: (n: number) => void }) {
+export default function AdminPanel({ darkMode, onPendingChange, onIdeasChange }: { darkMode: boolean; onPendingChange?: (n: number) => void; onIdeasChange?: (n: number) => void }) {
   const dialog = useDialog();
-  const [tab, setTab] = useState<'users' | 'stats'>('users');
+  const [tab, setTab] = useState<'users' | 'ideas' | 'stats'>('users');
+  // Suggestions not read yet ("Suggerisci una modifica"), for the badge on the tab.
+  const [ideasNew, setIdeasNew] = useState(0);
+  const updateIdeas = useCallback((n: number) => { setIdeasNew(n); onIdeasChange?.(n); }, [onIdeasChange]);
+  useEffect(() => { loadSuggestions().then(list => updateIdeas(list.filter(x => x.status === 'new').length)).catch(() => {}); }, [updateIdeas]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [requireApproval, setRequire] = useState(true);
   const [filter, setFilter] = useState<AccountStatus | 'all'>('pending');
@@ -110,17 +116,18 @@ export default function AdminPanel({ darkMode, onPendingChange }: { darkMode: bo
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] flex items-center gap-2 ${textColor}`}>Admin.</h2>
         <div className={`flex rounded-xl p-1 ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
-          {[{ id: 'users' as const, label: 'Utenti', icon: <Users className="w-4 h-4" /> }, { id: 'stats' as const, label: 'Statistiche', icon: <Activity className="w-4 h-4" /> }].map(t => (
+          {[{ id: 'users' as const, label: 'Utenti', icon: <Users className="w-4 h-4" /> }, { id: 'ideas' as const, label: 'Suggerimenti', icon: <Lightbulb className="w-4 h-4" /> }, { id: 'stats' as const, label: 'Statistiche', icon: <Activity className="w-4 h-4" /> }].map(t => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
               className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${tab === t.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : subTextColor}`}>
               {t.icon}{t.label}
               {t.id === 'users' && counts.pending > 0 && <span className="ml-1 min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center">{counts.pending}</span>}
+              {t.id === 'ideas' && ideasNew > 0 && <span className="ml-1 min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center">{ideasNew}</span>}
             </button>
           ))}
         </div>
       </div>
 
-      {tab === 'stats' ? <DeveloperDashboard darkMode={darkMode} /> : (
+      {tab === 'stats' ? <DeveloperDashboard darkMode={darkMode} /> : tab === 'ideas' ? <AdminSuggestions darkMode={darkMode} onNewCount={updateIdeas} /> : (
         <>
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">⚠️ {error}</div>}
 

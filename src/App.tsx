@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import { loadSuggestions } from './lib/suggestions';
 import { ProfileContext, makeProfileApi } from './lib/profile';
 import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
 import confetti from 'canvas-confetti';
@@ -36,6 +37,7 @@ const Business = lazy(loaders.business);
 const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
 const ProfileEditor = lazy(() => import('./components/ProfileEditor'));
+const SuggestionDialog = lazy(() => import('./components/SuggestionDialog'));
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -106,6 +108,9 @@ function App() {
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
   const [adminPending, setAdminPending] = useState(0);
+  // Admin: suggestions not read yet ("Suggerisci una modifica").
+  const [adminIdeas, setAdminIdeas] = useState(0);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   // Opened as …/admin: go straight to the admin panel after login.
   const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
   // Opened as …/?mindset=sera (iPhone automation): straight to Mindset's evening reset.
@@ -459,9 +464,10 @@ function App() {
   // Admin: how many accounts are waiting, for the badge in the menu (refreshed every minute).
   useEffect(() => {
     if (!user || !hasData || !isDeveloper(user.email)) return;
-    const check = () => loadAdminUsers()
-      .then(r => setAdminPending(r.users.filter(u => u.status === 'pending').length))
-      .catch(() => {});
+    const check = () => {
+      loadAdminUsers().then(r => setAdminPending(r.users.filter(u => u.status === 'pending').length)).catch(() => {});
+      loadSuggestions().then(list => setAdminIdeas(list.filter(x => x.status === 'new').length)).catch(() => {});
+    };
     check();
     const id = window.setInterval(check, 60000);
     return () => window.clearInterval(id);
@@ -517,6 +523,7 @@ function App() {
     setLoadError('');
     setAccountStatus(null);
     setAdminPending(0);
+    setAdminIdeas(0);
     setCurrentSection('home');
   };
 
@@ -740,7 +747,8 @@ function App() {
         colorTheme={data?.settings.colorTheme}
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
-        adminBadge={adminPending}
+        adminBadge={adminPending + adminIdeas}
+        onSuggest={() => setSuggestOpen(true)}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -827,7 +835,7 @@ function App() {
           />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
-          <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} />
+          <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} />
         )}
         {currentSection === 'guida-ai' && isDemo && <DemoGuide onSignup={() => exitDemo(true)} />}
         {currentSection === 'guida-ai' && !isDemo && (
@@ -847,6 +855,12 @@ function App() {
       {showGuide && (
         <Suspense fallback={<div className="fixed inset-0 z-[60] gradient-bg mesh-gradient" />}>
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
+        </Suspense>
+      )}
+      {suggestOpen && (
+        <Suspense fallback={null}>
+          <SuggestionDialog userId={isDemo ? null : user.id} section={currentSection} darkMode={darkMode}
+            onClose={() => setSuggestOpen(false)} onSignup={() => { setSuggestOpen(false); exitDemo(true); }} />
         </Suspense>
       )}
       {profileEditor && (
