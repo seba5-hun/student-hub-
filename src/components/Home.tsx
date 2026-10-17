@@ -3,6 +3,7 @@ import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
+import { nextOfEachSeries } from '../lib/recurrence';
 
 // Panels of the Home page, in their default order. `wide` panels take the full row.
 const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
@@ -28,7 +29,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
   const { tasks, grades, sessions, settings } = data;
   const quote = useMemo(() => getRandomQuote(), []);
 
-  const activeTasks = tasks.filter(t => !t.done).sort(compareTasks);
+  // A repeated task counts once: its next occurrence.
+  const activeTasks = nextOfEachSeries(tasks.filter(t => !t.done).sort(compareTasks));
   const avgGrade = grades.length > 0 ? (grades.reduce((s, g) => s + g.value, 0) / grades.length).toFixed(1) : '—';
   const totalHours = (sessions.reduce((s, ss) => s + ss.duration, 0) / 60).toFixed(1);
   const streak = getStudyStreak(sessions);

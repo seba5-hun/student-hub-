@@ -3,6 +3,7 @@
 // is saved anywhere.
 
 import { UserData, AuthUser, toDateKey } from './store';
+import { buildSeries, weekdayOf } from './recurrence';
 
 export const DEMO_USER: AuthUser = { id: 'demo', email: 'ospite@myndspace.world' };
 export const isDemoUser = (user: AuthUser | null | undefined) => user?.id === DEMO_USER.id;
@@ -36,10 +37,12 @@ export function createDemoData(): UserData {
     task('d-t3', 'Tema di Italiano da consegnare', 6, { subject: 'Italiano', importance: 3, estimatedTime: 90 }),
     task('d-t4', 'Verifica di Inglese: Romanticismo', 9, { subject: 'Inglese', importance: 4, estimatedTime: 120, movedFrom: day(5) }),
     task('d-t5', 'Esercizi di Fisica pag. 112', 1, { subject: 'Fisica', importance: 2, estimatedTime: 45 }),
-    task('d-t6', 'Allenamento', 0, { type: 'personale', importance: 2, estimatedTime: 90, time: '18:00', endTime: '19:30' }),
     task('d-t7', 'Laboratorio di Scienze: relazione', 12, { subject: 'Scienze', importance: 3, estimatedTime: 60 }),
     task('d-t8', 'Ricerca su Leopardi', -3, { subject: 'Italiano', done: true }),
     task('d-t9', 'Verifica di Scienze', -6, { subject: 'Scienze', done: true, importance: 4 }),
+    // Training twice a week until the end of next month: a repeated task.
+    ...buildSeries(task('d-t6', 'Allenamento', 0, { type: 'personale', importance: 2, estimatedTime: 90, time: '18:00', endTime: '19:30' }),
+      { freq: 'weekly', interval: 1, days: [...new Set([weekdayOf(day(0)), (weekdayOf(day(0)) + 3) % 7])], until: day(45) }, 'd-series-1'),
   ];
   const grades: UserData['grades'] = [];
   const marks: Record<string, number[]> = {

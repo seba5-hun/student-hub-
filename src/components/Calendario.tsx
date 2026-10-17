@@ -1,17 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Download, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Download, Plus, X, Repeat } from 'lucide-react';
 import { Task, IMPORTANCE_CONFIG, createId, toDateKey, todayKey, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
 import { downloadICS } from '../lib/calendar';
 import { useDialog } from './Dialog';
+import { buildSeries, describeRepeat } from '../lib/recurrence';
+import RepeatPicker, { NO_REPEAT, RepeatChoice, ruleFrom } from './RepeatPicker';
 
 interface CalendarioProps {
   tasks: Task[];
   darkMode: boolean;
   onNavigate?: (section: string, prefillDate?: string) => void;
   onAddTask?: (task: Task) => void;
+  onAddTasks?: (tasks: Task[]) => void;   // a repeated task: all its occurrences at once
 }
 
-export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: CalendarioProps) {
+export default function Calendario({ tasks, darkMode, onNavigate, onAddTask, onAddTasks }: CalendarioProps) {
   const dialog = useDialog();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -21,6 +24,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   const [quickAddTime, setQuickAddTime] = useState('');
   const [quickAddType, setQuickAddType] = useState<'scolastico' | 'personale'>('scolastico');
   const [quickAddImportance, setQuickAddImportance] = useState<1 | 2 | 3 | 4 | 5>(2);
+  const [quickAddRepeat, setQuickAddRepeat] = useState<RepeatChoice>(NO_REPEAT);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
@@ -68,12 +72,18 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
   const handleQuickAdd = () => {
     if (!quickAddTitle.trim() || !quickAddDate) return;
     const newTask: Task = { id: createId(), title: quickAddTitle.trim(), date: quickAddDate, type: quickAddType, importance: quickAddImportance, estimatedTime: 60, done: false, time: quickAddTime || undefined };
-    if (onAddTask) onAddTask(newTask);
-    setQuickAddTitle(''); setQuickAddTime(''); setQuickAddType('scolastico'); setQuickAddImportance(2); setShowQuickAdd(false);
+    const rule = ruleFrom(quickAddRepeat, quickAddDate);
+    if (rule && rule.until < quickAddDate) { dialog.alert({ title: 'Controlla la ripetizione', message: 'L\'ultimo giorno deve essere dopo la data dell\'impegno.' }); return; }
+    if (rule) {
+      const series = buildSeries(newTask, rule);
+      if (onAddTasks) onAddTasks(series); else series.forEach(t => onAddTask?.(t));
+    } else if (onAddTask) onAddTask(newTask);
+    setQuickAddTitle(''); setQuickAddTime(''); setQuickAddType('scolastico'); setQuickAddImportance(2); setQuickAddRepeat(NO_REPEAT); setShowQuickAdd(false);
   };
 
   const openQuickAdd = (date?: string) => {
     setQuickAddDate(date || todayKey());
+    setQuickAddRepeat(NO_REPEAT);
     setShowQuickAdd(true);
   };
 
@@ -143,6 +153,11 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
                       <p className={`text-sm font-medium ${task.done ? 'line-through opacity-60' : ''} ${textColor}`}>{task.title}</p>
                       {task.time && <span className="text-xs font-medium text-indigo-400 flex items-center gap-1"><Clock className="w-3 h-3" />{formatTaskTime(task)}</span>}
                       <span className={`text-xs ${subTextColor}`}>{task.type} • {imp.label}</span>
+                      {task.repeat && (
+                        <span className="text-xs font-medium flex items-center gap-1 mt-0.5" style={{ color: 'var(--brand-ring)' }}>
+                          <Repeat className="w-3 h-3" />{describeRepeat(task.repeat, task.date)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -165,7 +180,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
 
       {showQuickAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className={`${cardClass} p-6 w-full max-w-md animate-scale-in`}>
+          <div className={`${cardClass} p-6 w-full max-w-md animate-scale-in max-h-[calc(100dvh-2rem)] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-lg font-semibold ${textColor}`}>Nuovo Impegno</h3>
               <button onClick={() => setShowQuickAdd(false)} className={`p-1 rounded-lg ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
@@ -189,6 +204,7 @@ export default function Calendario({ tasks, darkMode, onNavigate, onAddTask }: C
                   </button>
                 ))}
               </div>
+              <RepeatPicker value={quickAddRepeat} onChange={setQuickAddRepeat} start={quickAddDate} darkMode={darkMode} />
               <div className="flex gap-2">
                 <button onClick={() => setShowQuickAdd(false)} className={`flex-1 py-2 rounded-lg ${darkMode ? 'bg-white/10' : 'bg-black/5'}`}>Annulla</button>
                 <button onClick={handleQuickAdd} disabled={!quickAddTitle.trim()} className="flex-1 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)] disabled:opacity-50">Aggiungi</button>

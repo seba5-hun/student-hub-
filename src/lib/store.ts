@@ -22,6 +22,17 @@ export interface Task {
   // It didn't happen (test cancelled, appointment called off): kept as done so that it leaves
   // every list and the reminders, but it doesn't count as completed.
   cancelled?: boolean;
+  // Repeated task ("ogni martedì fino a giugno"): every occurrence is a task of its own, so lists,
+  // reminders and priorities work as for any other; they share the series id and the rule.
+  seriesId?: string;
+  repeat?: RepeatRule;
+}
+
+export interface RepeatRule {
+  freq: 'daily' | 'weekly' | 'monthly';
+  interval: number;      // every 1, 2… days / weeks / months
+  days?: number[];       // weekly: weekdays, 0 = Monday … 6 = Sunday
+  until: string;         // last possible date, 'YYYY-MM-DD'
 }
 
 export interface Grade {

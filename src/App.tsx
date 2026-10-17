@@ -796,6 +796,7 @@ function App() {
             darkMode={darkMode} 
             onNavigate={handleSectionChange}
             onAddTask={(task) => updateData({ ...data, tasks: [...data.tasks, task] })}
+            onAddTasks={(added) => updateData({ ...data, tasks: [...data.tasks, ...added] })}
           />
         )}
         {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}

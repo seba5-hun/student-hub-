@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Check, Clock, TrendingUp, RotateCcw, Pencil, CalendarClock, Ban, X } from 'lucide-react';
+import { Plus, Trash2, Check, Clock, TrendingUp, RotateCcw, Pencil, CalendarClock, Ban, X, Repeat } from 'lucide-react';
 import { Task, IMPORTANCE_CONFIG, createId, formatDateWithDay, formatDate, formatTaskTime, compareTasks, effectiveImportance, dueLabel, taskDeadline, toDateKey, parseDate, todayKey } from '../lib/store';
+import { buildSeries, describeRepeat, isSameOrLater, nextOfEachSeries } from '../lib/recurrence';
+import RepeatPicker, { NO_REPEAT, RepeatChoice, ruleFrom, choiceFrom } from './RepeatPicker';
+import { useDialog } from './Dialog';
 
 interface ImpegniProps {
   tasks: Task[];
@@ -28,6 +31,8 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   // "Rinvia": the task whose date is being changed, with the date being chosen.
   const [moving, setMoving] = useState<{ id: string; date: string } | null>(null);
+  const [repeat, setRepeat] = useState<RepeatChoice>(NO_REPEAT);
+  const dialog = useDialog();
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
   const subTextColor = darkMode ? 'text-white/60' : 'text-gray-500';
@@ -51,14 +56,14 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
   const resetForm = () => {
     setTitle(''); setDate(''); setEndDate(''); setTime(''); setEndTime('');
     setIsMultiDay(false); setSubject(''); setEstimatedTime(60); setImportance(2); setType('scolastico');
-    setFormError(''); setEditingTaskId(null); setShowForm(false);
+    setFormError(''); setEditingTaskId(null); setShowForm(false); setRepeat(NO_REPEAT);
   };
 
   const startEdit = (t: Task) => {
     setTitle(t.title); setDate(t.date); setEndDate(t.endDate || ''); setIsMultiDay(!!t.endDate);
     setTime(t.time || ''); setEndTime(t.endTime || ''); setType(t.type); setImportance(t.importance);
     setEstimatedTime(t.estimatedTime); setSubject(t.subject || ''); setFormError('');
-    setEditingTaskId(t.id); setShowForm(true); setMoving(null);
+    setEditingTaskId(t.id); setShowForm(true); setMoving(null); setRepeat(choiceFrom(t.repeat));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -76,7 +81,17 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
     onUpdate(tasks.map(t => (t.id === id ? { ...t, done: false, cancelled: undefined, keepOpen: true } : t)));
   };
 
-  const handleAdd = (e: React.FormEvent) => {
+  // A repeated task: "solo questo" or "questo e i successivi" (null: the student closed the question).
+  const askSeries = (task: Task, action: 'modifica' | 'elimina') => dialog.choose({
+    title: action === 'elimina' ? 'Elimina impegno ripetuto' : 'Modifica impegno ripetuto',
+    message: `«${task.title}» si ripete (${describeRepeat(task.repeat!, task.date).toLowerCase()}).`,
+    choices: [
+      { label: action === 'elimina' ? 'Elimina solo questo' : 'Solo questo', value: 'one', danger: action === 'elimina' },
+      { label: action === 'elimina' ? 'Elimina questo e i successivi' : 'Questo e i successivi', value: 'following', danger: action === 'elimina' },
+    ],
+  });
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !date) return;
     if (isMultiDay && endDate && endDate < date) {
@@ -98,6 +113,27 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
       estimatedTime: Math.max(0, estimatedTime || 0),
       subject: type === 'scolastico' && subject.trim() ? subject.trim() : undefined,
     };
+    const rule = ruleFrom(repeat, date);
+    if (repeat.preset !== 'none' && repeat.endMode === 'until' && repeat.until && repeat.until < date) {
+      setFormError('La ripetizione deve finire dopo la data di inizio.');
+      return;
+    }
+    const editing = editingTaskId ? tasks.find(t => t.id === editingTaskId) : undefined;
+    if (editing && (editing.seriesId || rule)) {
+      // Repeated (or becoming repeated): this one only, or the series from here on rebuilt.
+      const scope = editing.seriesId ? await askSeries(editing, 'modifica') : 'following';
+      if (!scope) return;
+      if (scope === 'one') {
+        onUpdate(tasks.map(t => (t.id !== editing.id ? t : { ...withDate({ ...t, ...fields }, date), endDate: fields.endDate })));
+      } else {
+        const base: Task = { ...editing, ...fields, date, movedFrom: undefined, seriesId: undefined, repeat: undefined };
+        const series = rule ? buildSeries(base, rule) : [base];
+        const kept = tasks.filter(t => t.id !== editing.id && !(editing.seriesId && isSameOrLater(t, editing)));
+        onUpdate([...kept, ...series]);
+      }
+      resetForm();
+      return;
+    }
     if (editingTaskId) {
       onUpdate(tasks.map(t => {
         if (t.id !== editingTaskId) return t;
@@ -121,7 +157,7 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
       done: false,
       subject: type === 'scolastico' && subject.trim() ? subject.trim() : undefined,
     };
-    onUpdate([...tasks, newTask]);
+    onUpdate([...tasks, ...(rule ? buildSeries(newTask, rule) : [newTask])]);
     resetForm();
   };
 
@@ -138,11 +174,21 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
       : t));
   };
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (task?.seriesId && tasks.some(t => t.id !== id && t.seriesId === task.seriesId)) {
+      const scope = await askSeries(task, 'elimina');
+      if (!scope) return;
+      if (scope === 'following') { onUpdate(tasks.filter(t => !isSameOrLater(t, task))); return; }
+    }
     onUpdate(tasks.filter(t => t.id !== id));
   };
 
-  const pendingTasks = tasks.filter(t => !t.done).sort(compareTasks);
+  // A repeated task shows only its next occurrence (the others are in the calendar).
+  const allPending = tasks.filter(t => !t.done).sort(compareTasks);
+  const pendingTasks = nextOfEachSeries(allPending);
+  const laterCount = (t: Task) => (t.seriesId ? allPending.filter(x => x.seriesId === t.seriesId && x !== t).length : 0);
+  const lastOfSeries = (t: Task) => allPending.filter(x => x.seriesId === t.seriesId).reduce((a, x) => (x.date > a ? x.date : a), t.date);
   const subjectOptions = [...new Set([...knownSubjects, ...tasks.map(t => t.subject).filter((s): s is string => !!s)])].sort();
   const doneTasks = tasks.filter(t => t.done && !t.cancelled);
   const cancelledTasks = tasks.filter(t => t.cancelled).sort((a, b) => b.date.localeCompare(a.date));
@@ -227,6 +273,12 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
               <label className={`block text-sm mb-1 ${subTextColor}`}>Tempo stimato (minuti)</label>
               <input type="number" min={0} step={15} value={estimatedTime} onChange={e => setEstimatedTime(parseInt(e.target.value, 10) || 0)} className={darkMode ? 'input-glass w-full' : 'input-light w-full'} />
             </div>
+            <div className="md:col-span-2">
+              <RepeatPicker value={repeat} onChange={setRepeat} start={date} darkMode={darkMode} />
+              {editingTaskId && tasks.find(t => t.id === editingTaskId)?.seriesId && (
+                <p className={`text-xs mt-2 ${subTextColor}`}>Salvando ti chiedo se cambiare solo questo impegno o anche quelli dopo. Un cambio della ripetizione vale per questo e i successivi.</p>
+              )}
+            </div>
             <div>
               <label className="inline-flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={isMultiDay} onChange={e => setIsMultiDay(e.target.checked)} className="w-4 h-4" />
@@ -275,6 +327,13 @@ export default function Impegni({ tasks, knownSubjects = [], darkMode, onUpdate,
                     className={`text-xs text-left inline-flex items-center gap-1 rounded-full hover:underline ${subTextColor}`}>
                     {formatDateWithDay(task.date)}{task.endDate ? ` → ${formatDateWithDay(task.endDate)}` : ''}
                   </button>
+                  {task.repeat && (
+                    <span title={`Le prossime volte le trovi nel calendario`} className="text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                      style={{ color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' }}>
+                      <Repeat className="w-3 h-3" />{describeRepeat(task.repeat, task.date)}
+                      {laterCount(task) > 0 && <span className="opacity-75">· poi altre {laterCount(task)} fino al {formatDate(lastOfSeries(task))}</span>}
+                    </span>
+                  )}
                   {task.movedFrom && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" />rinviato dal {formatDate(task.movedFrom)}</span>}
                   {editingTimeId === task.id ? (
                     <input type="time" autoFocus defaultValue={task.time || ''} aria-label="Orario"

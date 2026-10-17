@@ -16,18 +16,25 @@ interface PromptOptions extends DialogOptions {
   placeholder?: string;
 }
 
+// Several answers (e.g. "Solo questo" / "Questo e i successivi"), one per button, plus Annulla.
+interface ChooseOptions extends DialogOptions {
+  choices: { label: string; value: string; danger?: boolean }[];
+}
+
 interface DialogApi {
   // Follows the app's light/dark theme (called by App).
   setDark: (dark: boolean) => void;
   confirm: (options: DialogOptions) => Promise<boolean>;
   prompt: (options: PromptOptions) => Promise<string | null>;
   alert: (options: DialogOptions) => Promise<void>;
+  choose: (options: ChooseOptions) => Promise<string | null>;
 }
 
 type Request =
   | { kind: 'confirm'; options: DialogOptions; resolve: (value: boolean) => void }
   | { kind: 'prompt'; options: PromptOptions; resolve: (value: string | null) => void }
-  | { kind: 'alert'; options: DialogOptions; resolve: () => void };
+  | { kind: 'alert'; options: DialogOptions; resolve: () => void }
+  | { kind: 'choose'; options: ChooseOptions; resolve: (value: string | null) => void };
 
 // Outside the provider (should not happen) fall back to the browser dialogs.
 const DialogContext = createContext<DialogApi>({
@@ -35,6 +42,7 @@ const DialogContext = createContext<DialogApi>({
   confirm: async o => window.confirm([o.title, o.message].filter(Boolean).join('\n\n')),
   prompt: async o => window.prompt([o.title, o.message].filter(Boolean).join('\n\n'), o.defaultValue),
   alert: async o => window.alert([o.title, o.message].filter(Boolean).join('\n\n')),
+  choose: async o => (window.confirm([o.title, o.message].filter(Boolean).join('\n\n')) ? o.choices[0]?.value ?? null : null),
 });
 
 export const useDialog = () => useContext(DialogContext);
@@ -52,6 +60,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     confirm: options => new Promise(resolve => push({ kind: 'confirm', options, resolve })),
     prompt: options => new Promise(resolve => push({ kind: 'prompt', options, resolve })),
     alert: options => new Promise(resolve => push({ kind: 'alert', options, resolve })),
+    choose: options => new Promise(resolve => push({ kind: 'choose', options, resolve })),
   }).current;
 
   useEffect(() => {
@@ -61,9 +70,10 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     }
   }, [current]);
 
-  const close = (ok: boolean) => {
+  const close = (ok: boolean, choice?: string) => {
     if (!current) return;
-    if (current.kind === 'confirm') current.resolve(ok);
+    if (current.kind === 'choose') current.resolve(ok && choice !== undefined ? choice : null);
+    else if (current.kind === 'confirm') current.resolve(ok);
     else if (current.kind === 'prompt') current.resolve(ok ? value : null);
     else current.resolve();
     setQueue(q => q.slice(1));
@@ -73,7 +83,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close(false);
-      if (e.key === 'Enter' && current.kind !== 'prompt') { e.preventDefault(); close(true); }
+      if (e.key === 'Enter' && current.kind !== 'prompt' && current.kind !== 'choose') { e.preventDefault(); close(true); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -95,6 +105,17 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                   className={`${dark ? 'input-glass' : 'input-light'} w-full`} maxLength={80} />
               </form>
             )}
+            {current.kind === 'choose' ? (
+              <div className="mt-6 flex flex-col gap-2">
+                {current.options.choices.map((c, i) => (
+                  <button key={c.value} onClick={() => close(true, c.value)} autoFocus={i === 0}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-semibold ${c.danger ? 'text-red-400 bg-red-500/10 hover:bg-red-500/15' : dark ? 'text-white bg-white/10 hover:bg-white/15' : 'text-gray-800 bg-black/5 hover:bg-black/10'}`}>
+                    {c.label}
+                  </button>
+                ))}
+                <button onClick={() => close(false)} className={`px-4 py-2 rounded-xl text-sm ${dark ? 'text-white/60' : 'text-gray-500'}`}>Annulla</button>
+              </div>
+            ) : (
             <div className="mt-6 flex justify-end gap-2">
               {current.kind !== 'alert' && (
                 <button onClick={() => close(false)} className={`px-4 py-2 rounded-xl text-sm font-medium ${dark ? 'text-white/80 bg-white/10 hover:bg-white/15' : 'text-gray-700 bg-black/5 hover:bg-black/10'}`}>
@@ -110,6 +131,7 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
                 {o.confirmLabel || 'OK'}
               </button>
             </div>
+            )}
           </div>
         </div>
       )}
