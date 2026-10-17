@@ -175,11 +175,11 @@ export default function Layout({ children, currentSection, onSectionChange, user
               ))}
             </nav>
             {onSuggest && (
-              <div className="px-3 pb-4">
+              <div className="px-7 pt-2 pb-5">
                 <button onClick={() => { setSidebarOpen(false); onSuggest(); }}
-                  className="w-full flex items-center gap-3 px-4 h-12 rounded-2xl text-[15px] font-medium transition-colors"
-                  style={{ color: 'var(--brand-ring)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 35%, transparent)' }}>
-                  <Lightbulb className="w-5 h-5" /> Suggerisci una modifica
+                  className="inline-flex items-center gap-1.5 text-xs opacity-60 hover:opacity-100 transition-opacity"
+                  style={{ color: 'var(--text-muted)' }}>
+                  <Lightbulb className="w-3.5 h-3.5" /> Suggerisci una modifica
                 </button>
               </div>
             )}
