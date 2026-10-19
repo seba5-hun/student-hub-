@@ -580,3 +580,28 @@ export async function locateInImage(data: string, mimeType: string, passage: str
   if (![y0, x0, y1, x1].every(v => v >= 0 && v <= 1000) || y1 <= y0 || x1 <= x0) return null;
   return [y0, x0, y1, x1];
 }
+
+// "Modello automatico" (Assistente MYND): the free AIs in order, the first that answers, whatever is
+// chosen for the tutor; without free keys, the AI chosen in the settings.
+export function autoReady(): boolean {
+  return FREE_CHAIN.some(x => getKey(x)) || isReady();
+}
+
+export async function askAuto(system: string, turns: ChatTurn[]): Promise<string> {
+  const chain: KeyProvider[] = FREE_CHAIN.filter(x => getKey(x));
+  const chosen = getProvider();
+  if (chosen !== 'free' && getKey(chosen) && !chain.includes(chosen)) chain.push(chosen);
+  if (!chain.length) throw new Error('Per usare l\'assistente collega una chiave AI gratuita (Gemini) nella Guida Studio AI.');
+  const errors: string[] = [];
+  for (const x of chain) {
+    try {
+      const answer = await askOne(x, system, '', turns);
+      if (!answer) throw new Error('risposta vuota');
+      lastAnsweredBy = PROVIDER_NAMES[x];
+      return answer;
+    } catch (err) {
+      errors.push(`${PROVIDER_NAMES[x]}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error(`Nessuna AI ha risposto in questo momento. Riprova tra poco.\n${errors.join('\n')}`);
+}

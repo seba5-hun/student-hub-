@@ -825,6 +825,8 @@ function App() {
             onUpdateSettings={(patch) => updateData(prev => ({ ...prev, settings: { ...prev.settings, ...patch } }))}
             onOpenGuide={() => setGuideOpen(true)}
             layoutActions={layoutActions}
+            onUpdateData={updateData}
+            assistantKey={`mynd_assistant_${user.id}`}
           />
         )}
         {currentSection === 'impegni' && (

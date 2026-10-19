@@ -6,17 +6,9 @@ import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getW
 import { nextOfEachSeries } from '../lib/recurrence';
 import { useProfile, overallAverage, universityStats } from '../lib/profile';
 import LayoutSwitcher, { LayoutActions } from './LayoutSwitcher';
+import { WIDGETS } from '../lib/homeWidgets';
+import AppAssistant from './AppAssistant';
 
-// Panels of the Home page, in their default order. `wide` panels take the full row.
-const WIDGETS: { id: string; label: string; wide?: boolean }[] = [
-  { id: 'quote', label: 'Frase motivazionale', wide: true },
-  { id: 'stats', label: 'Statistiche (impegni, media, ore, streak)', wide: true },
-  { id: 'goal', label: 'Obiettivo settimanale' },
-  { id: 'summary', label: 'Riepilogo materie' },
-  { id: 'upcoming', label: 'Prossimi impegni', wide: true },
-  { id: 'chart', label: 'Tempo di studio per materia' },
-  { id: 'notes', label: 'Note rapide', wide: true },
-];
 
 interface HomeProps {
   data: UserData;
@@ -27,9 +19,12 @@ interface HomeProps {
   onOpenGuide?: () => void;
   // "Le tue MYND": the default MYND and the versions adapted by the student.
   layoutActions?: LayoutActions;
+  // Assistente MYND: changes the data on request (and its chat is kept under this key).
+  onUpdateData?: (update: (prev: UserData) => UserData) => void;
+  assistantKey?: string;
 }
 
-export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, layoutActions }: HomeProps) {
+export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, layoutActions, onUpdateData, assistantKey }: HomeProps) {
   const { tasks, grades, sessions, settings } = data;
   const prof = useProfile();
   const quote = useMemo(() => getRandomQuote(), []);
@@ -246,6 +241,11 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
               <div className={`mb-5 p-4 rounded-2xl ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}
                 style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
                 <LayoutSwitcher settings={settings} darkMode={darkMode} {...layoutActions} />
+              </div>
+            )}
+            {onUpdateData && assistantKey && (
+              <div className="mb-5">
+                <AppAssistant data={data} darkMode={darkMode} storageKey={assistantKey} onUpdateData={onUpdateData} onNavigate={onNavigate} />
               </div>
             )}
             <h3 className={`font-semibold ${textColor}`}>Personalizza la tua dashboard</h3>
