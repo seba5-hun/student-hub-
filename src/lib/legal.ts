@@ -68,3 +68,28 @@ export async function deleteMyAccount(userId: string): Promise<void> {
   }
   await supabase.auth.signOut();
 }
+
+// ---- Newsletter (optional consent, kept with the account) ----
+export async function newsletterStatus(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data } = await supabase.auth.getUser();
+  return data.user?.user_metadata?.newsletter === true;
+}
+
+export async function setNewsletter(value: boolean): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase.auth.updateUser({ data: { newsletter: value, newsletter_at: new Date().toISOString() } });
+  if (error) throw new Error(error.message);
+}
+
+export interface Subscriber { email: string; name: string; subscribed_at: string }
+
+export async function loadNewsletter(): Promise<{ subscribers: Subscriber[]; verifiedUsers: number }> {
+  if (!supabase) throw new Error('Supabase non configurato');
+  const { data, error } = await supabase.rpc('admin_newsletter');
+  if (error) {
+    if (/admin_newsletter|PGRST202|function/i.test(error.message)) throw new Error('Manca la parte Newsletter su Supabase: esegui lo script supabase/newsletter.sql (Admin → Guida → Script Supabase).');
+    throw new Error(error.message);
+  }
+  return { subscribers: data.subscribers || [], verifiedUsers: data.verified_users || 0 };
+}

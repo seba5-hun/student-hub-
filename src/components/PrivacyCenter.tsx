@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Download, Trash2, Loader2, FileText, ExternalLink } from 'lucide-react';
-import { LEGAL_LINKS, statsConsent, setStatsConsent, deleteMyAccount } from '../lib/legal';
+import { LEGAL_LINKS, statsConsent, setStatsConsent, deleteMyAccount, newsletterStatus, setNewsletter } from '../lib/legal';
 
 // "Privacy e dati" (account menu): the legal documents, the choice about usage statistics, the
 // download of all data (portability) and the deletion of the account (right to erasure).
@@ -16,6 +16,14 @@ interface Props {
 
 export default function PrivacyCenter({ userId, email, darkMode, acceptedAt, onExport, onDeleted, onClose }: Props) {
   const [stats, setStats] = useState(statsConsent() === 'yes');
+  // Newsletter: null while loading (and in the demo, where there is no account).
+  const [news, setNews] = useState<boolean | null>(null);
+  useEffect(() => { if (onDeleted) newsletterStatus().then(setNews).catch(() => {}); }, [onDeleted]);
+  const toggleNews = async () => {
+    if (news === null) return;
+    const next = !news; setNews(next);
+    try { await setNewsletter(next); } catch { setNews(!next); }
+  };
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,6 +68,19 @@ export default function PrivacyCenter({ userId, email, darkMode, acceptedAt, onE
             <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${stats ? 'left-5' : 'left-1'}`} />
           </span>
         </label>
+
+        {news !== null && (
+          <>
+            <p className={`text-xs font-semibold uppercase tracking-wide mt-6 mb-2 ${sub}`}>Newsletter</p>
+            <label className={`flex items-center justify-between gap-4 p-3 rounded-xl cursor-pointer ${well}`}>
+              <span className={`text-sm ${sub}`}>Ricevi via email novità di MYND e consigli di studio. Puoi disiscriverti quando vuoi.</span>
+              <input type="checkbox" checked={news} onChange={toggleNews} className="sr-only" aria-label="Newsletter" />
+              <span className={`w-10 h-6 rounded-full relative flex-shrink-0 transition-colors ${news ? 'bg-[var(--brand-fill)]' : darkMode ? 'bg-white/15' : 'bg-black/15'}`}>
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${news ? 'left-5' : 'left-1'}`} />
+              </span>
+            </label>
+          </>
+        )}
 
         <p className={`text-xs font-semibold uppercase tracking-wide mt-6 mb-2 ${sub}`}>I tuoi dati</p>
         <button onClick={onExport} className={`w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm ${well} ${text}`}>

@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Users, Activity, Lightbulb, BookOpen, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
+import { Users, Activity, Lightbulb, BookOpen, Mail, Check, X, Ban, RotateCcw, Search, Loader2, RefreshCw, Clock } from 'lucide-react';
 import DeveloperDashboard, { formatDuration } from './DeveloperDashboard';
 import { AdminUser, AccountStatus, loadAdminUsers, setUserStatus, setRequireApproval } from '../lib/admin';
 import { useDialog } from './Dialog';
 import AdminSuggestions from './AdminSuggestions';
 import AdminGuide from './AdminGuide';
+import AdminNewsletter from './AdminNewsletter';
 import { loadSuggestions } from '../lib/suggestions';
 
 const STATUS_INFO: Record<AccountStatus, { label: string; badge: string }> = {
@@ -30,7 +31,7 @@ function formatDate(value: string | null): string {
 
 export default function AdminPanel({ darkMode, onPendingChange, onIdeasChange }: { darkMode: boolean; onPendingChange?: (n: number) => void; onIdeasChange?: (n: number) => void }) {
   const dialog = useDialog();
-  const [tab, setTab] = useState<'users' | 'ideas' | 'stats' | 'guide'>('users');
+  const [tab, setTab] = useState<'users' | 'ideas' | 'news' | 'stats' | 'guide'>('users');
   // Suggestions not read yet ("Suggerisci una modifica"), for the badge on the tab.
   const [ideasNew, setIdeasNew] = useState(0);
   const updateIdeas = useCallback((n: number) => { setIdeasNew(n); onIdeasChange?.(n); }, [onIdeasChange]);
@@ -117,7 +118,7 @@ export default function AdminPanel({ darkMode, onPendingChange, onIdeasChange }:
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] flex items-center gap-2 ${textColor}`}>Admin.</h2>
         <div className={`flex rounded-xl p-1 max-w-full overflow-x-auto ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist">
-          {[{ id: 'users' as const, label: 'Utenti', icon: <Users className="w-4 h-4" /> }, { id: 'ideas' as const, label: 'Suggerimenti', icon: <Lightbulb className="w-4 h-4" /> }, { id: 'stats' as const, label: 'Statistiche', icon: <Activity className="w-4 h-4" /> }, { id: 'guide' as const, label: 'Guida', icon: <BookOpen className="w-4 h-4" /> }].map(t => (
+          {[{ id: 'users' as const, label: 'Utenti', icon: <Users className="w-4 h-4" /> }, { id: 'ideas' as const, label: 'Suggerimenti', icon: <Lightbulb className="w-4 h-4" /> }, { id: 'news' as const, label: 'Newsletter', icon: <Mail className="w-4 h-4" /> }, { id: 'stats' as const, label: 'Statistiche', icon: <Activity className="w-4 h-4" /> }, { id: 'guide' as const, label: 'Guida', icon: <BookOpen className="w-4 h-4" /> }].map(t => (
             <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
               className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${tab === t.id ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-[var(--on-brand)]' : subTextColor}`}>
               {t.icon}{t.label}
@@ -128,7 +129,7 @@ export default function AdminPanel({ darkMode, onPendingChange, onIdeasChange }:
         </div>
       </div>
 
-      {tab === 'guide' ? <AdminGuide darkMode={darkMode} /> : tab === 'stats' ? <DeveloperDashboard darkMode={darkMode} /> : tab === 'ideas' ? <AdminSuggestions darkMode={darkMode} onNewCount={updateIdeas} /> : (
+      {tab === 'guide' ? <AdminGuide darkMode={darkMode} /> : tab === 'news' ? <AdminNewsletter darkMode={darkMode} /> : tab === 'stats' ? <DeveloperDashboard darkMode={darkMode} /> : tab === 'ideas' ? <AdminSuggestions darkMode={darkMode} onNewCount={updateIdeas} /> : (
         <>
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">⚠️ {error}</div>}
 

@@ -20,7 +20,7 @@ const SEEN_KEY = 'mynd_seen_welcome';
 const seenBefore = () => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; } };
 const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* ignore */ } };
 
-type Mode = 'welcome' | 'login' | 'register' | 'reset';
+type Mode = 'welcome' | 'login' | 'register' | 'reset' | 'verify';
 
 // 0-4 segments: length, letters of both cases, digits, symbols (or a long password).
 function passwordScore(p: string): number {
@@ -269,6 +269,33 @@ export function Field({ label, type = 'text', value, onChange, autoComplete, aut
   );
 }
 
+// The 6 digits of the email code: one real input (paste and iPhone's "from Mail" suggestion work)
+// drawn as six boxes.
+function CodeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [focused, setFocused] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return (
+    <div className="relative" onClick={() => ref.current?.focus()}>
+      <div className="grid grid-cols-6 gap-2" aria-hidden>
+        {Array.from({ length: 6 }, (_, i) => {
+          const current = focused && (i === value.length || (i === 5 && value.length >= 6));
+          return (
+            <span key={i} className="h-16 rounded-2xl flex items-center justify-center text-[28px] font-semibold tabular transition-colors"
+              style={{ background: 'var(--glass-well)', boxShadow: current ? 'inset 0 0 0 2px var(--brand-ring)' : 'inset 0 0 0 1px var(--border)', color: 'var(--text)' }}>
+              {value[i] || ''}
+            </span>
+          );
+        })}
+      </div>
+      <input ref={ref} value={value} onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} aria-label="Codice di verifica di 6 cifre"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-text" />
+    </div>
+  );
+}
+
 export function Notice({ kind, title, text }: { kind: 'ok' | 'error'; title: string; text?: string }) {
   return (
     <div className="glass-float rounded-[28px] p-5 flex gap-3.5 items-start animate-scale-in" role={kind === 'error' ? 'alert' : 'status'}>
@@ -296,6 +323,10 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(0);
+  // Email check: the 6-digit code sent after sign-up (or when an unverified account tries to log in).
+  const [code, setCode] = useState('');
+  const [newsletter, setNewsletter] = useState(false);
+  const [verifyFrom, setVerifyFrom] = useState<'register' | 'login'>('register');
 
   const setMode = (m: Mode) => { setModeState(m); setError(''); setSuccess(''); if (m !== 'welcome') markSeen(); };
 
@@ -314,6 +345,13 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error && /email not confirmed/i.test(error.message)) {
+        // The account exists but the email was never verified: a new code, and the code screen.
+        openVerify('login');
+        await sendCode(true);
+        setSuccess('Il tuo account non è ancora verificato: ti abbiamo mandato un nuovo codice.');
+        return;
+      }
       if (error) {
         if (/invalid login credentials/i.test(error.message) && matchesLegacyAccount(email, password)) {
           await migrateLegacyAccount();
@@ -344,8 +382,8 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
     } else if (data.user && data.user.identities?.length === 0) {
       setError('Esiste già un account online con questa email, ma con un\'altra password. Usa "Password dimenticata?".');
     } else {
-      setPassword('');
-      setSuccess('Abbiamo trasferito il tuo account online! Ti abbiamo inviato un\'email: clicca sul link per confermare, poi accedi con la stessa password. I tuoi dati verranno caricati al primo accesso.');
+      openVerify();
+      setSuccess('Abbiamo trasferito il tuo account online! Inserisci il codice che ti abbiamo mandato via email: i tuoi dati verranno caricati al primo accesso.');
     }
   };
 
@@ -364,7 +402,14 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
         email: email.trim(),
         password,
         // Terms/Privacy accepted with the checkbox: kept with the account as proof of consent.
-        options: { emailRedirectTo: redirectTo(), data: { name: name.trim(), legal_version: LEGAL_VERSION, legal_at: new Date().toISOString(), adult14: true } },
+        options: {
+          emailRedirectTo: redirectTo(),
+          data: {
+            name: name.trim(), legal_version: LEGAL_VERSION, legal_at: new Date().toISOString(), adult14: true,
+            // Newsletter: only with the separate, optional box (consent, GDPR art. 6.1.a).
+            newsletter, ...(newsletter ? { newsletter_at: new Date().toISOString() } : {}),
+          },
+        },
       });
       if (error) throw error;
       if (data.user && data.user.identities?.length !== 0) track('signup', 'accesso');
@@ -375,12 +420,47 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
         // Supabase answers this way when the email is already registered.
         setError('Esiste già un account con questa email. Accedi o recupera la password.');
       } else {
-        setModeState('login');
-        setPassword('');
-        setSuccess('Account creato! Ti abbiamo inviato un\'email: clicca sul link per confermare, poi accedi.');
+        // Email confirmation is on: the code screen (the email also has a link, as a fallback).
+        openVerify();
       }
     } catch (err) {
       setError(authErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openVerify = (from: 'register' | 'login' = 'register') => { setVerifyFrom(from); setModeState('verify'); setError(''); setSuccess(''); setCode(''); setResendIn(60); };
+
+  // A new code. Supabase allows one every ~60 seconds: its answer says how long to wait.
+  const sendCode = async (quiet = false) => {
+    if (!supabase || (!quiet && resendIn > 0)) return;
+    setError('');
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim(), options: { emailRedirectTo: redirectTo() } });
+    if (error) {
+      const wait = /after (\d+) second/i.exec(error.message);
+      if (wait) { setResendIn(Number(wait[1])); return; }
+      setError(authErrorMessage(error));
+      return;
+    }
+    setResendIn(60);
+    if (!quiet) setSuccess('Nuovo codice inviato. Controlla la posta (anche lo spam).');
+  };
+
+  const verifyCode = async (token = code) => {
+    if (!supabase || token.length < 6) return;
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      let result = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'signup' });
+      if (result.error && !/expired|invalid/i.test(result.error.message)) result = await supabase.auth.verifyOtp({ email: email.trim(), token, type: 'email' });
+      if (result.error) throw result.error;
+      const user = result.data.user || result.data.session?.user;
+      if (!user) throw new Error('Codice non valido.');
+      onLogin({ id: user.id, email: user.email || email.trim() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(/expired|invalid|otp/i.test(msg) ? 'Il codice è sbagliato o scaduto. Controlla l\'ultima email ricevuta o chiedine uno nuovo.' : authErrorMessage(err));
+      setCode('');
     } finally {
       setLoading(false);
     }
@@ -489,6 +569,14 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
               </span>
               <span className="text-sm leading-snug" style={{ color: 'var(--text-muted)' }}>Ho almeno 14 anni (o il consenso di un genitore), accetto i {termsLink} e ho letto l'{privacyLink}.</span>
             </label>
+            <label className="flex gap-3 items-start px-2 cursor-pointer">
+              <input type="checkbox" checked={newsletter} onChange={e => setNewsletter(e.target.checked)} className="sr-only peer" />
+              <span aria-hidden className="w-6 h-6 flex-shrink-0 rounded-[7px] flex items-center justify-center text-sm font-bold transition-colors peer-focus-visible:ring-2"
+                style={newsletter ? { background: '#C8F25A', color: '#0A0B0C' } : { border: '1.5px solid var(--border)' }}>
+                {newsletter && '✓'}
+              </span>
+              <span className="text-sm leading-snug" style={{ color: 'var(--text-muted)' }}>Voglio ricevere novità e consigli di studio via email (facoltativo, ti disiscrivi quando vuoi).</span>
+            </label>
             <PrimaryButton loading={loading} disabled={!canRegister}>Crea account</PrimaryButton>
           </div>
         }>
@@ -511,6 +599,39 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
                 </span>
               </div>
             </div>
+            {errorBox}
+          </div>
+        </ManifestoScreen>
+      </form>
+    );
+  }
+
+  if (mode === 'verify') {
+    const isIOSMail = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return (
+      <form onSubmit={e => { e.preventDefault(); verifyCode(); }}>
+        <ManifestoScreen back={() => setMode(verifyFrom)} glow="right" footer={
+          <div className="flex flex-col gap-3">
+            <PrimaryButton loading={loading} disabled={code.length < 6}>Verifica</PrimaryButton>
+            <button type="button" onClick={() => sendCode()} disabled={resendIn > 0} className="h-11 text-[15px] tabular disabled:opacity-60" style={{ color: 'var(--text-muted)' }}>
+              {resendIn > 0 ? `Non è arrivato? Invia di nuovo tra ${Math.floor(resendIn / 60)}:${String(resendIn % 60).padStart(2, '0')}` : 'Non è arrivato? Invia di nuovo il codice'}
+            </button>
+          </div>
+        }>
+          <div className="flex flex-col gap-9">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-[44px] font-bold leading-none" style={{ letterSpacing: '-0.045em' }}>Controlla la posta.</h1>
+              <p className="text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                Abbiamo mandato un codice di 6 cifre a <b style={{ color: 'var(--text)' }}>{email.trim()}</b>. Scrivilo qui per verificare la tua email.
+              </p>
+            </div>
+            <CodeInput value={code} onChange={v => { setCode(v); setError(''); if (v.length === 6 && !loading) verifyCode(v); }} />
+            <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+              <span>Non trovi l'email? Guarda anche in <b style={{ color: 'var(--text)' }}>Spam</b> o <b style={{ color: 'var(--text)' }}>Promozioni</b>. Il codice vale 1 ora.</span>
+              <span>Email sbagliata? <button type="button" onClick={() => setMode('register')} className="underline" style={{ color: 'var(--text)' }}>Correggila</button></span>
+              {isIOSMail && <a href="message://" className="underline w-fit" style={{ color: 'var(--text)' }}>Apri l'app Mail</a>}
+            </div>
+            {success && <Notice kind="ok" title="Fatto." text={success} />}
             {errorBox}
           </div>
         </ManifestoScreen>

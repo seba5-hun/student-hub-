@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Check, Copy, ExternalLink, ChevronDown, Rocket, Database, Scale, ShieldCheck, Link2, Info, ListChecks } from 'lucide-react';
+import { Check, Copy, ExternalLink, ChevronDown, Rocket, Database, Scale, ShieldCheck, Link2, Info, ListChecks, Mail } from 'lucide-react';
 import schemaSql from '../../supabase/schema.sql?raw';
 import suggestionsSql from '../../supabase/suggerimenti.sql?raw';
 import accountSql from '../../supabase/account.sql?raw';
 import businessSql from '../../supabase/business.sql?raw';
 import business2Sql from '../../supabase/business_2.sql?raw';
+import newsletterSql from '../../supabase/newsletter.sql?raw';
+import emailTemplate from '../../supabase/email_conferma.html?raw';
 import { LEGAL_VERSION } from '../lib/legal';
 
 // Admin → Guida: everything the owner needs at hand (what is left to do before selling, Supabase
@@ -15,7 +17,14 @@ const CHECK_KEY = 'mynd_admin_checklist';
 const PROJECT = 'czzlvcmnfvyrcjvyfyxi';
 const BRANCH = 'claude/github-private-repo-setup-84qt3z';
 
+const EMAIL_SUBJECT = 'Il tuo codice MYND: {{ .Token }}';
+const EMAIL_BODY = emailTemplate.replace(/^<!--[\s\S]*?-->\s*/, '');
+
 const TODO: { id: string; title: string; detail: string; link?: [string, string] }[] = [
+  { id: 'confirm-email', title: 'Attiva la verifica dell\'email', detail: 'Supabase → Authentication → Sign In / Providers → Email → "Confirm email" acceso. Senza, chi si registra entra subito senza codice.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/providers`, 'Apri i provider'] },
+  { id: 'email-template', title: 'Imposta l\'email con il codice', detail: 'Supabase → Authentication → Emails → "Confirm signup": copia oggetto e testo dalla sezione "Email di verifica" qui sotto.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/templates`, 'Apri i template email'] },
+  { id: 'smtp', title: 'Collega un servizio email (SMTP)', detail: 'Il servizio email incluso in Supabase manda pochissime email all\'ora (e nei progetti nuovi solo al tuo team): per i codici a tutti serve un SMTP, ad es. Brevo (300 email/giorno gratis) o Resend. Mittente consigliato: noreply@myndspace.world, poi aggiungi i record DNS (SPF/DKIM) che ti indicano. Supabase → Authentication → Emails → SMTP Settings.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/smtp`, 'Apri SMTP Settings'] },
+  { id: 'sql-newsletter', title: 'Esegui lo script "Newsletter" su Supabase', detail: 'Serve per vedere gli iscritti in Admin → Newsletter.' },
   { id: 'sql-suggestions', title: 'Esegui lo script "Suggerimenti" su Supabase', detail: 'Senza, i suggerimenti degli utenti non vengono salvati. Lo trovi qui sotto in "Script Supabase".' },
   { id: 'sql-account', title: 'Esegui lo script "Elimina account" su Supabase', detail: 'Senza, il pulsante "Elimina il mio account" in Privacy e dati non funziona.' },
   { id: 'google-scope', title: 'Google: togli il permesso "cloud-platform"', detail: 'Google Auth Platform → Accesso ai dati: lascia solo openid, email, profile e drive.file.', link: ['https://console.cloud.google.com/auth/scopes', 'Apri Google Auth Platform'] },
@@ -35,6 +44,7 @@ const SCRIPTS: { id: string; title: string; when: string; sql: string }[] = [
   { id: 'schema', title: 'Base dati (schema.sql)', when: 'Già eseguito all\'inizio. Rieseguilo solo se Claude te lo chiede (aggiorna tabelle e permessi senza cancellare dati).', sql: schemaSql },
   { id: 'suggerimenti', title: 'Suggerimenti (suggerimenti.sql)', when: 'Da eseguire una volta: salva i messaggi di "Suggerisci una modifica".', sql: suggestionsSql },
   { id: 'account', title: 'Elimina account (account.sql)', when: 'Da eseguire una volta: permette agli utenti di cancellare il proprio account (GDPR).', sql: accountSql },
+  { id: 'newsletter', title: 'Newsletter (newsletter.sql)', when: 'Da eseguire una volta: mostra in Admin → Newsletter chi ha dato il consenso.', sql: newsletterSql },
   { id: 'business', title: 'MYND Business (business.sql + business_2.sql)', when: 'Solo per la sezione Business (account admin).', sql: `${businessSql}\n\n${business2Sql}` },
 ];
 
@@ -165,6 +175,26 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
         </div>
       </Section>
 
+      <Section icon={<Mail className="w-5 h-5" />} title="Email di verifica (codice di 6 cifre)"
+        note="Chi si registra riceve un codice e lo scrive in MYND; può chiederne uno nuovo ogni 60 secondi. Chi entra con Google è già verificato.">
+        <ol className={`text-sm space-y-1 list-decimal pl-5 mb-3 ${sub}`}>
+          <li>Supabase → Authentication → Emails → <b className={text}>Confirm signup</b>.</li>
+          <li>Nel campo <b className={text}>Subject</b> incolla l'oggetto, nel campo <b className={text}>Message body</b> il testo.</li>
+          <li>Premi <b className={text}>Save</b>. Fai una prova registrandoti con un'altra tua email.</li>
+        </ol>
+        <div className="space-y-2">
+          <div className={`rounded-xl p-3 flex items-center justify-between gap-3 ${well}`}>
+            <span className="min-w-0"><span className={`block text-xs ${sub}`}>Oggetto</span><span className={`block text-sm font-mono break-all ${text}`}>{EMAIL_SUBJECT}</span></span>
+            <CopyButton id="email-subject" value={EMAIL_SUBJECT} />
+          </div>
+          <div className={`rounded-xl p-3 flex items-center justify-between gap-3 ${well}`}>
+            <span className="min-w-0"><span className={`block text-xs ${sub}`}>Testo dell'email (HTML)</span><span className={`block text-sm ${text}`}>Codice grande in verde, link di riserva, stile MYND</span></span>
+            <CopyButton id="email-body" value={EMAIL_BODY} label="Copia testo" />
+          </div>
+        </div>
+        <p className={`text-xs mt-3 ${sub}`}>Durata del codice e intervallo tra un invio e l'altro: Supabase → Authentication → Sign In / Providers → Email ("Email OTP Expiration", di base 1 ora).</p>
+      </Section>
+
       <Section icon={<Scale className="w-5 h-5" />} title="Documenti legali"
         note={`Versione attuale accettata dagli utenti: ${LEGAL_VERSION}. I campi in giallo nelle pagine vanno ancora completati.`}>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -201,6 +231,8 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
           <li><b className={text}>AI</b>: ogni utente collega la propria chiave (Gemini gratis consigliata) nella Guida Studio AI; i costi AI non sono tuoi.</li>
           <li><b className={text}>Le tue MYND</b>: gli utenti possono creare versioni adattate (università, test…) da Home → Personalizza.</li>
           <li><b className={text}>Demo</b>: "Dai un'occhiata, senza account" mostra l'app con dati finti, niente viene salvato.</li>
+          <li><b className={text}>Verifica email</b>: chi si registra con email e password entra solo dopo aver scritto il codice ricevuto; se prova ad accedere senza averlo fatto, riceve un nuovo codice.</li>
+          <li><b className={text}>Newsletter</b>: casella facoltativa alla registrazione e interruttore in "Privacy e dati"; gli iscritti (solo email verificate) sono in Admin → Newsletter, con CSV da importare in Brevo o Mailchimp.</li>
         </ul>
       </Section>
 
