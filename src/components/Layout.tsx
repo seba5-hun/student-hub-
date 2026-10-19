@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase, Lightbulb } from 'lucide-react';
+import PrivacyCenter from './PrivacyCenter';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 import Logo from './Logo';
@@ -23,6 +24,8 @@ interface LayoutProps {
   adminBadge?: number;
   // "Suggerisci una modifica" (read by the admin).
   onSuggest?: () => void;
+  // The account was deleted from "Privacy e dati" (absent in the demo).
+  onAccountDeleted?: () => void;
 }
 
 export const SECTIONS = [
@@ -43,7 +46,8 @@ const MINDSET_SECTION = { id: 'mindset', label: 'Performance', icon: Compass };
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted }: LayoutProps) {
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const prof = useProfile();
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -129,6 +133,9 @@ export default function Layout({ children, currentSection, onSectionChange, user
                     <button onClick={handleImport} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
                       <Upload className="w-4 h-4" /> Importa dati
                     </button>
+                    <button onClick={() => { setShowMenu(false); setPrivacyOpen(true); }} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
+                      <ShieldCheck className="w-4 h-4" /> Privacy e dati
+                    </button>
                     {onSuggest && (
                       <button onClick={() => { setShowMenu(false); onSuggest(); }} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
                         <Lightbulb className="w-4 h-4" /> Suggerisci una modifica
@@ -185,6 +192,11 @@ export default function Layout({ children, currentSection, onSectionChange, user
             )}
           </div>
         </div>
+      )}
+
+      {privacyOpen && (
+        <PrivacyCenter userId={user.id} email={user.email} darkMode={darkMode} acceptedAt={data.settings.legal?.at}
+          onExport={handleExport} onDeleted={onAccountDeleted} onClose={() => setPrivacyOpen(false)} />
       )}
 
       <main className="pb-8 px-4 max-w-7xl mx-auto" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top))' }}>

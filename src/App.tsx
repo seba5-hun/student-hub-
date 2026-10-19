@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react';
+import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAccount } from './lib/legal';
+import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
 import { ProfileContext, makeProfileApi } from './lib/profile';
 import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
@@ -262,6 +264,32 @@ function App() {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => { flushSave(); }, 800);
   }, [user, flushSave]);
+
+  // Terms and Privacy: accounts without the current acceptance (Google sign-ups, documents changed)
+  // see the LegalGate once; the acceptance given at sign-up is read from the account.
+  const [legalNeeded, setLegalNeeded] = useState(false);
+  const legalVersion = data?.settings.legal?.version;
+  const hasUserData = !!data;
+  useEffect(() => {
+    if (!user || isDemoUser(user) || !hasUserData) return;
+    if (legalVersion === LEGAL_VERSION) { setLegalNeeded(false); return; }
+    let alive = true;
+    acceptanceFromAccount()
+      .then(acc => {
+        if (!alive) return;
+        if (acc?.version === LEGAL_VERSION) updateData(prev => ({ ...prev, settings: { ...prev.settings, legal: acc } }));
+        else setLegalNeeded(true);
+      })
+      .catch(() => { if (alive) setLegalNeeded(true); });
+    return () => { alive = false; };
+  }, [user, hasUserData, legalVersion, updateData]);
+
+  const acceptLegal = () => {
+    const acc = acceptedNow();
+    updateData(prev => ({ ...prev, settings: { ...prev.settings, legal: acc } }));
+    saveAcceptanceToAccount(acc).catch(() => {});
+    setLegalNeeded(false);
+  };
 
   const dataRef = useRef(data);
   const userRef = useRef(user);
@@ -527,6 +555,26 @@ function App() {
     setCurrentSection('home');
   };
 
+  // "Elimina il mio account" done: nothing is saved anymore and the copies in this browser go too.
+  const handleAccountDeleted = () => {
+    window.clearTimeout(saveTimer.current);
+    pendingSave.current = null;
+    const id = user?.id;
+    try {
+      if (id) Object.keys(localStorage).filter(k => k.includes(id)).forEach(k => localStorage.removeItem(k));
+      localStorage.removeItem('mynd_name');
+    } catch { /* ignore */ }
+    analyzeQueue.current = [];
+    setAnalyzing([]);
+    setUser(null);
+    setData(null);
+    setLoadError('');
+    setAccountStatus(null);
+    setAdminPending(0);
+    setAdminIdeas(0);
+    setCurrentSection('home');
+  };
+
   // Toggle dark mode
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode;
@@ -749,6 +797,7 @@ function App() {
         showDeveloper={isDeveloper(user.email)}
         adminBadge={adminPending + adminIdeas}
         onSuggest={() => setSuggestOpen(true)}
+        onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -856,6 +905,9 @@ function App() {
         <Suspense fallback={<div className="fixed inset-0 z-[60] gradient-bg mesh-gradient" />}>
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
         </Suspense>
+      )}
+      {legalNeeded && !isDemo && (
+        <LegalGate updated={!!data.settings.legal || !!data.settings.onboardingSeen} onAccept={acceptLegal} onLogout={handleLogout} />
       )}
       {suggestOpen && (
         <Suspense fallback={null}>

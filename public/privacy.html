@@ -18,15 +18,24 @@
     .card { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); border-radius: 28px; padding: 28px; }
     h1 { color: #ECEEF0; font-size: 44px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; margin: 0 0 10px; }
     h2 { color: #ECEEF0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 32px 0 8px; }
-    p, li { font-size: 16px; color: #C3C7CC; }
-    b { color: #ECEEF0; }
-    ul { padding-left: 1.2rem; }
+    h3 { color: #ECEEF0; font-size: 17px; font-weight: 600; margin: 20px 0 4px; }
+    p, li, td, th { font-size: 16px; color: #C3C7CC; }
+    b, th { color: #ECEEF0; }
+    ul, ol { padding-left: 1.2rem; }
     a { color: #C8F25A; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 14.5px; }
+    th { font-weight: 600; }
     .muted { color: #969BA1; font-size: 13px; }
+    .todo { background: rgba(255,200,0,.18); color: #FFD95A; border-radius: 4px; padding: 0 4px; }
+    .box { background: rgba(200,242,90,.08); border: 1px solid rgba(200,242,90,.25); border-radius: 16px; padding: 14px 16px; margin: 14px 0; }
     .back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; text-decoration: none; color: #ECEEF0; }
     .back span { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); display: inline-flex; align-items: center; justify-content: center; }
     .logo { font-weight: 600; letter-spacing: -0.03em; }
     .logo i { font-style: normal; color: #C8F25A; }
+    nav.legal { margin-top: 28px; }
+    .form-line { border-bottom: 1px solid rgba(255,255,255,.3); min-height: 28px; margin: 6px 0 14px; }
+    @media print { body { background: #fff; color: #000; } .card { box-shadow: none; border: 0; } p, li, td, th, b, h1, h2 { color: #000; } .back, nav.legal { display: none; } .form-line { border-color: #000; } }
   </style>
 </head>
 <body>
@@ -34,24 +43,66 @@
     <a class="back" href="/"><span>←</span> <b class="logo">M<i>Y</i>ND</b></a>
     <div class="card">
       <h1>Privacy.</h1>
-      <p class="muted">Ultimo aggiornamento: 10 ottobre 2026</p>
+      <p class="muted">Ultimo aggiornamento: 19 ottobre 2026</p>
 
-      <p>MYND (prima "Student Hub") è un'app per organizzare studio, sport, sonno e progetti: impegni, voti, timer, archivio dei materiali e un coach AI.
-      Questa pagina spiega quali dati usa e come.</p>
+      <p>Questa informativa spiega, ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 ("GDPR") e del
+      D.Lgs. 196/2003 ("Codice Privacy"), quali dati personali tratta <b>MYND</b> (l'app su myndspace.world, prima
+      "Student Hub"), perché, per quanto tempo e quali diritti hai. L'abbiamo scritta in modo semplice: se qualcosa
+      non è chiaro scrivici.</p>
 
-      <h2>Dati che salviamo</h2>
+      <h2>1. Chi è il titolare del trattamento</h2>
+      <p><b>Sebastiano Zorzi</b> — <span class="todo">[indirizzo completo della sede / residenza]</span> — P.IVA <span class="todo">[Partita IVA]</span> — email <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a> — PEC <span class="todo">[indirizzo PEC]</span>.<br>
+      Non è stato nominato un Responsabile della protezione dei dati (DPO), perché non obbligatorio: per ogni
+      richiesta puoi scrivere all'email qui sopra.</p>
+
+      <h2>2. Quali dati trattiamo</h2>
       <ul>
-        <li><b>Account</b>: indirizzo email e password (gestita in forma cifrata dal servizio di autenticazione Supabase).
-        Se accedi con Google, riceviamo solo nome, indirizzo email e foto del profilo.</li>
-        <li><b>Dati di studio</b>: impegni, voti, sessioni di studio, materie, note e impostazioni che inserisci tu.</li>
-        <li><b>Archivio</b>: i file che carichi e il loro testo trascritto, usato dal tutor AI.</li>
-        <li><b>Chat</b> con la Guida Studio AI.</li>
-        <li><b>Statistiche d'uso anonime</b>: quali sezioni vengono aperte e per quanto tempo, il tipo di dispositivo.
-        Non registriamo il contenuto di note, file o chat nelle statistiche.</li>
+        <li><b>Account</b>: nome, indirizzo email, password (conservata solo in forma cifrata dal servizio di autenticazione);
+        se accedi con Google, nome, email e foto del profilo; data di registrazione e accettazione dei termini (con la
+        dichiarazione di avere almeno 14 anni).</li>
+        <li><b>Contenuti che inserisci</b>: impegni, voti, sessioni di studio, materie, note, impostazioni, le versioni
+        di MYND che crei, i file caricati nell'Archivio con il loro testo trascritto e le chat della Guida Studio AI.</li>
+        <li><b>Acquisti</b> (piani a pagamento): piano scelto, importi, date, dati di fatturazione e stato dei pagamenti.
+        I dati della carta li gestisce direttamente il fornitore di pagamento: <b>noi non li vediamo e non li conserviamo</b>.</li>
+        <li><b>Messaggi</b> che ci mandi (assistenza, email, "Suggerisci una modifica"), con la sezione dell'app da cui scrivi.</li>
+        <li><b>Dati tecnici</b> necessari al funzionamento e alla sicurezza (indirizzo IP, tipo di browser e dispositivo,
+        orari di accesso, registri di errore), trattati dai nostri fornitori di infrastruttura.</li>
+        <li><b>Statistiche d'uso, solo se acconsenti</b>: quali sezioni apri, per quanto tempo, quante domande fai al tutor
+        o quanti file carichi, il tipo di dispositivo. Non registriamo mai il contenuto di note, file o chat.</li>
       </ul>
-      <p>I dati sono conservati su Supabase (database e spazio file) e ogni utente può vedere solo i propri.</p>
+      <p>MYND non ti chiede dati sulla salute o altri dati "particolari" (art. 9 GDPR). Ti chiediamo di non inserirli
+      nelle note o nei file, né dati di altre persone: se lo fai, li conserviamo solo per mostrarli a te.</p>
 
-      <h2>Google Drive</h2>
+      <h2>3. Perché li trattiamo e su quale base giuridica</h2>
+      <table>
+        <tr><th>Finalità</th><th>Base giuridica</th></tr>
+        <tr><td>Creare e gestire il tuo account e fornirti MYND (salvataggio dei dati, sincronizzazione, archivio, tutor AI, assistenza)</td><td>Esecuzione del contratto (art. 6.1.b)</td></tr>
+        <tr><td>Vendere i piani a pagamento, incassare, emettere fatture, gestire rimborsi e recesso</td><td>Contratto (art. 6.1.b) e obblighi di legge fiscali e contabili (art. 6.1.c)</td></tr>
+        <tr><td>Sicurezza del servizio, prevenzione di abusi e frodi, approvazione degli account</td><td>Legittimo interesse (art. 6.1.f)</td></tr>
+        <tr><td>Statistiche d'uso per migliorare l'app</td><td>Consenso (art. 6.1.a), revocabile quando vuoi da "Privacy e dati"</td></tr>
+        <tr><td>Leggere e rispondere ai suggerimenti e alle richieste</td><td>Legittimo interesse (art. 6.1.f) / contratto</td></tr>
+        <tr><td>Email di servizio (conferma account, recupero password, ricevute, avvisi su modifiche dei termini)</td><td>Contratto (art. 6.1.b)</td></tr>
+        <tr><td>Difendere i nostri diritti e rispondere alle autorità</td><td>Legittimo interesse (art. 6.1.f) e obblighi di legge (art. 6.1.c)</td></tr>
+      </table>
+      <p>Non inviamo pubblicità, non facciamo profilazione a fini commerciali e <b>non vendiamo i tuoi dati</b>.</p>
+
+      <h2>4. Minori</h2>
+      <p>MYND è pensata anche per studenti. In Italia si può acconsentire da soli ai servizi online dai <b>14 anni</b>
+      (art. 2-quinquies Codice Privacy): sotto i 14 anni l'account può essere creato solo con il consenso di chi esercita
+      la responsabilità genitoriale. Gli <b>acquisti</b> dei piani a pagamento sono riservati ai maggiorenni o vanno fatti
+      dal genitore/tutore. Se ci accorgiamo che un account è stato creato senza i requisiti, possiamo sospenderlo e
+      cancellarne i dati. I genitori possono scriverci per qualsiasi richiesta.</p>
+
+      <h2>5. Intelligenza artificiale</h2>
+      <p>Quando usi la Guida Studio AI o fai leggere un file, le tue domande, le foto e il testo del materiale scelto
+      vengono inviati al fornitore di intelligenza artificiale che hai scelto (Google Gemini, Groq, OpenAI ChatGPT,
+      Anthropic Claude oppure OpenRouter e il modello selezionato), <b>con la tua chiave API e direttamente dal tuo
+      browser</b>, per generare la risposta. Le chiavi restano salvate solo nel tuo browser. Il fornitore tratta questi
+      dati in base al rapporto che hai con lui e alla sua informativa; con i piani gratuiti dei fornitori i dati possono
+      essere usati per migliorare i loro servizi. Le risposte sono generate automaticamente: MYND non prende decisioni
+      automatizzate che producono effetti giuridici su di te (art. 22 GDPR).</p>
+
+<h2>Google Drive</h2>
       <p>Se scegli di collegare Google Drive, MYND chiede solo il permesso <b>drive.file</b>: può vedere,
       creare e modificare <b>esclusivamente i file che carica lui</b> nella cartella "Student Hub" del tuo Drive.
       Non può leggere né modificare nessun altro file del tuo Drive.</p>
@@ -70,14 +121,10 @@
       <b>foto del profilo</b> (permessi openid, email, profile), usati per creare e riconoscere il tuo account MYND.
       Non riceviamo la tua password di Google.</p>
 
-      <h2>Tutor AI (Google Gemini, Groq, ChatGPT, Claude, OpenRouter)</h2>
-      <p>Quando usi la Guida Studio AI o fai leggere un file, le tue domande, le foto e il testo del materiale scelto
-      vengono inviati al fornitore di intelligenza artificiale che hai scelto (Google Gemini, Groq, OpenAI ChatGPT, Anthropic
-      Claude oppure OpenRouter e il modello selezionato), con la <b>tua</b> chiave API e direttamente dal tuo browser, per generare
-      la risposta. Le chiavi restano salvate solo nel tuo browser. Ogni fornitore tratta i dati secondo la propria
-      informativa; con i modelli gratuiti i dati possono essere usati per migliorare i servizi.</p>
+      
 
-      <h2>Uso Limitato dei dati di Google</h2>
+
+<h2>Uso Limitato dei dati di Google</h2>
       <p>L'uso e il trasferimento ad altre app delle informazioni ricevute dalle API di Google rispettano le
       <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>,
       inclusi i requisiti di Uso Limitato (Limited Use). I dati ricevuti da Google (account e Drive) sono usati
@@ -85,18 +132,62 @@
       letti da persone (salvo tuo consenso, per motivi di sicurezza o per obblighi di legge) e non vengono usati per
       addestrare modelli di intelligenza artificiale.</p>
 
-      <h2>Cosa non facciamo</h2>
+      
+
+      <h2>6. A chi comunichiamo i dati</h2>
+      <p>I dati sono trattati da noi e da fornitori che lavorano per nostro conto come <b>responsabili del trattamento</b>
+      (art. 28 GDPR), solo per le finalità indicate:</p>
       <ul>
-        <li>Non vendiamo né cediamo i tuoi dati a terzi.</li>
-        <li>Non mostriamo pubblicità.</li>
+        <li><b>Supabase Inc.</b> — database, autenticazione, archivio dei file ed email di servizio;</li>
+        <li><b>Vercel Inc.</b> — hosting del sito e dell'app;</li>
+        <li><b>Google</b> — accesso con Google e Google Drive, solo se li usi;</li>
+        <li><b><span class="todo">[Stripe]</span></b> — pagamenti online, solo se acquisti un piano;</li>
+        <li>consulenti fiscali e contabili, per la fatturazione e gli obblighi di legge.</li>
+      </ul>
+      <p>I fornitori di intelligenza artificiale (punto 5) ricevono i dati per tua scelta e con il tuo account presso di loro.
+      I dati possono essere comunicati alle autorità quando lo impone la legge.</p>
+
+      <h2>7. Trasferimenti fuori dall'Unione europea</h2>
+      <p>Alcuni fornitori hanno sede negli Stati Uniti o possono trattare dati fuori dallo Spazio economico europeo. In questi
+      casi il trasferimento avviene con le garanzie previste dal GDPR: decisione di adeguatezza (EU-US Data Privacy
+      Framework) per le società certificate oppure Clausole contrattuali standard approvate dalla Commissione europea
+      (art. 46 GDPR). Puoi chiederci una copia di queste garanzie.</p>
+
+      <h2>8. Per quanto tempo li conserviamo</h2>
+      <ul>
+        <li><b>Account e contenuti</b>: finché hai l'account. Se lo elimini, li cancelliamo subito dal database; le copie di
+        sicurezza dei fornitori vengono sovrascritte entro 90 giorni.</li>
+        <li><b>Dati di acquisti e fatture</b>: 10 anni, come richiesto dalla legge (art. 2220 c.c. e norme fiscali).</li>
+        <li><b>Statistiche d'uso</b>: fino a 24 mesi; quando elimini l'account restano solo in forma anonima.</li>
+        <li><b>Messaggi e suggerimenti</b>: finché servono a gestire la richiesta e comunque non oltre la chiusura dell'account.</li>
+        <li><b>Dati tecnici di sicurezza</b>: per il tempo stabilito dai fornitori, di norma pochi mesi.</li>
       </ul>
 
-      <h2>I tuoi diritti</h2>
-      <p>Puoi esportare i tuoi dati dal menu dell'app, modificarli o cancellarli in qualsiasi momento. Per chiedere
-      la cancellazione completa dell'account o per qualsiasi domanda scrivi a
-      <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
+      <h2>9. I tuoi diritti</h2>
+      <p>Puoi chiedere in ogni momento di <b>accedere</b> ai tuoi dati, <b>correggerli</b>, <b>cancellarli</b>, <b>limitarne</b>
+      il trattamento, <b>riceverli</b> in un formato leggibile (portabilità) e <b>opporti</b> ai trattamenti basati sul legittimo
+      interesse (artt. 15–21 GDPR). Puoi <b>revocare il consenso</b> alle statistiche quando vuoi, senza conseguenze sul
+      servizio. Molte cose le fai da solo, dall'app, nel menu dell'account → <b>"Privacy e dati"</b>: scaricare tutti i tuoi
+      dati, attivare o disattivare le statistiche, <b>eliminare l'account</b>. Per il resto scrivi a <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>: rispondiamo
+      entro un mese.</p>
+      <p>Se pensi che il trattamento violi la legge puoi proporre reclamo al <b>Garante per la protezione dei dati personali</b>
+      (<a href="https://www.garanteprivacy.it" target="_blank" rel="noopener">www.garanteprivacy.it</a>).</p>
 
-      <h2>Google user data — English summary</h2>
+      <h2>10. Sicurezza</h2>
+      <p>Connessioni cifrate (HTTPS), password conservate solo in forma cifrata, accesso ai dati limitato a ciascun account
+      con regole a livello di database (Row Level Security), file dell'Archivio in uno spazio privato. Nessun sistema è
+      sicuro al 100%: in caso di violazione dei dati che ti riguardi ti avviseremo come previsto dal GDPR.</p>
+
+      <h2>11. Cookie e archiviazione nel browser</h2>
+      <p>Usiamo solo l'archiviazione tecnica necessaria e, con il tuo consenso, le statistiche d'uso. I dettagli sono nella
+      <a href="/cookie.html">cookie policy</a>.</p>
+
+      <h2>12. Modifiche</h2>
+      <p>Se cambiamo questa informativa in modo importante te lo diciamo nell'app e, quando serve, ti chiediamo di nuovo
+      di prenderne visione. La data in alto indica l'ultima versione.</p>
+
+
+<h2>Google user data — English summary</h2>
       <p>MYND requests Google user data only for features the user starts: <b>Sign in with Google</b> (openid, email,
       profile: to create and identify the account), <b>Google Drive</b> (drive.file: only files MYND itself uploads, in the
       "Student Hub" folder). Access tokens are used in the user's browser, are never stored on our servers and expire
@@ -108,10 +199,8 @@
       access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>
       and request deletion of their data at <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a>.</p>
 
-      <p class="muted"><a href="/termini.html">Termini di servizio</a> · <a href="/info.html">Cos'è MYND</a></p>
-
-      <h2>Contatti</h2>
-      <p>MYND — Sebastiano Zorzi · <a href="mailto:flowbase.service@gmail.com">flowbase.service@gmail.com</a></p>
+      
+      <nav class="legal muted"><a href="/privacy.html">Privacy</a> · <a href="/termini.html">Termini e condizioni</a> · <a href="/cookie.html">Cookie</a> · <a href="/note-legali.html">Note legali</a> · <a href="/recesso.html">Modulo di recesso</a> · <a href="/info.html">Cos'è MYND</a></nav>
     </div>
   </main>
 </body>

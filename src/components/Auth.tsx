@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AuthUser, matchesLegacyAccount } from '../lib/store';
 import { supabase, authErrorMessage, googleLoginEnabled } from '../lib/supabase';
+import { LEGAL_VERSION } from '../lib/legal';
 import { loadGoogleSignIn, makeNonce, googleClientId, isStandaloneApp } from '../lib/googleSignIn';
 import { track } from '../lib/analytics';
 import { Loader2, Check, AlertCircle, Eye } from 'lucide-react';
@@ -233,6 +234,11 @@ function GoogleButton({ onError, onLogin }: { onError: (msg: string) => void; on
           Continua con Google
         </button>
       )}
+      {/* Google creates the account in one tap: the acceptance is written under the button. */}
+      <p className="text-xs -mt-3 text-center leading-snug" style={{ color: 'var(--text-subtle)' }}>
+        Continuando con Google accetti i <a href="/termini.html" target="_blank" rel="noopener" className="underline">Termini</a> e dichiari di aver letto
+        l'<a href="/privacy.html" target="_blank" rel="noopener" className="underline">informativa privacy</a>.
+      </p>
       <div className="flex items-center gap-3 text-xs uppercase tracking-[0.12em]" style={{ color: 'var(--text-subtle)' }}>
         <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />oppure<span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
       </div>
@@ -357,7 +363,8 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: redirectTo(), data: { name: name.trim() } },
+        // Terms/Privacy accepted with the checkbox: kept with the account as proof of consent.
+        options: { emailRedirectTo: redirectTo(), data: { name: name.trim(), legal_version: LEGAL_VERSION, legal_at: new Date().toISOString(), adult14: true } },
       });
       if (error) throw error;
       if (data.user && data.user.identities?.length !== 0) track('signup', 'accesso');
@@ -399,6 +406,7 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
   };
 
   const privacyLink = <a href="/privacy.html" target="_blank" rel="noopener" className="underline" style={{ color: 'var(--text)' }}>informativa sulla privacy</a>;
+  const termsLink = <a href="/termini.html" target="_blank" rel="noopener" className="underline" style={{ color: 'var(--text)' }}>Termini e condizioni</a>;
   const errorBox = error ? <Notice kind="error" title="Qualcosa non va." text={error} /> : null;
 
   if (mode === 'welcome') {
@@ -413,7 +421,7 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
             </button>
           )}
           <p className="text-xs text-center" style={{ color: 'var(--text-subtle)' }}>
-            <a href="/info.html" className="underline">Cos'è MYND</a> · <a href="/privacy.html" className="underline">Privacy</a> · <a href="/termini.html" className="underline">Termini</a>
+            <a href="/info.html" className="underline">Cos'è MYND</a> · <a href="/privacy.html" className="underline">Privacy</a> · <a href="/termini.html" className="underline">Termini</a> · <a href="/cookie.html" className="underline">Cookie</a> · <a href="/note-legali.html" className="underline">Note legali</a>
           </p>
         </div>
       }>
@@ -479,7 +487,7 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
                 style={privacy ? { background: '#C8F25A', color: '#0A0B0C' } : { border: '1.5px solid var(--border)' }}>
                 {privacy && '✓'}
               </span>
-              <span className="text-sm leading-snug" style={{ color: 'var(--text-muted)' }}>Ho letto l'{privacyLink}.</span>
+              <span className="text-sm leading-snug" style={{ color: 'var(--text-muted)' }}>Ho almeno 14 anni (o il consenso di un genitore), accetto i {termsLink} e ho letto l'{privacyLink}.</span>
             </label>
             <PrimaryButton loading={loading} disabled={!canRegister}>Crea account</PrimaryButton>
           </div>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cookie · MYND</title>
+  <link rel="icon" type="image/png" href="/favicon-32.png">
+  <meta name="theme-color" content="#0A0B0C">
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; min-height: 100vh; line-height: 1.6; -webkit-font-smoothing: antialiased;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+      color: #ECEEF0;
+      background: radial-gradient(55% 30% at 10% 22%, rgba(200,242,90,.10), transparent 70%), radial-gradient(60% 35% at 95% 70%, rgba(130,150,180,.12), transparent 70%), #0A0B0C fixed;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 20px 64px; }
+    .card { background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); border-radius: 28px; padding: 28px; }
+    h1 { color: #ECEEF0; font-size: 44px; font-weight: 700; letter-spacing: -0.045em; line-height: 1; margin: 0 0 10px; }
+    h2 { color: #ECEEF0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 32px 0 8px; }
+    h3 { color: #ECEEF0; font-size: 17px; font-weight: 600; margin: 20px 0 4px; }
+    p, li, td, th { font-size: 16px; color: #C3C7CC; }
+    b, th { color: #ECEEF0; }
+    ul, ol { padding-left: 1.2rem; }
+    a { color: #C8F25A; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+    th, td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 14.5px; }
+    th { font-weight: 600; }
+    .muted { color: #969BA1; font-size: 13px; }
+    .todo { background: rgba(255,200,0,.18); color: #FFD95A; border-radius: 4px; padding: 0 4px; }
+    .box { background: rgba(200,242,90,.08); border: 1px solid rgba(200,242,90,.25); border-radius: 16px; padding: 14px 16px; margin: 14px 0; }
+    .back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; text-decoration: none; color: #ECEEF0; }
+    .back span { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,.22); display: inline-flex; align-items: center; justify-content: center; }
+    .logo { font-weight: 600; letter-spacing: -0.03em; }
+    .logo i { font-style: normal; color: #C8F25A; }
+    nav.legal { margin-top: 28px; }
+    .form-line { border-bottom: 1px solid rgba(255,255,255,.3); min-height: 28px; margin: 6px 0 14px; }
+    @media print { body { background: #fff; color: #000; } .card { box-shadow: none; border: 0; } p, li, td, th, b, h1, h2 { color: #000; } .back, nav.legal { display: none; } .form-line { border-color: #000; } }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/"><span>←</span> <b class="logo">M<i>Y</i>ND</b></a>
+    <div class="card">
+      <h1>Cookie.</h1>
+      <p class="muted">Ultimo aggiornamento: 19 ottobre 2026</p>
+
+      <p>MYND non usa cookie pubblicitari o di profilazione. Per funzionare salva alcune informazioni nel tuo browser
+      (archiviazione locale, simile ai cookie) e, solo se acconsenti, raccoglie statistiche d'uso.</p>
+
+      <h2>1. Strumenti tecnici (sempre attivi)</h2>
+      <p>Servono a far funzionare l'app e non richiedono consenso (art. 122 Codice Privacy):</p>
+      <table>
+        <tr><th>Cosa</th><th>A cosa serve</th><th>Durata</th></tr>
+        <tr><td>Sessione di accesso (sb-…-auth-token)</td><td>Tenerti collegato al tuo account in modo sicuro</td><td>Fino all'uscita</td></tr>
+        <tr><td>Copia locale dei dati e preferenze (studenthub_…, mynd_…)</td><td>Tema, impostazioni, uso offline e salvataggi veloci</td><td>Finché non le cancelli o esci</td></tr>
+        <tr><td>Chiavi AI (gemini_api_key, studenthub_…_key)</td><td>Usare il fornitore di AI che hai scelto, solo nel tuo browser</td><td>Finché non le rimuovi</td></tr>
+        <tr><td>Scelta sulle statistiche (mynd_stats_consent)</td><td>Ricordare la tua scelta per non chiedertela ogni volta</td><td>Finché non la cambi</td></tr>
+      </table>
+
+      <h2>2. Statistiche d'uso (solo con il tuo consenso)</h2>
+      <p>Se premi "Accetta" nel banner, MYND salva un identificativo casuale del browser (studenthub_visitor, studenthub_session)
+      e registra sui propri server quali sezioni apri, per quanto tempo e il tipo di dispositivo, per capire cosa migliorare.
+      Non registriamo il contenuto di note, file o chat e non usiamo strumenti di terze parti come Google Analytics.
+      Puoi cambiare idea quando vuoi dal menu dell'account → <b>"Privacy e dati"</b>.</p>
+
+      <h2>3. Servizi di terze parti</h2>
+      <ul>
+        <li><b>Accedi con Google</b>: quando usi il pulsante di Google viene caricato un componente di Google
+        (accounts.google.com), che può usare propri cookie per l'accesso. Vedi la
+        <a href="https://policies.google.com/technologies/cookies" target="_blank" rel="noopener">policy di Google</a>.</li>
+        <li><b>Pagamenti</b>: nella pagina di pagamento il fornitore (<span class="todo">[Stripe]</span>) usa cookie tecnici e antifrode propri.</li>
+      </ul>
+
+      <h2>4. Come gestirli</h2>
+      <p>Puoi cancellare i dati salvati dal browser nelle sue impostazioni (sezione privacy / dati dei siti). Se cancelli
+      quelli tecnici dovrai accedere di nuovo. Per tutto il resto vedi l'<a href="/privacy.html">informativa privacy</a>.</p>
+      <nav class="legal muted"><a href="/privacy.html">Privacy</a> · <a href="/termini.html">Termini e condizioni</a> · <a href="/cookie.html">Cookie</a> · <a href="/note-legali.html">Note legali</a> · <a href="/recesso.html">Modulo di recesso</a> · <a href="/info.html">Cos'è MYND</a></nav>
+    </div>
+  </main>
+</body>
+</html>

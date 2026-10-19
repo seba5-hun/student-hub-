@@ -108,6 +108,8 @@ export interface UserSettings {
   layouts?: MyndLayout[];
   activeLayout?: string;            // id of the active version (none: the default MYND)
   defaultLayout?: LayoutSnapshot;   // Home and menu of the default MYND while another is active
+  // Terms and Privacy accepted (version and when), with the age declaration: proof of consent.
+  legal?: { version: string; at: string; adult14: boolean };
 }
 
 export interface LayoutSnapshot {

@@ -1,6 +1,7 @@
 // Usage statistics for the developer page. Only counts and times are recorded (which section,
 // for how long, how many AI questions/uploads) — never the content of notes, files or chats.
 import { supabase } from './supabase';
+import { statsConsent } from './legal';
 
 export const DEVELOPER_EMAIL = 'flowbase.service@gmail.com';
 
@@ -29,8 +30,9 @@ function stored(storage: 'local' | 'session', key: string): string {
 }
 
 // Same browser = same visitor; a new tab or a return after closing = new session.
-const visitorId = stored('local', 'studenthub_visitor');
-const sessionId = stored('session', 'studenthub_session');
+// Created only when the user agreed to the statistics (nothing is stored in the browser before).
+const visitorId = () => stored('local', 'studenthub_visitor');
+const sessionId = () => stored('session', 'studenthub_session');
 let userId: string | null = null;
 
 function device(): string {
@@ -42,12 +44,14 @@ function device(): string {
 
 export function track(event: EventName, section?: string | null, seconds = 0): void {
   if (!supabase) return;
+  // Only with the user's consent (banner "Statistiche d'uso"): no consent, nothing is recorded.
+  if (statsConsent() !== 'yes') return;
   supabase
     .from('analytics_events')
     .insert({
       user_id: userId,
-      visitor_id: visitorId,
-      session_id: sessionId,
+      visitor_id: visitorId(),
+      session_id: sessionId(),
       event,
       section: section ?? null,
       seconds: Math.max(0, Math.min(3600, Math.round(seconds))),
@@ -63,9 +67,9 @@ export function track(event: EventName, section?: string | null, seconds = 0): v
 let visitTrackedFor: string | null | undefined;
 export function setAnalyticsUser(id: string | null): void {
   userId = id;
-  if (visitTrackedFor === id) return;
+  if (visitTrackedFor === id || statsConsent() !== 'yes') return;
   try {
-    const key = `studenthub_visit_${sessionId}_${id ?? 'anon'}`;
+    const key = `studenthub_visit_${sessionId()}_${id ?? 'anon'}`;
     if (sessionStorage.getItem(key)) { visitTrackedFor = id; return; }
     sessionStorage.setItem(key, '1');
   } catch { /* ignore */ }
