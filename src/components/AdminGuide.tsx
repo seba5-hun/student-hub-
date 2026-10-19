@@ -22,7 +22,7 @@ const EMAIL_BODY = emailTemplate.replace(/^<!--[\s\S]*?-->\s*/, '');
 
 const TODO: { id: string; title: string; detail: string; link?: [string, string] }[] = [
   { id: 'confirm-email', title: 'Attiva la verifica dell\'email', detail: 'Supabase → Authentication → Sign In / Providers → Email → "Confirm email" acceso. Senza, chi si registra entra subito senza codice.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/providers`, 'Apri i provider'] },
-  { id: 'email-template', title: 'Imposta l\'email con il codice', detail: 'Supabase → Authentication → Emails → "Confirm signup": copia oggetto e testo dalla sezione "Email di verifica" qui sotto.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/templates`, 'Apri i template email'] },
+  { id: 'email-template', title: 'Imposta l\'email con il codice', detail: 'Copia oggetto e testo dalla sezione "Email con il codice" qui sotto e incollali in Supabase → Emails → Confirm signup. Così arriva solo il numero, senza link.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/templates`, 'Apri i template email'] },
   { id: 'smtp', title: 'Collega un servizio email (SMTP)', detail: 'Il servizio email incluso in Supabase manda pochissime email all\'ora (e nei progetti nuovi solo al tuo team): per i codici a tutti serve un SMTP, ad es. Brevo (300 email/giorno gratis) o Resend. Mittente consigliato: noreply@myndspace.world, poi aggiungi i record DNS (SPF/DKIM) che ti indicano. Supabase → Authentication → Emails → SMTP Settings.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/smtp`, 'Apri SMTP Settings'] },
   { id: 'sql-newsletter', title: 'Esegui lo script "Newsletter" su Supabase', detail: 'Serve per vedere gli iscritti in Admin → Newsletter.' },
   { id: 'sql-suggestions', title: 'Esegui lo script "Suggerimenti" su Supabase', detail: 'Senza, i suggerimenti degli utenti non vengono salvati. Lo trovi qui sotto in "Script Supabase".' },
@@ -175,24 +175,18 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
         </div>
       </Section>
 
-      <Section icon={<Mail className="w-5 h-5" />} title="Email di verifica (codice di 6 cifre)"
-        note="Chi si registra riceve un codice e lo scrive in MYND; può chiederne uno nuovo ogni 60 secondi. Chi entra con Google è già verificato.">
-        <ol className={`text-sm space-y-1 list-decimal pl-5 mb-3 ${sub}`}>
-          <li>Supabase → Authentication → Emails → <b className={text}>Confirm signup</b>.</li>
-          <li>Nel campo <b className={text}>Subject</b> incolla l'oggetto, nel campo <b className={text}>Message body</b> il testo.</li>
-          <li>Premi <b className={text}>Save</b>. Fai una prova registrandoti con un'altra tua email.</li>
+      <Section icon={<Mail className="w-5 h-5" />} title="Email con il codice (da fare una volta)"
+        note="Chi si registra riceve un'email con solo un numero di 6 cifre: lo scrive in MYND ed è fatto. Nessun link da aprire.">
+        <ol className={`text-sm space-y-2 list-decimal pl-5 mb-3 ${sub}`}>
+          <li>Apri <a href={`https://supabase.com/dashboard/project/${PROJECT}/auth/templates`} target="_blank" rel="noopener" className="underline" style={{ color: 'var(--brand-ring)' }}>Supabase → Emails</a> e scegli <b className={text}>Confirm signup</b>.</li>
+          <li>Copia l'<b className={text}>oggetto</b> qui sotto e incollalo in "Subject".</li>
+          <li>Copia il <b className={text}>testo</b> qui sotto, cancella quello che c'è in "Message body" e incollalo. Premi <b className={text}>Save</b>.</li>
         </ol>
-        <div className="space-y-2">
-          <div className={`rounded-xl p-3 flex items-center justify-between gap-3 ${well}`}>
-            <span className="min-w-0"><span className={`block text-xs ${sub}`}>Oggetto</span><span className={`block text-sm font-mono break-all ${text}`}>{EMAIL_SUBJECT}</span></span>
-            <CopyButton id="email-subject" value={EMAIL_SUBJECT} />
-          </div>
-          <div className={`rounded-xl p-3 flex items-center justify-between gap-3 ${well}`}>
-            <span className="min-w-0"><span className={`block text-xs ${sub}`}>Testo dell'email (HTML)</span><span className={`block text-sm ${text}`}>Codice grande in verde, link di riserva, stile MYND</span></span>
-            <CopyButton id="email-body" value={EMAIL_BODY} label="Copia testo" />
-          </div>
+        <div className="flex flex-wrap gap-2">
+          <CopyButton id="email-subject" value={EMAIL_SUBJECT} label="Copia oggetto" />
+          <CopyButton id="email-body" value={EMAIL_BODY} label="Copia testo" />
         </div>
-        <p className={`text-xs mt-3 ${sub}`}>Durata del codice e intervallo tra un invio e l'altro: Supabase → Authentication → Sign In / Providers → Email ("Email OTP Expiration", di base 1 ora).</p>
+        <p className={`text-xs mt-3 ${sub}`}>Deve essere acceso anche "Confirm email" (Sign In / Providers → Email). Se le email non arrivano a tutti, serve il servizio email (SMTP): è nella lista qui sopra.</p>
       </Section>
 
       <Section icon={<Scale className="w-5 h-5" />} title="Documenti legali"
