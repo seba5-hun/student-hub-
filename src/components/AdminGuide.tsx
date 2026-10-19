@@ -186,7 +186,8 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
           <CopyButton id="email-subject" value={EMAIL_SUBJECT} label="Copia oggetto" />
           <CopyButton id="email-body" value={EMAIL_BODY} label="Copia testo" />
         </div>
-        <p className={`text-xs mt-3 ${sub}`}>Deve essere acceso anche "Confirm email" (Sign In / Providers → Email). Se le email non arrivano a tutti, serve il servizio email (SMTP): è nella lista qui sopra.</p>
+        <p className={`text-sm mt-3 ${sub}`}>Per avere un codice corto: Supabase → Sign In / Providers → <b className={text}>Email</b> → <b className={text}>Email OTP Length = 6</b> (il minimo che Supabase consente) → Save.</p>
+        <p className={`text-xs mt-2 ${sub}`}>Deve essere acceso anche "Confirm email" (Sign In / Providers → Email). Se le email non arrivano a tutti, serve il servizio email (SMTP): è nella lista qui sopra.</p>
       </Section>
 
       <Section icon={<Scale className="w-5 h-5" />} title="Documenti legali"

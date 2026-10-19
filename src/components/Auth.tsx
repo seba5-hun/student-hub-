@@ -275,22 +275,24 @@ function CodeInput({ value, onChange }: { value: string; onChange: (v: string) =
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
+  // 6 boxes (the code length set in Supabase); more appear by themselves if the code is longer.
+  const slots = Math.min(10, Math.max(6, value.length));
   return (
     <div className="relative" onClick={() => ref.current?.focus()}>
-      <div className="grid grid-cols-6 gap-2" aria-hidden>
-        {Array.from({ length: 6 }, (_, i) => {
-          const current = focused && (i === value.length || (i === 5 && value.length >= 6));
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }} aria-hidden>
+        {Array.from({ length: slots }, (_, i) => {
+          const current = focused && (i === value.length || (i === slots - 1 && value.length >= slots));
           return (
-            <span key={i} className="h-16 rounded-2xl flex items-center justify-center text-[28px] font-semibold tabular transition-colors"
+            <span key={i} className={`${slots > 6 ? 'h-14 text-[22px] rounded-xl' : 'h-16 text-[28px] rounded-2xl'} flex items-center justify-center font-semibold tabular transition-colors`}
               style={{ background: 'var(--glass-well)', boxShadow: current ? 'inset 0 0 0 2px var(--brand-ring)' : 'inset 0 0 0 1px var(--border)', color: 'var(--text)' }}>
               {value[i] || ''}
             </span>
           );
         })}
       </div>
-      <input ref={ref} value={value} onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+      <input ref={ref} value={value} onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 10))}
         onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} aria-label="Codice di verifica di 6 cifre"
+        inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={10} aria-label="Codice di verifica"
         className="absolute inset-0 w-full h-full opacity-0 cursor-text" />
     </div>
   );
@@ -445,6 +447,18 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
     }
     setResendIn(60);
     if (!quiet) setSuccess('Nuovo codice inviato. Controlla la posta (anche lo spam).');
+  };
+
+  // The code is checked by itself: at once when it is pasted or filled in by the phone, after a
+  // short pause when typed (so a code longer than 6 digits can still be finished).
+  const codeTimer = useRef<number | undefined>(undefined);
+  const onCodeChange = (v: string) => {
+    const jumped = v.length - code.length >= 2;
+    setCode(v); setError('');
+    window.clearTimeout(codeTimer.current);
+    if (v.length < 6 || loading) return;
+    if (jumped) verifyCode(v);
+    else codeTimer.current = window.setTimeout(() => verifyCode(v), 900);
   };
 
   const verifyCode = async (token = code) => {
@@ -622,10 +636,10 @@ export default function Auth({ onLogin, initialError = '', onDemo, startMode }: 
             <div className="flex flex-col gap-2">
               <h1 className="text-[44px] font-bold leading-none" style={{ letterSpacing: '-0.045em' }}>Controlla la posta.</h1>
               <p className="text-base leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                Abbiamo mandato un codice di 6 cifre a <b style={{ color: 'var(--text)' }}>{email.trim()}</b>. Scrivilo qui per verificare la tua email.
+                Abbiamo mandato un codice a <b style={{ color: 'var(--text)' }}>{email.trim()}</b>. Scrivilo qui per verificare la tua email.
               </p>
             </div>
-            <CodeInput value={code} onChange={v => { setCode(v); setError(''); if (v.length === 6 && !loading) verifyCode(v); }} />
+            <CodeInput value={code} onChange={onCodeChange} />
             <div className="flex flex-col gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
               <span>Non trovi l'email? Guarda anche in <b style={{ color: 'var(--text)' }}>Spam</b> o <b style={{ color: 'var(--text)' }}>Promozioni</b>. Il codice vale 1 ora.</span>
               <span>Email sbagliata? <button type="button" onClick={() => setMode('register')} className="underline" style={{ color: 'var(--text)' }}>Correggila</button></span>
