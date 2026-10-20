@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, laz
 import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAccount } from './lib/legal';
 import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
-import { timerSettings } from './lib/custom';
+import { timerSettings, BASE_SECTIONS, isReplaced } from './lib/custom';
+import SectionExtras from './components/SectionExtras';
 import { ProfileContext, makeProfileApi } from './lib/profile';
 import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
 import confetti from 'canvas-confetti';
@@ -774,6 +775,9 @@ function App() {
     return <Auth key={authStart || 'auth'} onLogin={handleLogin} onDemo={startDemo} startMode={authStart} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }
 
+  // MYND's own section, unless the student's version shows its own in place of it.
+  const showBase = (id: string) => currentSection === id && !isReplaced(data.settings, id);
+
   // Save indicator
   // "Le tue MYND": switch, create, edit and delete versions of the app (the data stays the same).
   const layoutActions = {
@@ -831,6 +835,7 @@ function App() {
           </div>
         )}
         <Suspense fallback={<SectionFallback />}>
+        {BASE_SECTIONS.includes(currentSection) && <SectionExtras section={currentSection} where="above" data={data} darkMode={darkMode} onUpdateData={updateData} onNavigate={handleSectionChange} />}
         {currentSection === 'home' && (
           <Home
             data={data}
@@ -844,13 +849,13 @@ function App() {
             userId={user.id}
           />
         )}
-        {currentSection === 'impegni' && (
+        {showBase('impegni') && (
           <Impegni tasks={data.tasks} knownSubjects={[...(data.settings.subjects || []).map(d => d.name), ...data.grades.map(g => g.subject), ...data.sessions.map(s => s.subject)]} darkMode={darkMode} onUpdate={handleTasksUpdate} prefillDate={prefillImpegniDate} />
         )}
-        {currentSection === 'voti' && (
+        {showBase('voti') && (
           <Voti grades={data.grades} subjectNames={(data.settings.subjects || []).map(d => d.name)} darkMode={darkMode} onUpdate={(grades) => updateData({ ...data, grades })} />
         )}
-        {currentSection === 'timer' && (
+        {showBase('timer') && (
           <Timer
             sessions={data.sessions}
             extraSubjects={data.tasks.map(t => t.subject).filter((s): s is string => !!s)}
@@ -865,7 +870,7 @@ function App() {
             onTimerSettings={patch => updateData(prev => ({ ...prev, settings: { ...prev.settings, timer: { ...timerSettings(prev.settings), ...patch } } }))}
           />
         )}
-        {currentSection === 'archivio' && (
+        {showBase('archivio') && (
           <Archivio
             userId={user.id}
             subjectNames={(data.settings.subjects || []).map(d => d.name)}
@@ -878,10 +883,10 @@ function App() {
             onOpenGuide={() => handleSectionChange('guida-ai')}
           />
         )}
-        {currentSection === 'cosa-studiare' && (
+        {showBase('cosa-studiare') && (
           <CosaStudiare data={data} darkMode={darkMode} onNavigateToTimer={handleNavigateToTimer} />
         )}
-        {currentSection === 'calendario' && (
+        {showBase('calendario') && (
           <Calendario 
             tasks={data.tasks} 
             darkMode={darkMode} 
@@ -911,8 +916,8 @@ function App() {
             ? <CustomSectionView section={section} data={data} darkMode={darkMode} onUpdateData={updateData} onNavigate={handleSectionChange} />
             : <Home data={data} darkMode={darkMode} onNavigate={handleSectionChange} />;
         })()}
-        {currentSection === 'guida-ai' && isDemo && <DemoGuide onSignup={() => exitDemo(true)} />}
-        {currentSection === 'guida-ai' && !isDemo && (
+        {showBase('guida-ai') && isDemo && <DemoGuide onSignup={() => exitDemo(true)} />}
+        {showBase('guida-ai') && !isDemo && (
           <GuidaStudioAI
             userId={user.id}
             data={data}
@@ -923,6 +928,7 @@ function App() {
             onOpenProfile={() => setProfileEditor(normalizeLayouts(data.settings).activeLayout ? 'edit' : 'new')}
           />
         )}
+        {BASE_SECTIONS.includes(currentSection) && <SectionExtras section={currentSection} where="below" data={data} darkMode={darkMode} onUpdateData={updateData} onNavigate={handleSectionChange} />}
         </Suspense>
       </Layout>
       <SaveIndicator />

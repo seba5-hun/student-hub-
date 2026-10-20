@@ -133,6 +133,8 @@ export interface CustomBlock {
   title: string;
   // Settings and contents of the block (depend on the kind, see lib/custom.ts).
   config: Record<string, unknown>;
+  // Inside one of MYND's own sections: above or below its content, or in place of it.
+  at?: 'above' | 'below' | 'replace';
 }
 
 export interface CustomSection {
@@ -145,6 +147,12 @@ export interface CustomSection {
 export interface CustomSpace {
   widgets: CustomBlock[];      // on the Home (ids "cw:<id>" in the Home order)
   sections: CustomSection[];   // in the menu (ids "cs:<id>")
+  // Blocks and mini-apps put inside MYND's own sections (Timer, Calendario…), by section id.
+  inside?: Record<string, CustomBlock[]>;
+  // Sections whose replacement the student turned off for now (MYND's original is shown).
+  original?: string[];
+  // Order of the menu (ids of MYND's sections and "cs:<id>"); missing ones keep their place.
+  menu?: string[];
 }
 
 export interface LayoutSnapshot {

@@ -17,6 +17,7 @@ const SNAPSHOTS = new Map<number, UserData>();
 
 // What the studio proposes first: new things to build.
 const CREATE_SUGGESTIONS = [
+  'Nel Timer voglio pause proporzionali a quanto studio',
   'Voglio delle flashcard per ripassare, divise per materia',
   'Un quiz che mi interroga sulle prossime verifiche',
   'Un calcolatore: che voto mi serve per arrivare al 7?',

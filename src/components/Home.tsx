@@ -207,7 +207,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
         const block = id.startsWith('cw:') ? custom.widgets.find(b => `cw:${b.id}` === id) : undefined;
         if (!block || !onUpdateData) return null;
         return (
-          <CustomBlockView block={block} data={data} darkMode={darkMode} onNavigate={onNavigate}
+          <CustomBlockView block={block} data={data} darkMode={darkMode} onNavigate={onNavigate} onUpdateData={onUpdateData}
             onChange={next => onUpdateData(prev => updateBlock(prev, block.id, () => next))}
             onRemove={() => onUpdateData(prev => updateBlock(prev, block.id, () => null))} />
         );

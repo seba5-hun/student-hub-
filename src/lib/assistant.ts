@@ -8,7 +8,7 @@ import { WIDGETS } from './homeWidgets';
 import { makeProfileApi, PRESETS, KIND_ORDER, LABEL_KEYS } from './profile';
 import { listLayouts, switchLayout, createLayout, updateActiveLayout, DEFAULT_LAYOUT_ID } from './layouts';
 import { buildSeries, untilAfter, weekdayOf } from './recurrence';
-import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, timerSettings, MAX_APP_HTML } from './custom';
+import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, timerSettings, MAX_APP_HTML, addInside, allBlocks, updateBlock, takeBlock, setOriginal, isReplaced, orderMenu } from './custom';
 import { CustomBlock } from './store';
 
 export const SECTION_IDS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
@@ -40,7 +40,9 @@ export function describeState(data: UserData): string {
     `Obiettivo settimanale di studio: ${s.weeklyGoal} ore.`,
     (() => { const t = timerSettings(s); return `Timer Studio: ${t.mode === 'pomodoro' ? `Pomodoro (${t.work} min studio, ${t.shortBreak} pausa, ${t.longBreak} pausa lunga ogni ${t.cycles} cicli)` : 'cronometro libero'}.`; })(),
     `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
-    `Mini-app create: ${allApps(s).map(b => `"${b.title}" (id ${b.id})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
+    `Mini-app create: ${allApps(s).map(b => `"${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.write ? ', modifica i dati' : ''})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
+    `Dentro le sezioni di MYND: ${Object.entries(customOf(s).inside || {}).filter(([, l]) => l.length).map(([k, l]) => `${k}: ${l.map(b => `${b.at === 'replace' ? 'AL POSTO DELLA SEZIONE' : b.at === 'above' ? 'sopra' : 'sotto'} ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}" (id ${b.id})`).join(', ')}${isReplaced(s, k) ? '' : l.some(b => b.at === 'replace') ? ' [ora lo studente vede l\'originale]' : ''}`).join('; ') || 'niente'}.`,
+    `Ordine del menu: ${orderMenu([...SECTION_IDS, ...customOf(s).sections.map(x => `cs:${x.id}`)].map(id => ({ id })), customOf(s).menu).map(x => { const cs = customOf(s).sections.find(y => `cs:${y.id}` === x.id); return cs ? `"${cs.name}"` : x.id; }).join(', ')}.`,
     `Sezioni create con i blocchi (nel menu): ${customOf(s).sections.map(x => `"${x.name}" (${x.blocks.map(b => `${b.kind} "${b.title}"`).join(', ') || 'vuota'})`).join('; ') || 'nessuna'}.`,
     `Prossimi impegni: ${upcoming.map(t => `${t.title} il ${t.date}${t.time ? ` alle ${t.time}` : ''}`).join('; ') || 'nessuno'}.`,
   ].join('\n');
@@ -48,8 +50,20 @@ export function describeState(data: UserData): string {
 
 // Every mini-app of the active version (Home and sections).
 export function allApps(s: UserData['settings']): CustomBlock[] {
+  return allBlocks(s).filter(b => b.kind === 'app');
+}
+
+// Where a block is, in words and as a section to open.
+function placeOf(s: UserData['settings'], id: string): { text: string; open?: string } {
   const c = customOf(s);
-  return [...c.widgets, ...c.sections.flatMap(x => x.blocks)].filter(b => b.kind === 'app');
+  if (c.widgets.some(b => b.id === id)) return { text: 'nella Home', open: 'home' };
+  const sec = c.sections.find(x => x.blocks.some(b => b.id === id));
+  if (sec) return { text: `nella sezione "${sec.name}"`, open: `cs:${sec.id}` };
+  for (const [k, list] of Object.entries(c.inside || {})) {
+    const b = list.find(x => x.id === id);
+    if (b) return { text: `${b.at === 'replace' ? 'al posto di' : b.at === 'above' ? 'in cima a' : 'in fondo a'} ${k}`, open: k };
+  }
+  return { text: '' };
 }
 
 // The code of the mini-apps the conversation is about (the one being edited, the last one made,
@@ -99,12 +113,19 @@ ${BLOCK_KINDS.map(b => `- ${b.kind}: ${b.label}. ${b.hint}`).join('\n')}
 - {"type":"add_widget","kind":"checklist","title":"Da fare oggi","config":{...},"position":1}  aggiunge un blocco come pannello della Home (position facoltativa, 1 = in alto)
 - {"type":"add_section","name":"Benessere","icon":"heart","blocks":[{"kind":"habits","title":"Abitudini","config":{...}}]}  crea una nuova sezione nel menu fatta di blocchi; icone: ${SECTION_ICONS.join(', ')}
 - {"type":"add_block","section":"Benessere","kind":"counter","title":"Acqua","config":{...}}  aggiunge un blocco a una sezione creata
+- {"type":"add_block","section":"timer","position":"above","kind":"countdown","title":"…","config":{...}}  un blocco DENTRO una sezione di MYND (${SECTION_IDS.join(', ')}): position "above" (in cima), "below" (in fondo) o "replace" (al posto del contenuto)
+
+SPOSTARE E RIORDINARE (nella versione dello studente tutto può andare dove vuole):
+- {"type":"move_block","block":"titolo o id","place":"home"}  sposta un blocco o una mini-app: place = "home", il nome di una sezione creata, oppure una sezione di MYND con "position":"above"|"below"|"replace"
+- {"type":"move_section","section":"timer","position":1}  ordine del menu (1 = subito dopo la Home); section = id di MYND o nome di una sezione creata
+- {"type":"use_original","section":"timer","original":true}  mostra di nuovo la sezione originale di MYND al posto della versione dello studente (false = torna alla sua versione)
 - {"type":"request_feature","text":"descrizione chiara della funzione richiesta"}  invia la richiesta agli sviluppatori di MYND
 
 MINI-APP (per tutto ciò che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, tabelle, grafici, timer speciali…):
-- {"type":"create_app","title":"Flashcard","place":"section","icon":"brain","code":"A1","uses_data":true,"description":"mazzi di flashcard per materia con punteggio"}
-  place: "section" (nuova sezione del menu) oppure "home" (pannello della Home); uses_data true se deve leggere materie, impegni o voti.
-- {"type":"update_app","app":"Flashcard","code":"A1","description":"…"}  sostituisce il codice di una mini-app esistente (app = titolo o id)
+- {"type":"create_app","title":"Flashcard","place":"section","icon":"brain","code":"A1","uses_data":true,"writes_data":false,"description":"mazzi di flashcard per materia con punteggio"}
+  place: "section" (nuova sezione del menu), "home" (pannello della Home) oppure una sezione di MYND (${SECTION_IDS.join(', ')}) con "position": "replace" (prende il posto del contenuto della sezione: la sezione diventa la versione dello studente), "above" o "below";
+  uses_data true se deve leggere materie, impegni o voti; writes_data true se deve anche AGGIUNGERE dati (tempo di studio, impegni, voti, note) o spuntare impegni.
+- {"type":"update_app","app":"Flashcard","code":"A1","description":"…","writes_data":true}  sostituisce il codice di una mini-app esistente (app = titolo o id)
 Il codice NON va nel JSON: scrivilo DOPO il JSON, tra i segni <<<APP:A1>>> e <<<END>>> (A1 = il valore di "code").
 Come scrivere il codice di una mini-app:
 - Una sola pagina HTML completa e funzionante, con <style> e <script> dentro; niente librerie o risorse esterne (non vengono caricate), niente alert/prompt.
@@ -112,15 +133,25 @@ Come scrivere il codice di una mini-app:
 - Grafica MYND già pronta: usa le classi card, well, btn, btn-secondary, btn-danger, input, chip, row, col, grid, bar (con <i style="width:40%">), big, muted, subtle, lime, ok, bad, e le variabili CSS var(--text), var(--text-muted), var(--brand-ring), var(--brand-fill), var(--border), var(--glass-well), var(--area-scuola)… Lo sfondo resta trasparente. Non cambiare font o colori di base.
 - Salvataggio: all'avvio const saved = await mynd.load() (null la prima volta); a ogni modifica await mynd.save(stato) (un oggetto JSON, massimo ~200 KB). Non usare localStorage.
 - Dati dello studente (solo se uses_data è true): const d = await mynd.data() → { today, subjects:[{name,color}], tasks:[{title,date,time,subject,done,type,importance}], grades:[{subject,value,scale,date,description}], studyMinutes:[{subject,minutes,date}] } (null se lo studente non lo permette: gestiscilo). Sono solo da leggere.
-- mynd.today() restituisce la data di oggi "AAAA-MM-GG".
+- mynd.today() restituisce la data di oggi "AAAA-MM-GG". mynd.open("calendario") apre una sezione.
+- Scrivere nei dati (solo se writes_data è true; ogni funzione restituisce una Promise e lancia un errore se i dati non vanno bene: usa try/catch e mostra un messaggio):
+  await mynd.addSession({subject:"Matematica", minutes:50})  tempo di studio: conta nella Home, nelle statistiche e in "Cosa studiare" come quello del Timer
+  await mynd.addTask({title:"Verifica", date:"AAAA-MM-GG", time:"HH:MM", subject:"Storia", personal:false, importance:3, minutes:60})
+  await mynd.setTaskDone({id:"…", done:true})  (gli id arrivano da mynd.data().tasks)
+  await mynd.addGrade({subject:"Fisica", value:7.5, scale:10, date:"AAAA-MM-GG", description:"Interrogazione"})
+  await mynd.addNote({text:"…"})
+  Non si può cancellare nulla. Al massimo 30 scritture al minuto.
 - Codice completo e corretto, senza puntini o parti da completare.
 
 REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
 - Se la richiesta è ambigua o manca un dato importante (es. la data di una verifica), non fare azioni: chiedi in "reply".
-- MYND è uno spazio personalizzabile al 100%: quando lo studente chiede una FUNZIONE NUOVA la realizzi tu. Se bastano i blocchi o set_timer usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
+- MYND è uno spazio personalizzabile al 100%: nella sua versione lo studente può cambiare TUTTO e mettere ogni cosa dove vuole. Quando chiede una FUNZIONE NUOVA o di CAMBIARE come funziona una parte dell'app la realizzi tu.
+- Se la richiesta riguarda una sezione che esiste già (es. "le pause del timer proporzionali allo studio", "il calendario con la vista per settimana"), la modifica va DENTRO quella sezione, non in una sezione nuova: se cambia il funzionamento crea una mini-app con place = quella sezione e position "replace" che rifà la sezione per intero con la modifica (tutte le funzioni utili dell'originale più quella nuova) e tiene i dati collegati (es. un timer salva il tempo con mynd.addSession, così Home e statistiche continuano a funzionare); se aggiunge solo qualcosa usa "above" o "below". Prima prova le azioni esistenti (es. set_timer) se bastano davvero.
+- Se non è chiaro dove lo studente vuole una cosa, chiediglielo nella proposta (es. "La metto nella Home o dentro il Timer?"). Se bastano i blocchi o set_timer usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
 - Per una mini-app nuova o una modifica importante PRIMA proponi: in "reply" descrivi in 2-5 punti brevi cosa farà e dove la metti, e chiedi "Va bene così?", senza azioni. Quando lo studente conferma (sì, ok, va bene, procedi…) creala con create_app/update_app e il codice. Per piccole correzioni o se lo studente ti ha già detto esattamente cosa vuole puoi farlo subito.
-- Usa request_feature solo per ciò che una mini-app non può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, o cambiare il funzionamento interno delle sezioni base. Dillo allo studente. Non dire mai che "non puoi modificare il codice".
+- Usa request_feature solo per ciò che una mini-app non può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, notifiche quando l'app è chiusa. Dillo allo studente.
+- Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare il codice".
 - Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
 - Non cancellare mai dati: non esistono azioni per eliminare.
 - Al massimo 20 azioni per risposta. Se non serve nessuna azione usa "actions": [].`;
@@ -187,6 +218,9 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
     const code = codes[str(key, 40)] || '';
     return /<(script|div|body|html|main|section)[\s>]/i.test(code) ? code.slice(0, MAX_APP_HTML) : '';
   };
+  const position = (v: unknown): 'above' | 'below' | 'replace' => (str(v) === 'replace' ? 'replace' : str(v) === 'below' ? 'below' : 'above');
+  const findBlock = (key: string, appsOnly: boolean) => (appsOnly ? allApps(settings()) : allBlocks(settings())).find(b => b.id === key || same(b.title, key))
+    || customOf(settings()).widgets.find(b => `cw:${b.id}` === key);
 
   for (const a of actions) {
     switch (a.type) {
@@ -342,35 +376,93 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
         const title = str(a.title, 60) || 'Mini-app';
         if (!html) { skipped.push(`mini-app "${title}" senza codice valido`); break; }
         ownVersion();
-        const app = makeApp(title, html, a.uses_data === true, str(a.description, 300));
+        const writes = a.writes_data === true;
+        const app = makeApp(title, html, a.uses_data === true || writes, str(a.description, 300), writes);
         apps.push(app.id);
-        if (str(a.place) === 'home') {
+        const place = str(a.place, 40);
+        if (place === 'home') {
           data = addWidget(data, app, Math.round(num(a.position)) || undefined);
           done.push(`Nuova mini-app nella Home: "${title}"`);
+          navigate = 'home';
+        } else if (SECTION_IDS.includes(place)) {
+          const at = position(a.position);
+          data = addInside(data, place, app, at);
+          navigate = place;
+          done.push(at === 'replace' ? `${sectionName(place)} ora è la tua versione: "${title}" (l'originale resta a un tocco)` : `Mini-app "${title}" ${at === 'above' ? 'in cima a' : 'in fondo a'} ${sectionName(place)}`);
         } else {
           const res = addSection(data, title, str(a.icon), [app]);
           data = res.data;
           navigate = `cs:${res.section.id}`;
           done.push(`Nuova sezione nel menu con la mini-app "${title}"`);
         }
+        if (writes) done.push('Può aggiungere dati (tempo di studio, impegni, voti, note): lo togli dal pulsante "Modifica" sulla mini-app');
         break;
       }
       case 'update_app': {
         const html = appCode(a.code);
         const key = str(a.app, 60);
-        const target = allApps(settings()).find(b => b.id === key || same(b.title, key));
+        const target = findBlock(key, true);
         if (!target || !html) { skipped.push(`modifica di "${key}"`); break; }
-        const c = customOf(settings());
-        const upd = (b: CustomBlock): CustomBlock => (b.id !== target.id ? b : {
+        const writes = a.writes_data === true;
+        data = updateBlock(data, target.id, b => ({
           ...b, title: str(a.title, 60) || b.title,
-          config: { ...b.config, html, lastError: '', ...(str(a.description) ? { description: str(a.description, 300) } : {}), ...(typeof a.uses_data === 'boolean' ? { data: a.uses_data } : {}),
+          config: { ...b.config, html, lastError: '', ...(str(a.description) ? { description: str(a.description, 300) } : {}),
+            ...(typeof a.uses_data === 'boolean' ? { data: a.uses_data || writes } : {}),
+            ...(writes ? { data: true, write: true, wantsWrite: true } : {}),
             history: [...((b.config.history as unknown[]) || []), { html: String(b.config.html || ''), at: new Date().toISOString() }].slice(-5) },
-        });
-        setSettings({ custom: { widgets: c.widgets.map(upd), sections: c.sections.map(x => ({ ...x, blocks: x.blocks.map(upd) })) } });
-        done.push(`Aggiornata la mini-app "${target.title}"`);
+        }));
         apps.push(target.id);
-        const inSection = c.sections.find(x => x.blocks.some(b => b.id === target.id));
-        if (inSection) navigate = `cs:${inSection.id}`;
+        done.push(`Aggiornata la mini-app "${target.title}"`);
+        const where = placeOf(settings(), target.id);
+        if (where.open) navigate = where.open;
+        if (where.open && SECTION_IDS.includes(where.open) && (target.at === 'replace')) data = setOriginal(data, where.open, false);
+        break;
+      }
+      case 'move_block': {
+        const key = str(a.block, 60);
+        const target = findBlock(key, false);
+        const place = str(a.place, 40);
+        if (!target) { skipped.push(`spostamento di "${key}"`); break; }
+        ownVersion();
+        const taken = takeBlock(data, target.id);
+        if (!taken.block) { skipped.push(`spostamento di "${key}"`); break; }
+        const custom = customOf(taken.data.settings).sections.find(x => same(x.name, place) || `cs:${x.id}` === place);
+        if (place === 'home') {
+          data = addWidget(taken.data, taken.block, Math.round(num(a.home_position)) || undefined);
+          navigate = 'home';
+        } else if (SECTION_IDS.includes(place)) {
+          data = addInside(taken.data, place, taken.block, position(a.position));
+          navigate = place;
+        } else if (custom) {
+          const c = customOf(taken.data.settings);
+          data = { ...taken.data, settings: { ...taken.data.settings, custom: { ...c, sections: c.sections.map(x => (x.id === custom.id ? { ...x, blocks: [...x.blocks, taken.block!] } : x)) } } };
+          navigate = `cs:${custom.id}`;
+        } else { skipped.push(`posto "${place}"`); break; }
+        done.push(`"${target.title}" spostato ${placeOf(settings(), target.id).text}`);
+        break;
+      }
+      case 'move_section': {
+        const key = str(a.section, 40);
+        const c0 = customOf(settings());
+        const cs = c0.sections.find(x => same(x.name, key) || `cs:${x.id}` === key);
+        const id = SECTION_IDS.includes(key) ? key : cs ? `cs:${cs.id}` : '';
+        if (!id) { skipped.push(`sezione "${key}"`); break; }
+        ownVersion();
+        const c = customOf(settings());
+        const all = orderMenu([...SECTION_IDS, ...c.sections.map(x => `cs:${x.id}`)].map(x => ({ id: x })), c.menu).map(x => x.id).filter(x => x !== id);
+        const pos = Math.max(1, Math.min(all.length + 1, Math.round(num(a.position)) || 1));
+        all.splice(pos - 1, 0, id);
+        setSettings({ custom: { ...c, menu: all } });
+        done.push(`"${cs ? cs.name : sectionName(id)}" in posizione ${pos} nel menu`);
+        break;
+      }
+      case 'use_original': {
+        const id = str(a.section, 40);
+        if (!SECTION_IDS.includes(id)) { skipped.push(`sezione "${id}"`); break; }
+        const original = a.original !== false;
+        data = setOriginal(data, id, original);
+        navigate = id;
+        done.push(original ? `${sectionName(id)}: di nuovo l'originale di MYND (la tua versione resta salvata)` : `${sectionName(id)}: di nuovo la tua versione`);
         break;
       }
       case 'add_widget': {
@@ -399,10 +491,19 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
       }
       case 'add_block': {
         const name = str(a.section, 28), kind = str(a.kind);
+        if (!isBlockKind(kind) || kind === 'app') { skipped.push(`blocco in "${name}"`); break; }
+        const block = makeBlock(kind, str(a.title, 60), (a.config && typeof a.config === 'object' ? a.config : {}) as Record<string, unknown>);
+        if (SECTION_IDS.includes(name)) {
+          ownVersion();
+          const at = position(a.position);
+          data = addInside(data, name, block, at);
+          navigate = name;
+          done.push(`Aggiunto "${block.title}" ${at === 'replace' ? 'al posto di' : at === 'above' ? 'in cima a' : 'in fondo a'} ${sectionName(name)}`);
+          break;
+        }
         const c = customOf(settings());
         const section = c.sections.find(x => same(x.name, name));
-        if (!section || !isBlockKind(kind)) { skipped.push(`blocco in "${name}"`); break; }
-        const block = makeBlock(kind, str(a.title, 60), (a.config && typeof a.config === 'object' ? a.config : {}) as Record<string, unknown>);
+        if (!section) { skipped.push(`blocco in "${name}"`); break; }
         setSettings({ custom: { ...c, sections: c.sections.map(x => (x.id === section.id ? { ...x, blocks: [...x.blocks, block] } : x)) } });
         done.push(`Aggiunto "${block.title}" in "${section.name}"`);
         break;

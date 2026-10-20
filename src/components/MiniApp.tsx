@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { UserData, todayKey } from '../lib/store';
 import { MAX_APP_STORE } from '../lib/custom';
+import { applyWrite, WRITE_TYPES } from '../lib/miniAppWrites';
+import { createId } from '../lib/store';
 
 // A mini-app written by the Assistente MYND, running in a closed room: a sandboxed iframe with a
 // unique (opaque) origin, no access to MYND's storage, cookies or keys, no network (CSP), no
 // popups or navigation. It gets MYND's look (the theme tokens and a small stylesheet) and talks
 // to MYND only through `window.mynd`: load/save its own data and, if allowed, read a summary of
-// the student's subjects, tasks and grades.
+// the student's subjects, tasks and grades and add to them (checked by MYND, see miniAppWrites).
 
 const TOKENS = ['brand', 'brand-ring', 'brand-fill', 'on-brand', 'bg', 'surface', 'border', 'text', 'text-muted', 'text-subtle', 'success', 'warning', 'danger',
   'area-scuola', 'area-studio', 'area-sport', 'area-progetto', 'area-recupero', 'area-vita', 'area-viaggio', 'area-pasto', 'area-sonno', 'area-extra',
@@ -42,7 +44,10 @@ const SDK = `
   window.addEventListener('message',function(e){var m=e.data;if(m&&m.__mynd&&m.reply&&pending[m.id]){pending[m.id](m.result);delete pending[m.id];}});
   function call(type,payload){return new Promise(function(res){var id=++seq;pending[id]=res;parent.postMessage({__mynd:true,id:id,type:type,payload:payload},'*');});}
   var last=0;function h(){var v=Math.ceil(document.documentElement.scrollHeight);if(v!==last){last=v;parent.postMessage({__mynd:true,type:'height',payload:v},'*');}}
-  window.mynd={load:function(){return call('load')},save:function(data){return call('save',data)},data:function(){return call('data')},today:function(){return '__TODAY__'}};
+  function w(op){return function(p){return call('write',{op:op,payload:p}).then(function(r){if(r&&r.error)throw new Error(r.error);return r&&r.result;});};}
+  window.mynd={load:function(){return call('load')},save:function(data){return call('save',data)},data:function(){return call('data')},today:function(){return '__TODAY__'},
+    addSession:w('addSession'),addTask:w('addTask'),setTaskDone:w('setTaskDone'),addGrade:w('addGrade'),addNote:w('addNote'),
+    open:function(section){parent.postMessage({__mynd:true,type:'open',payload:String(section)},'*')}};
   window.addEventListener('load',function(){h();try{new ResizeObserver(h).observe(document.body)}catch(_){setInterval(h,500)}});
   window.addEventListener('error',function(e){parent.postMessage({__mynd:true,type:'error',payload:String(e.message||'errore')},'*')});
 })();`;
@@ -54,13 +59,19 @@ interface Props {
   data: UserData;
   onSave: (store: unknown) => void;
   onError?: (message: string) => void;
+  allowWrite?: boolean;
+  onUpdateData?: (update: (prev: UserData) => UserData) => void;
+  onNavigate?: (section: string) => void;
 }
 
-export default function MiniApp({ html, store, allowData, data, onSave, onError }: Props) {
+const WRITES_PER_MINUTE = 30;
+
+export default function MiniApp({ html, store, allowData, data, onSave, onError, allowWrite, onUpdateData, onNavigate }: Props) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(240);
-  const latest = useRef({ store, allowData, data, onSave, onError });
-  latest.current = { store, allowData, data, onSave, onError };
+  const latest = useRef({ store, allowData, data, onSave, onError, allowWrite, onUpdateData, onNavigate });
+  latest.current = { store, allowData, data, onSave, onError, allowWrite, onUpdateData, onNavigate };
+  const writes = useRef<number[]>([]);
 
   // The page is built once per code version (and theme), so saving data doesn't reload it.
   const theme = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -96,12 +107,28 @@ export default function MiniApp({ html, store, allowData, data, onSave, onError 
           reply({
             today,
             subjects: (d.settings.subjects || []).map(s => ({ name: s.name, color: s.color })),
-            tasks: d.tasks.filter(t => !t.cancelled).slice(-300).map(t => ({ title: t.title, date: t.date, time: t.time || null, subject: t.subject || null, done: t.done, type: t.type, importance: t.importance })),
+            tasks: d.tasks.filter(t => !t.cancelled).slice(-300).map(t => ({ id: t.id, title: t.title, date: t.date, time: t.time || null, subject: t.subject || null, done: t.done, type: t.type, importance: t.importance })),
             grades: d.grades.slice(-300).map(g => ({ subject: g.subject, value: g.value, scale: g.scale || 10, date: g.date, description: g.description })),
             studyMinutes: d.sessions.slice(-500).map(s => ({ subject: s.subject, minutes: s.duration, date: s.date.slice(0, 10) })),
           });
           break;
         }
+        case 'write': {
+          const { op, payload } = (m.payload || {}) as { op?: string; payload?: unknown };
+          if (!cur.allowWrite || !cur.onUpdateData) { reply({ error: 'questa mini-app non ha il permesso di modificare i dati (Modifica: no)' }); break; }
+          if (!op || !WRITE_TYPES.includes(op)) { reply({ error: 'operazione non permessa' }); break; }
+          const now = Date.now();
+          writes.current = writes.current.filter(t => now - t < 60_000);
+          if (writes.current.length >= WRITES_PER_MINUTE) { reply({ error: 'troppe modifiche in poco tempo' }); break; }
+          const id = createId();
+          const res = applyWrite(cur.data, op, payload, id);
+          if ('error' in res) { reply({ error: res.error }); break; }
+          writes.current.push(now);
+          cur.onUpdateData(prev => { const r = applyWrite(prev, op, payload, id); return 'error' in r ? prev : r.data; });
+          reply({ result: res.result });
+          break;
+        }
+        case 'open': if (typeof m.payload === 'string' && m.payload) cur.onNavigate?.(m.payload); break;
         case 'error': cur.onError?.(String(m.payload).slice(0, 200)); break;
       }
     };

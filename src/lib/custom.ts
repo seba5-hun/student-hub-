@@ -24,7 +24,25 @@ export const SECTION_ICONS = ['star', 'book', 'target', 'heart', 'flame', 'list'
 export const DEFAULT_TIMER: TimerSettings = { mode: 'stopwatch', work: 25, shortBreak: 5, longBreak: 15, cycles: 4, autoStart: true };
 export const timerSettings = (s: UserSettings): TimerSettings => ({ ...DEFAULT_TIMER, ...s.timer });
 
-export const customOf = (s: UserSettings): CustomSpace => ({ widgets: s.custom?.widgets || [], sections: s.custom?.sections || [] });
+export const customOf = (s: UserSettings): CustomSpace => ({ ...s.custom, widgets: s.custom?.widgets || [], sections: s.custom?.sections || [] });
+
+// MYND's own sections where blocks and mini-apps can go (above, below or in place of the content).
+export const BASE_SECTIONS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
+export const insideOf = (s: UserSettings, section: string): CustomBlock[] => customOf(s).inside?.[section] || [];
+// The section is shown in the student's version (a mini-app in its place) instead of MYND's.
+export const isReplaced = (s: UserSettings, section: string) =>
+  insideOf(s, section).some(b => b.at === 'replace') && !(customOf(s).original || []).includes(section);
+// Every block of the version, wherever it is.
+export const allBlocks = (s: UserSettings): CustomBlock[] => {
+  const c = customOf(s);
+  return [...c.widgets, ...c.sections.flatMap(x => x.blocks), ...Object.values(c.inside || {}).flat()];
+};
+
+// The menu in the order chosen by the student (the ids not in the order keep theirs, after).
+export function orderMenu<T extends { id: string }>(items: T[], order: string[] = []): T[] {
+  const rank = (id: string) => { const i = order.indexOf(id); return i < 0 ? order.length + items.findIndex(x => x.id === id) : i; };
+  return [...items].sort((a, b) => rank(a.id) - rank(b.id));
+}
 
 // Cleans what comes from the AI (or an old version): only known fields, sensible sizes.
 export function cleanConfig(kind: BlockKind, raw: Record<string, unknown> = {}): Record<string, unknown> {
@@ -57,7 +75,7 @@ export function cleanConfig(kind: BlockKind, raw: Record<string, unknown> = {}):
       // student's subjects/tasks/grades, its own saved data and the previous versions of the page.
       const html = typeof raw.html === 'string' ? raw.html.slice(0, MAX_APP_HTML) : '';
       const history = (Array.isArray(raw.history) ? raw.history : []).filter((h: unknown) => h && typeof (h as { html?: unknown }).html === 'string').slice(-5);
-      return { html, data: raw.data === true, store: raw.store ?? null, history, description: text(raw.description, 300), lastError: '' };
+      return { html, data: raw.data === true, write: raw.write === true, wantsWrite: raw.write === true || raw.wantsWrite === true, store: raw.store ?? null, history, description: text(raw.description, 300), lastError: '' };
     }
     case 'tasks':
       return { filter: ['upcoming', 'school', 'personal'].includes(text(raw.filter)) ? text(raw.filter) : 'upcoming', subject: text(raw.subject, 40), limit: Math.min(15, Math.max(1, Math.round(n(raw.limit, 5)))) };
@@ -90,7 +108,34 @@ export function addSection(data: UserData, name: string, icon: string, blocks: C
 export function updateBlock(data: UserData, blockId: string, update: (b: CustomBlock) => CustomBlock | null): UserData {
   const c = customOf(data.settings);
   const map = (list: CustomBlock[]) => list.map(b => (b.id === blockId ? update(b) : b)).filter((b): b is CustomBlock => !!b);
-  return withCustom(data, { widgets: map(c.widgets), sections: c.sections.map(s => ({ ...s, blocks: map(s.blocks) })) });
+  const inside = c.inside ? Object.fromEntries(Object.entries(c.inside).map(([k, list]) => [k, map(list)])) : undefined;
+  return withCustom(data, { ...c, widgets: map(c.widgets), sections: c.sections.map(s => ({ ...s, blocks: map(s.blocks) })), ...(inside ? { inside } : {}) });
+}
+
+// Puts a block inside one of MYND's sections (above, below or in place of its content).
+export function addInside(data: UserData, section: string, block: CustomBlock, at: 'above' | 'below' | 'replace'): UserData {
+  const c = customOf(data.settings);
+  // Only one thing in place of the section: an older one is not lost, it moves below.
+  const kept = (c.inside?.[section] || []).map(b => (at === 'replace' && b.at === 'replace' ? { ...b, at: 'below' as const } : b));
+  const next = at === 'above' ? [{ ...block, at }, ...kept] : [...kept, { ...block, at }];
+  return withCustom(data, { ...c, inside: { ...c.inside, [section]: next }, original: (c.original || []).filter(x => x !== section) });
+}
+
+// Takes a block out of wherever it is (to move it somewhere else).
+export function takeBlock(data: UserData, blockId: string): { data: UserData; block?: CustomBlock } {
+  const block = allBlocks(data.settings).find(b => b.id === blockId);
+  if (!block) return { data };
+  const next = updateBlock(data, blockId, () => null);
+  const order = next.settings.homeLayout;
+  const homeLayout = order ? { ...order, order: order.order.filter(x => x !== `cw:${blockId}`) } : order;
+  return { data: { ...next, settings: { ...next.settings, homeLayout } }, block: { ...block, at: undefined } };
+}
+
+// Shows MYND's original section again, or the student's version (when it has one).
+export function setOriginal(data: UserData, section: string, original: boolean): UserData {
+  const c = customOf(data.settings);
+  const list = (c.original || []).filter(x => x !== section);
+  return withCustom(data, { ...c, original: original ? [...list, section] : list });
 }
 
 export function removeSection(data: UserData, sectionId: string): UserData {
@@ -99,6 +144,6 @@ export function removeSection(data: UserData, sectionId: string): UserData {
 }
 
 // A mini-app written by the Assistente MYND.
-export function makeApp(title: string, html: string, useData: boolean, description = ''): CustomBlock {
-  return { id: createId(), kind: 'app', title: title.trim().slice(0, 60) || 'Mini-app', config: cleanConfig('app', { html, data: useData, description }) };
+export function makeApp(title: string, html: string, useData: boolean, description = '', write = false): CustomBlock {
+  return { id: createId(), kind: 'app', title: title.trim().slice(0, 60) || 'Mini-app', config: cleanConfig('app', { html, data: useData, write, description }) };
 }

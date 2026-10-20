@@ -68,7 +68,7 @@ export default function CustomSectionView({ section, data, darkMode, onUpdateDat
         <div className="grid grid-cols-1 md:grid-cols-2 md:grid-flow-row-dense gap-4">
           {section.blocks.map(b => (
             <div key={b.id} className={blockWide(b.kind) ? 'md:col-span-2' : ''}>
-              <CustomBlockView block={b} data={data} darkMode={darkMode} onNavigate={onNavigate}
+              <CustomBlockView block={b} data={data} darkMode={darkMode} onNavigate={onNavigate} onUpdateData={onUpdateData}
                 onChange={next => onUpdateData(prev => updateBlock(prev, b.id, () => next))}
                 onRemove={() => onUpdateData(prev => updateBlock(prev, b.id, () => null))} />
             </div>

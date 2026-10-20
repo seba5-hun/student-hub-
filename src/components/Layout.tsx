@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase, Lightbulb } from 'lucide-react';
 import PrivacyCenter from './PrivacyCenter';
-import { customOf } from '../lib/custom';
+import { customOf, orderMenu } from '../lib/custom';
 import { sectionIcon } from './sectionIcons';
 import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
@@ -164,7 +164,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {[...(showDeveloper ? [SECTIONS[0], MINDSET_SECTION, BUSINESS_SECTION] : [SECTIONS[0]]), ...SECTIONS.slice(1).filter(section => !hiddenSections.includes(section.id)), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) })).filter(section => !hiddenSections.includes(section.id)), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
+              {[...(showDeveloper ? [SECTIONS[0], MINDSET_SECTION, BUSINESS_SECTION] : [SECTIONS[0]]), ...orderMenu([...SECTIONS.slice(1), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) }))].filter(section => !hiddenSections.includes(section.id)), customOf(data.settings).menu), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}

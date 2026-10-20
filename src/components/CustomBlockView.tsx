@@ -15,13 +15,14 @@ interface Props {
   onChange: (block: CustomBlock) => void;
   onRemove: () => void;
   onNavigate?: (section: string) => void;
+  onUpdateData?: (update: (prev: UserData) => UserData) => void;   // mini-apps that add study time, tasks…
 }
 
 type Item = { id: string; text: string; done: boolean };
 type Link = { label: string; url: string };
 const WEEK = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
 
-export default function CustomBlockView({ block, data, darkMode, onChange, onRemove, onNavigate }: Props) {
+export default function CustomBlockView({ block, data, darkMode, onChange, onRemove, onNavigate, onUpdateData }: Props) {
   const dialog = useDialog();
   const c = block.config as Record<string, unknown>;
   const set = (patch: Record<string, unknown>) => onChange({ ...block, config: { ...c, ...patch } });
@@ -198,9 +199,16 @@ export default function CustomBlockView({ block, data, darkMode, onChange, onRem
       corner = (
         <>
           <button onClick={() => set({ data: !c.data })} title={c.data ? 'Può leggere materie, impegni e voti: tocca per toglierlo' : 'Non legge i tuoi dati: tocca per permetterlo'}
-            className="text-xs px-2 py-1 rounded-full flex items-center gap-1" style={c.data ? { color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' } : { color: 'var(--text-subtle)' }}>
+            className="text-xs px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap" style={c.data ? { color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' } : { color: 'var(--text-subtle)' }}>
             <Database className="w-3.5 h-3.5" /> {c.data ? 'Dati: sì' : 'Dati: no'}
           </button>
+          {c.data === true && c.wantsWrite === true && (
+            <button onClick={() => set({ write: c.write !== true })}
+              title={c.write ? 'Può aggiungere tempo di studio, impegni, voti e note e spuntare impegni (mai cancellare): tocca per toglierlo' : 'Non modifica i tuoi dati: tocca per permetterlo'}
+              className="text-xs px-2 py-1 rounded-full whitespace-nowrap" style={c.write ? { color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' } : { color: 'var(--text-subtle)' }}>
+              {c.write ? 'Modifica: sì' : 'Modifica: no'}
+            </button>
+          )}
           {history.length > 0 && (
             <button onClick={async () => {
               if (!(await dialog.confirm({ title: 'Tornare alla versione precedente?', message: `"${block.title}" torna com'era prima dell'ultima modifica. I dati salvati restano.`, confirmLabel: 'Torna indietro' }))) return;
@@ -216,6 +224,7 @@ export default function CustomBlockView({ block, data, darkMode, onChange, onRem
         <div>
           {String(c.html || '') ? (
             <MiniApp html={String(c.html)} store={c.store} allowData={c.data === true} data={data}
+              allowWrite={c.data === true && c.write === true} onUpdateData={onUpdateData} onNavigate={onNavigate}
               onSave={store => set({ store })} onError={setAppError} />
           ) : <p className={`text-sm ${sub}`}>Questa mini-app è vuota.</p>}
           {appError && (
@@ -248,10 +257,10 @@ export default function CustomBlockView({ block, data, darkMode, onChange, onRem
   }
 
   return (
-    <div className={`${card} p-6 h-full flex flex-col`}>
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <div className={`${card} ${block.kind === 'app' ? 'p-4 sm:p-6' : 'p-6'} h-full flex flex-col`}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-4">
         <h3 className={`font-semibold ${text}`}>{block.title}</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 ml-auto">
           {corner}
           <button onClick={remove} aria-label={`Togli ${block.title}`} title="Togli il blocco" className={`p-1.5 rounded-lg opacity-50 hover:opacity-100 ${sub}`}><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
