@@ -122,6 +122,12 @@ export async function updateRequest(id: string, patch: { status?: RequestStatus;
   if (error) throw friendly(error);
 }
 
+// Where the function goes (Admin can change it before approving).
+export async function setRequestPlacement(id: string, place: string, position: string): Promise<void> {
+  const { error } = await client().rpc('admin_set_custom_placement', { p_id: id, p_place: place, p_position: position });
+  if (error) throw friendly(error);
+}
+
 export interface PlanRow { user_id: string; email: string | null; credits: number; used: number; package: string | null; updated_at: string }
 
 export async function loadPlans(): Promise<PlanRow[]> {

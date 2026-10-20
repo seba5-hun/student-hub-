@@ -161,6 +161,23 @@ begin
 end;
 $$;
 
+-- Cambia dove va la funzione (es. "in cima al Timer Studio" invece di "al posto del Timer").
+create or replace function public.admin_set_custom_placement(p_id uuid, p_place text, p_position text)
+returns void language plpgsql security definer set search_path = public, auth as $$
+begin
+  if not public.is_developer() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  update public.custom_requests
+  set placement = jsonb_set(jsonb_set(coalesce(placement, '{}'::jsonb), '{place}', to_jsonb(left(coalesce(p_place, 'section'), 40))),
+                            '{position}', to_jsonb(left(coalesce(p_position, ''), 20)))
+  where id = p_id;
+end;
+$$;
+
+revoke all on function public.admin_set_custom_placement(uuid, text, text) from public, anon;
+grant execute on function public.admin_set_custom_placement(uuid, text, text) to authenticated;
+
 -- Pacchetti: aggiunge (o toglie, con un numero negativo) personalizzazioni a un'email.
 create or replace function public.admin_add_custom_credits(p_email text, p_add integer, p_package text default null)
 returns jsonb language plpgsql security definer set search_path = public, auth as $$

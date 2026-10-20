@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, RefreshCw, Check, X, Eye, Code2, ShieldCheck, ShieldAlert, ShieldX, Sparkles, Package, Plus, Minus, Copy, Wand2, RotateCcw } from 'lucide-react';
-import { CustomRequest, RequestStatus, PlanRow, loadAllRequests, updateRequest, loadPlans, addCredits } from '../lib/customRequests';
+import { CustomRequest, RequestStatus, PlanRow, loadAllRequests, updateRequest, loadPlans, addCredits, setRequestPlacement } from '../lib/customRequests';
 import { checkAppCode, SECURITY_REVIEW_SYSTEM, parseReview, AiReview } from '../lib/appSecurity';
 import { askAuto, askForCode, autoReady } from '../lib/ai';
 import { createDemoData } from '../lib/demoData';
 import { UserData } from '../lib/store';
 import MiniApp from './MiniApp';
-import { buildClaudeBrief, placeLabel } from '../lib/claudeBrief';
+import { buildClaudeBrief, placeLabel, PLACES } from '../lib/claudeBrief';
 import { useDialog } from './Dialog';
 
 // Admin → Personalizzazioni: the functions on measure the students asked for. When the page opens,
@@ -14,6 +14,20 @@ import { useDialog } from './Dialog';
 // looks at the preview and approves; a correction can be asked in words ("Correggi con l'AI").
 // "Copia per Claude" stays as an alternative. Approved, it appears only in that student's MYND.
 // Below: the packages.
+
+// Where a new function can go: "place|position".
+const WHERE: [string, string][] = [
+  ['section|', 'Nuova sezione nel menu'], ['home|', 'Pannello nella Home'],
+  ...Object.entries(PLACES).filter(([id]) => id !== 'home').flatMap(([id, name]): [string, string][] => [[`${id}|above`, `In cima a ${name}`], [`${id}|below`, `In fondo a ${name}`], [`${id}|replace`, `Al posto di ${name}`]]),
+  ['home|replace', 'Al posto di tutta la Home'],
+];
+const whereOf = (r: CustomRequest) => {
+  const p = r.placement || {};
+  const place = p.place || 'section';
+  if (place === 'section') return 'section|';
+  if (place === 'home') return p.position === 'replace' ? 'home|replace' : 'home|';
+  return `${place}|${p.position === 'replace' || p.position === 'below' ? p.position : 'above'}`;
+};
 
 const CODE_SYSTEM = 'Sei lo sviluppatore di MYND e scrivi funzioni su misura (mini-app) per gli studenti, seguendo esattamente le regole che ti vengono date. Rispondi con UN SOLO blocco ```html con la pagina completa e funzionante, senza parti da completare.';
 
@@ -130,6 +144,15 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
     }
   };
 
+  // The admin moves the function (e.g. "in cima al Timer" instead of "al posto del Timer"): the AI
+  // prepares it again for the new place.
+  const move = (r: CustomRequest, value: string) => act(r.id, async () => {
+    const [place, position] = value.split('|');
+    await setRequestPlacement(r.id, place, position);
+    const moved = { ...r, placement: { ...r.placement, place, position } };
+    if (htmlOf(r).trim()) build(moved);
+  });
+
   // New requests without code: prepared one at a time as soon as the page is open.
   useEffect(() => {
     if (Object.values(gen).includes('working')) return;
@@ -212,6 +235,15 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
                   <button onClick={() => build(r, fixes[r.id] || '')} disabled={!(fixes[r.id] || '').trim()} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5 disabled:opacity-40"><Wand2 className="w-3.5 h-3.5" /> Correggi con l'AI</button>
                 </div>
               </div>
+            )}
+            {r.status === 'pending' && r.kind === 'new' && (
+              <label className={`text-xs flex flex-wrap items-center gap-2 ${sub}`}>
+                <span className={`font-semibold ${text}`}>Dove va:</span>
+                <select value={whereOf(r)} onChange={e => move(r, e.target.value)} disabled={busy === r.id || gen[r.id] === 'working'} className={`${input} !py-1 !text-xs`}>
+                  {WHERE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <span>(se lo cambi, l'AI la rifà per il nuovo posto)</span>
+              </label>
             )}
             <p className={`text-xs ${sub}`}>Permessi: {r.placement?.uses_data ? 'legge materie, impegni e voti' : 'non legge i dati'}{r.placement?.writes_data ? ' · aggiunge dati (studio, impegni, voti, note)' : ''}</p>
 

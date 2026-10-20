@@ -5,7 +5,7 @@ import { CustomRequest } from './customRequests';
 // MYND mini-app. Claude answers with one HTML page; the admin pastes it in "Codice", tries it in
 // the preview and approves it: it then appears only in that student's MYND.
 
-const PLACES: Record<string, string> = {
+export const PLACES: Record<string, string> = {
   home: 'Home', impegni: 'Impegni', voti: 'Voti', timer: 'Timer Studio', archivio: 'Archivio',
   'cosa-studiare': 'Cosa studiare', calendario: 'Calendario', 'guida-ai': 'Guida Studio AI',
 };
@@ -27,7 +27,8 @@ export const MINI_APP_GUIDE = `COME FUNZIONA UNA FUNZIONE SU MISURA DI MYND (min
 - Leggere i dati dello studente (solo se ha il permesso "legge i dati"): const d = await mynd.data() → { today, subjects:[{name,color}], tasks:[{id,title,date,time,subject,done,type,importance}], grades:[{subject,value,scale,date,description}], studyMinutes:[{subject,minutes,date}] }, oppure null se lo studente non lo permette (gestiscilo).
 - Aggiungere dati (solo se ha il permesso "aggiunge dati"; Promise che lancia un errore se i dati non vanno bene, usa try/catch): mynd.addSession({subject, minutes}) (tempo di studio: conta nella Home e nelle statistiche come il Timer), mynd.addTask({title, date:"AAAA-MM-GG", time:"HH:MM", subject, personal, importance:1-5, minutes}), mynd.setTaskDone({id, done}), mynd.addGrade({subject, value, scale:10|30|100, date, description}), mynd.addNote({text}). Non si può cancellare nulla; massimo 30 scritture al minuto.
 - Altro: mynd.today() → "AAAA-MM-GG"; mynd.open("calendario") apre una sezione di MYND (home, impegni, voti, timer, archivio, cosa-studiare, calendario, guida-ai).
-- L'altezza si adatta da sola al contenuto. Se rifà una sezione intera ("al posto di"), deve includere tutto ciò che serve di quella sezione oltre alla novità.`;
+- L'altezza si adatta da sola al contenuto.
+- DOVE VA: se è "in cima" o "in fondo" a una sezione di MYND, la sezione originale RESTA sotto/sopra con tutte le sue funzioni: scrivi SOLO la parte nuova (es. per "Pomodoro nel Timer Studio": i cicli studio/pausa con scelta della materia, che salvano il tempo con mynd.addSession; NON rifare il cronometro, il grafico o le statistiche che ci sono già), compatta e ben integrata. Solo se è "al posto di" una sezione, rifai la sezione intera con tutto ciò che serve oltre alla novità.`;
 
 export function buildClaudeBrief(r: CustomRequest): string {
   const p = r.placement || {};
