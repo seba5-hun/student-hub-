@@ -55,8 +55,10 @@ const MISSING = 'Manca la parte "Personalizzazioni" su Supabase: esegui lo scrip
 function friendly(error: { message: string; code?: string }): Error {
   if (/row-level security/i.test(error.message)) return new Error('Non hai personalizzazioni disponibili nel tuo pacchetto (oppure hai già inviato molte richieste oggi).');
   if (/not allowed|42501/i.test(error.message)) return new Error('Questo account non è admin.');
-  if (/custom_requests|custom_plans|admin_custom|PGRST20[25]|42P01|schema cache|function/i.test(error.message)) return new Error(MISSING);
-  return new Error(error.message);
+  if (/infinite recursion/i.test(error.message)) return new Error('Va aggiornato lo script "Personalizzazioni" su Supabase (Admin → Guida → Script Supabase): rieseguilo.');
+  // Only a missing table or function means the script was never run; anything else is shown as it is.
+  if (error.code === '42P01' || /PGRST20[25]|does not exist|Could not find the (table|function)/i.test(error.message)) return new Error(MISSING);
+  return new Error(`Errore: ${error.message}`);
 }
 
 // ---- Student ----

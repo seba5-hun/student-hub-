@@ -25,8 +25,9 @@ const MISSING = 'Manca la parte "Suggerimenti" su Supabase: esegui lo script sup
 function friendly(error: { message: string; code?: string }): Error {
   if (/not allowed|42501/i.test(error.message) && !/row-level security/i.test(error.message)) return new Error('Questo account non è admin.');
   if (/row-level security/i.test(error.message)) return new Error('Hai già inviato molti suggerimenti oggi: riprova domani. Grazie!');
-  if (/suggestions|admin_suggestions|PGRST20[25]|42P01|schema cache|function/i.test(error.message)) return new Error(MISSING);
-  return new Error(error.message);
+  if (/infinite recursion/i.test(error.message)) return new Error('Va aggiornato lo script "Suggerimenti" su Supabase (Admin → Guida → Script Supabase): rieseguilo.');
+  if (error.code === '42P01' || /PGRST20[25]|does not exist|Could not find the (table|function)/i.test(error.message)) return new Error(MISSING);
+  return new Error(`Errore: ${error.message}`);
 }
 
 export async function sendSuggestion(userId: string, kind: SuggestionKind, message: string, section: string): Promise<void> {

@@ -46,6 +46,25 @@ create index if not exists custom_requests_user_idx on public.custom_requests (u
 
 alter table public.custom_requests enable row level security;
 
+-- Quante personalizzazioni restano e quante richieste ha inviato oggi chi sta usando l'app.
+-- Sono funzioni (security definer) perché una regola non può leggere la sua stessa tabella:
+-- Postgres lo blocca con "infinite recursion detected in policy".
+create or replace function public.my_custom_left()
+returns integer language sql stable security definer set search_path = public as $$
+  select (select coalesce(max(p.credits), 2) from public.custom_plans p where p.user_id = auth.uid())
+       - (select count(*) from public.custom_requests r where r.user_id = auth.uid() and r.status <> 'rejected')::integer;
+$$;
+
+create or replace function public.my_custom_today()
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::integer from public.custom_requests r where r.user_id = auth.uid() and r.created_at > now() - interval '1 day';
+$$;
+
+revoke all on function public.my_custom_left() from public, anon;
+revoke all on function public.my_custom_today() from public, anon;
+grant execute on function public.my_custom_left() to authenticated;
+grant execute on function public.my_custom_today() to authenticated;
+
 -- Si può inviare una richiesta solo a proprio nome, solo "in attesa" e solo se il pacchetto lo
 -- permette (le richieste rifiutate non contano). Al massimo 10 al giorno.
 drop policy if exists "custom_requests_insert_own" on public.custom_requests;
@@ -55,10 +74,8 @@ create policy "custom_requests_insert_own" on public.custom_requests
     user_id = (select auth.uid())
     and status = 'pending'
     and admin_note is null and review is null and reviewed_at is null
-    and (select coalesce(max(p.credits), 2) from public.custom_plans p where p.user_id = (select auth.uid()))
-        > (select count(*) from public.custom_requests r where r.user_id = (select auth.uid()) and r.status <> 'rejected')
-    and (select count(*) from public.custom_requests r
-         where r.user_id = (select auth.uid()) and r.created_at > now() - interval '1 day') < 10
+    and public.my_custom_left() > 0
+    and public.my_custom_today() < 10
   );
 
 drop policy if exists "custom_requests_select_own" on public.custom_requests;

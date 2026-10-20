@@ -15,6 +15,15 @@ create table if not exists public.suggestions (
 
 alter table public.suggestions enable row level security;
 
+-- Quanti suggerimenti ha inviato oggi chi sta usando l'app. È una funzione (security definer)
+-- perché una regola non può leggere la sua stessa tabella ("infinite recursion detected in policy").
+create or replace function public.my_suggestions_today()
+returns integer language sql stable security definer set search_path = public as $$
+  select count(*)::integer from public.suggestions s where s.user_id = auth.uid() and s.created_at > now() - interval '1 day';
+$$;
+revoke all on function public.my_suggestions_today() from public, anon;
+grant execute on function public.my_suggestions_today() to authenticated;
+
 -- Ognuno può inviare suggerimenti a proprio nome (al massimo 20 al giorno) e rileggere i propri.
 drop policy if exists "suggestions_insert_own" on public.suggestions;
 create policy "suggestions_insert_own" on public.suggestions
@@ -22,8 +31,7 @@ create policy "suggestions_insert_own" on public.suggestions
   with check (
     user_id = (select auth.uid())
     and status = 'new'
-    and (select count(*) from public.suggestions s
-         where s.user_id = (select auth.uid()) and s.created_at > now() - interval '1 day') < 20
+    and public.my_suggestions_today() < 20
   );
 
 drop policy if exists "suggestions_select_own" on public.suggestions;
