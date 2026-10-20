@@ -187,7 +187,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
       <div className={`${card} p-5 space-y-4`}>
         <div>
           <p className={`font-semibold flex items-center gap-2 ${text}`}><Package className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} /> Pacchetti di personalizzazioni</p>
-          <p className={`text-sm ${sub}`}>Dopo il pagamento, aggiungi le personalizzazioni all'email del cliente. Ogni richiesta inviata ne usa una; se la rifiuti, torna disponibile.</p>
+          <p className={`text-sm ${sub}`}>Ogni account ha 2 personalizzazioni incluse. Dopo il pagamento, aggiungi quelle del pacchetto all'email del cliente (si sommano alle 2). Ogni richiesta inviata ne usa una; se la rifiuti, torna disponibile.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="Email dell'account" className={`${input} flex-1 min-w-[200px]`} />

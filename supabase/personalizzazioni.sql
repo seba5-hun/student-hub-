@@ -3,16 +3,20 @@
 -- in Admin → Personalizzazioni. L'admin controlla la sicurezza, prova l'anteprima e approva:
 -- solo allora la funzione compare nella MYND di quello studente (e di nessun altro).
 -- Ogni richiesta usa una personalizzazione del pacchetto (se viene rifiutata, torna disponibile).
+-- Ogni account ha 2 personalizzazioni incluse; quelle dei pacchetti si aggiungono.
+-- Si può rieseguire senza perdere dati (aggiorna regole e funzioni).
 -- Da incollare una volta in Supabase → SQL Editor → New query → Run (dopo schema.sql).
 
--- Quante personalizzazioni ha comprato ogni persona (le assegna l'admin).
+-- Quante personalizzazioni ha ogni persona (le assegna l'admin). Chi non è in questa tabella ha
+-- quelle incluse (2).
 create table if not exists public.custom_plans (
   user_id     uuid primary key references auth.users (id) on delete cascade,
-  credits     integer not null default 0 check (credits between 0 and 1000),
+  credits     integer not null default 2 check (credits between 0 and 1000),
   package     text check (char_length(package) <= 60),
   updated_at  timestamptz not null default now()
 );
 
+alter table public.custom_plans alter column credits set default 2;   -- per chi aveva già lo script
 alter table public.custom_plans enable row level security;
 
 drop policy if exists "custom_plans_select_own" on public.custom_plans;
@@ -51,7 +55,7 @@ create policy "custom_requests_insert_own" on public.custom_requests
     user_id = (select auth.uid())
     and status = 'pending'
     and admin_note is null and review is null and reviewed_at is null
-    and (select coalesce(max(p.credits), 0) from public.custom_plans p where p.user_id = (select auth.uid()))
+    and (select coalesce(max(p.credits), 2) from public.custom_plans p where p.user_id = (select auth.uid()))
         > (select count(*) from public.custom_requests r where r.user_id = (select auth.uid()) and r.status <> 'rejected')
     and (select count(*) from public.custom_requests r
          where r.user_id = (select auth.uid()) and r.created_at > now() - interval '1 day') < 10
@@ -120,7 +124,7 @@ begin
     raise exception 'Nessun account con questa email.';
   end if;
   insert into public.custom_plans (user_id, credits, package, updated_at)
-  values (v_user, greatest(0, p_add), nullif(trim(coalesce(p_package, '')), ''), now())
+  values (v_user, greatest(0, 2 + p_add), nullif(trim(coalesce(p_package, '')), ''), now())   -- le 2 incluse + il pacchetto
   on conflict (user_id) do update set
     credits = greatest(0, public.custom_plans.credits + p_add),
     package = coalesce(nullif(trim(coalesce(p_package, '')), ''), public.custom_plans.package),

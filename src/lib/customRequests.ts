@@ -34,6 +34,9 @@ export interface CustomRequest {
   email?: string | null;
 }
 
+// Every account has 2 personalisations included; the packages bought add to them.
+export const INCLUDED_CREDITS = 2;
+
 export interface CustomPlan { credits: number; used: number; left: number; package: string | null; requests: CustomRequest[] }
 
 // A request prepared in the chat, not sent yet.
@@ -63,7 +66,7 @@ export async function loadMyPlan(userId: string): Promise<CustomPlan> {
   if (plan.error) throw friendly(plan.error);
   if (reqs.error) throw friendly(reqs.error);
   const requests = (reqs.data || []) as CustomRequest[];
-  const credits = plan.data?.credits || 0;
+  const credits = plan.data ? plan.data.credits : INCLUDED_CREDITS;
   const used = requests.filter(r => r.status !== 'rejected').length;
   return { credits, used, left: Math.max(0, credits - used), package: plan.data?.package || null, requests };
 }
