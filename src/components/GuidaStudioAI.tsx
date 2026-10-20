@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
-import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
+import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin, Mic, Volume2, VolumeX } from 'lucide-react';
+import { dictationSupported, readingSupported, startDictation, speak, stopSpeaking } from '../lib/voice';
 import { Grade, Task, UserData, createId, gradeOn10 } from '../lib/store';
 import { useProfile, ProfileApi } from '../lib/profile';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
@@ -151,6 +152,14 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   // "Mostra nei file": the places of the files an answer comes from (hits null = still searching).
   const [sources, setSources] = useState<{ hits: SourceHit[] | null } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Voice: dictation into the box (🎤) and answers read aloud (🔊); "Leggi le risposte" reads every
+  // new answer by itself, and so does an answer to a question asked by voice.
+  const [listening, setListening] = useState(false);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [autoRead, setAutoRead] = useState(() => { try { return localStorage.getItem('mynd_tutor_read') === '1'; } catch { return false; } });
+  const stopDictation = useRef<(() => void) | null>(null);
+  const spokenQuestion = useRef(false);
+  const readNext = useRef(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [uploadedImages, setUploadedImages] = useState<MessageImage[]>([]);
@@ -392,6 +401,10 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   // `editIndex`: a message already sent and edited by the student; the chat restarts from there.
   const sendMessage = async (text = input, title?: string, editIndex?: number) => {
+    stopDictation.current?.();
+    stopSpeaking(); setSpeakingId(null);
+    readNext.current = autoRead || spokenQuestion.current;
+    spokenQuestion.current = false;
     const editing = editIndex !== undefined;
     const images = editing ? messages[editIndex].images : (uploadedImages.length > 0 ? [...uploadedImages] : undefined);
     if ((!text.trim() && !images?.length) || isLoading) return;
@@ -572,6 +585,56 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   );
 
   const clearChat = newChat;
+
+  // 🎤 Dictation: what is said goes into the box (after what was already written).
+  const toggleDictation = () => {
+    if (listening) { stopDictation.current?.(); return; }
+    stopSpeaking(); setSpeakingId(null);
+    const before = input.trim();
+    setListening(true); setError('');
+    stopDictation.current = startDictation({
+      onText: t => { setInput(before ? `${before} ${t}` : t); spokenQuestion.current = true; },
+      onEnd: () => { setListening(false); stopDictation.current = null; },
+      onError: msg => setError(msg),
+    });
+  };
+  useEffect(() => () => { stopDictation.current?.(); stopSpeaking(); }, []);
+
+  // 🔊 Reads an answer aloud (tap again to stop).
+  const toggleRead = (id: string, text: string) => {
+    if (speakingId === id) { stopSpeaking(); setSpeakingId(null); return; }
+    setSpeakingId(id);
+    speak(text, () => setSpeakingId(s => (s === id ? null : s)));
+  };
+  // The new answer is read by itself when asked (see readNext).
+  useEffect(() => {
+    if (isLoading || !readNext.current) return;
+    const last = messages[messages.length - 1];
+    if (last?.role === 'assistant' && last.content) { readNext.current = false; toggleRead(last.id, last.content); }
+  }, [isLoading, messages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const micButton = (className: string) => dictationSupported() ? (
+    <button onClick={toggleDictation} disabled={isLoading} title={listening ? 'Ho finito di parlare' : 'Parla: detta la domanda'} aria-label={listening ? 'Ferma la dettatura' : 'Detta la domanda'}
+      className={`${className} flex items-center justify-center flex-shrink-0 disabled:opacity-30 ${listening ? 'animate-pulse' : ''}`}
+      style={listening ? { background: 'var(--danger)', color: '#fff' } : undefined}>
+      <Mic className="w-4 h-4" />
+    </button>
+  ) : null;
+
+  const readButton = (msg: Message) => readingSupported() && msg.content ? (
+    <button onClick={() => toggleRead(msg.id, msg.content)} className={`mt-2 text-xs flex items-center gap-1.5 ${subTextColor} hover:opacity-80`}
+      aria-label={speakingId === msg.id ? 'Ferma la lettura' : 'Ascolta la risposta'}>
+      {speakingId === msg.id ? <><VolumeX className="w-3.5 h-3.5" /> Ferma</> : <><Volume2 className="w-3.5 h-3.5" /> Ascolta</>}
+    </button>
+  ) : null;
+
+  const autoReadToggle = readingSupported() ? (
+    <button onClick={() => { const v = !autoRead; setAutoRead(v); try { localStorage.setItem('mynd_tutor_read', v ? '1' : '0'); } catch { /* private mode */ } if (!v) { stopSpeaking(); setSpeakingId(null); } }}
+      className={`text-xs flex items-center gap-1.5 ${autoRead ? '' : subTextColor}`} style={autoRead ? { color: 'var(--brand-ring)' } : undefined}
+      title="Legge ad alta voce ogni nuova risposta">
+      {autoRead ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />} Leggi le risposte: {autoRead ? 'sì' : 'no'}
+    </button>
+  ) : null;
 
   const onInputKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -758,6 +821,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
                 <div key={msg.id} className={textColor}>
                   <FormattedText text={msg.content} large />
                   {sourcesButton(msg)}
+                  {readButton(msg)}
                 </div>
               )
             ))}
@@ -775,12 +839,16 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           <div className={`flex items-end gap-2 rounded-3xl p-2 border ${darkMode ? 'bg-white/10 border-white/15' : 'bg-white/90 border-black/10 shadow-lg'}`}>
             {imagePicker(`w-10 h-10 rounded-full ${hoverBg}`)}
             <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey} autoFocus
-              placeholder="Chiedi qualcosa sul tuo materiale..." rows={1}
+              placeholder={listening ? 'Ti ascolto…' : 'Chiedi qualcosa sul tuo materiale...'} rows={1}
               className={`flex-1 resize-none bg-transparent outline-none py-2 text-base max-h-40 ${darkMode ? 'text-white placeholder-white/40' : 'text-gray-800 placeholder-gray-400'}`}
               disabled={isLoading} />
+            {micButton(`w-10 h-10 rounded-full ${hoverBg}`)}
             {sendButton(`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 disabled:opacity-30 ${darkMode ? 'bg-white text-gray-900' : 'bg-gray-900 text-white'}`)}
           </div>
-          <p className={`text-xs text-center mt-2 ${subTextColor}`}>L'AI può sbagliare: controlla le informazioni importanti sul libro.</p>
+          <div className="flex items-center justify-center gap-4 mt-2">
+            {autoReadToggle}
+            <p className={`text-xs ${subTextColor}`}>L'AI può sbagliare: controlla le informazioni importanti sul libro.</p>
+          </div>
         </div>
         </div>
       </div>
@@ -876,6 +944,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
                   {messageImages(msg)}
                   <FormattedText text={msg.content} />
                   {sourcesButton(msg)}
+                  {readButton(msg)}
                 </div>
               )}
             {msg.role === 'user' && (
@@ -909,9 +978,11 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
         <div className="flex gap-2">
           {imagePicker(`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'}`)}
           <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={onInputKey}
-            placeholder="Chiedi aiuto..." rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
+            placeholder={listening ? 'Ti ascolto…' : 'Chiedi aiuto...'} rows={1} className={`${darkMode ? 'input-glass' : 'input-light'} flex-1 resize-none`} disabled={isLoading} />
+          {micButton(`w-10 h-10 rounded-xl ${darkMode ? 'bg-white/10' : 'bg-black/5'}`)}
           {sendButton('w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-[var(--on-brand)] disabled:opacity-50 flex-shrink-0')}
         </div>
+        {autoReadToggle && <div className="mt-2">{autoReadToggle}</div>}
       </div>
     </div>
     </div>
