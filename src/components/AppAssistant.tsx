@@ -23,9 +23,21 @@ function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> 
 
 // A request for a function on measure, sent when the student confirmed it.
 interface SentRequest { title: string; ok: boolean; error?: string }
+// A function on measure proposed by the AI: the student confirms it with the button or a "sì".
+interface Proposal { action: Action; state: 'open' | 'sent' | 'failed'; error?: string }
 interface Message {
   role: 'user' | 'assistant'; text: string; done?: string[]; skipped?: string[]; undone?: boolean; id: number; apps?: string[];
-  sent?: SentRequest[];
+  sent?: SentRequest[]; proposal?: Proposal;
+  closes?: boolean;   // "richiesta inviata": what comes after is a new idea
+}
+
+// "sì", "ok confermo", "vai", "va bene"… (a short yes without a "ma", "cambia"…): the proposal is
+// sent right away, without asking the AI again (a second long answer could take minutes).
+const YES = ['si', 'sì', 'ok', 'okay', 'confermo', 'conferma', 'confermato', 'confermata', 'vai', 'procedi', 'perfetto', 'certo', 'approvata', 'approvato', 'fallo', 'invia', 'inviala', 'esatto', 'giusto', 'daccordo', 'bene', 'yes'];
+const BUT = ['no', 'non', 'ma', 'però', 'pero', 'cambia', 'cambiare', 'aggiungi', 'togli', 'invece', 'aspetta', 'prima', 'modifica', 'anche', 'oppure'];
+function isConfirmation(text: string): boolean {
+  const words = text.toLowerCase().replace(/d'accordo/g, 'daccordo').split(/[^\p{L}]+/u).filter(Boolean);
+  return text.length <= 60 && words.some(w => YES.includes(w)) && !words.some(w => BUT.includes(w));
 }
 // Only the team installs code (after checking it): the chat never runs these.
 const BLOCKED_ACTIONS = ['create_app', 'update_app'];
@@ -111,6 +123,9 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
     const userMsg: Message = { role: 'user', text: question, id: Date.now() };
     const history = [...messages, userMsg];
     setMessages(history);
+    // "Sì" to the open proposal: sent by the app, no AI needed.
+    const last = [...messages].reverse().find(m => m.role === 'assistant');
+    if (last?.proposal && last.proposal.state !== 'sent' && isConfirmation(question)) { await confirmProposal(last, history); return; }
     setBusy(true);
     try {
       const turns: ChatTurn[] = history.slice(-10).map(m => ({ role: m.role, text: m.done?.length ? `${m.text}\n[Fatto: ${m.done.join('; ')}${m.undone ? ' — poi annullato dallo studente' : ''}]` : m.text }));
@@ -119,7 +134,8 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
       const answer = parseAnswer(await withTimeout(askAuto(system, turns), 150_000, 'L\'AI non ha risposto in tempo. Riprova tra poco.'));
       const id = Date.now() + 1;
       let done: string[] = [], skipped: string[] = [], navigate: string | undefined, apps: string[] = [];
-      const actions = answer.actions.filter(a => a.type !== 'request_custom' && !BLOCKED_ACTIONS.includes(a.type));
+      const actions = answer.actions.filter(a => !['request_custom', 'propose_custom'].includes(a.type) && !BLOCKED_ACTIONS.includes(a.type));
+      const propose = answer.actions.find(a => a.type === 'propose_custom');
       if (actions.length) {
         const before = dataRef.current;
         const result = applyActions(before, actions, answer.codes);
@@ -149,7 +165,7 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
       // If nothing could be sent, the "Perfetto, inviata!" of the AI would be wrong.
       const reply = sent.length && !sent.some(x => x.ok) ? 'Non sono riuscito a inviare la richiesta.' : answer.reply;
       setMessages(m => [...m, { role: 'assistant', text: reply || (done.length || sent.length ? 'Fatto!' : 'Non ho capito bene: puoi dirmelo in un altro modo?'), done, skipped, id,
-        ...(apps.length ? { apps } : {}), ...(sent.length ? { sent } : {}) }]);
+        ...(apps.length ? { apps } : {}), ...(sent.length ? { sent } : {}), ...(propose && !sent.length ? { proposal: { action: propose, state: 'open' as const } } : {}) }]);
       // In the studio the student keeps talking: the new thing opens behind it.
       if (navigate && onNavigate) setTimeout(() => onNavigate(navigate!), 600);
     } catch (e) {
@@ -161,13 +177,14 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
 
   // The idea confirmed by the student → request for the team, with what the student asked in words,
   // the AI's detailed version for the developer and what the student's MYND already has.
-  const makeRequest = (a: Action, history: Message[]): Draft | null => {
+  const makeRequest = (a: Action, history: Message[], proposalText = ''): Draft | null => {
     const settings = dataRef.current.settings;
     // Only what was said after the previous request sent (an earlier idea is not part of this one).
-    const lastSent = history.map(m => !!m.sent?.some(x => x.ok)).lastIndexOf(true);
-    const asked = history.slice(lastSent + 1).filter(m => m.role === 'user').slice(-10).map(m => `- ${m.text}`).join('\n');
-    const summary = String(a.summary || '').trim();
-    const spec = String(a.spec || '').trim().slice(0, 8000);
+    const lastSent = history.map(m => !!m.sent?.some(x => x.ok) || !!m.closes).lastIndexOf(true);
+    const asked = history.slice(lastSent + 1).filter(m => m.role === 'user' && !isConfirmation(m.text)).slice(-10).map(m => `- ${m.text}`).join('\n');
+    // The proposal the student confirmed is the request (written by the AI from the whole chat).
+    const summary = String(a.summary || '').trim() || proposalText.trim().slice(0, 3000);
+    const spec = String(a.spec || '').trim().slice(0, 8000) || proposalText.trim().slice(0, 8000);
     if (!summary && !spec) return null;
     const idea = `${summary || 'Funzione su misura chiesta all\'Assistente MYND.'}\n\nCosa ha scritto lo studente:\n${asked}`;
     const key = String(a.target_app || '').trim();
@@ -179,6 +196,28 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
     }
     return { title: String(a.title || 'La mia funzione').slice(0, 60), idea, kind: 'new', html: '',
       placement: { ...base, place: String(a.place || 'section'), position: a.position ? String(a.position) : undefined, icon: a.icon ? String(a.icon) : undefined } };
+  };
+
+  // The student confirmed the proposal (button or "sì"): the request goes to Admin → Personalizzazioni.
+  const confirmProposal = async (m: Message, history: Message[]) => {
+    if (!m.proposal || busy) return;
+    const setState = (state: Proposal['state'], err?: string) =>
+      setMessages(ms => ms.map(x => (x.id === m.id && x.proposal ? { ...x, proposal: { ...x.proposal, state, error: err } } : x)));
+    const fail = (msg: string) => { setState('failed', msg); setMessages(ms => [...ms, { role: 'assistant', id: Date.now() + 2, text: `Non sono riuscito a inviare la richiesta: ${msg}` }]); };
+    if (demo) { fail('nella demo non si può, crea un account per avere le funzioni su misura.'); return; }
+    const d = makeRequest(m.proposal.action, history, m.text);
+    if (!d) { fail('la proposta è incompleta, chiedimela di nuovo.'); return; }
+    setBusy(true);
+    try {
+      await withTimeout(sendRequest(userId!, d), 30_000, 'il server non ha risposto: controlla la connessione e riprova.');
+      setState('sent');
+      setMessages(ms => [...ms, { role: 'assistant', id: Date.now() + 2, closes: true, text: 'Perfetto! Ho inviato la tua richiesta: la modifica verrà fatta il prima possibile e la troverai nella tua MYND.' }]);
+      refreshPlan();
+    } catch (e) {
+      fail(e instanceof Error ? e.message.replace(/^Errore: /, '') : String(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const askPackage = async () => {
@@ -300,6 +339,32 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
                 )}
               </div>
             )}
+            {m.proposal && (() => {
+              const p = m.proposal;
+              const latest = [...messages].reverse().find(x => x.proposal)?.id === m.id;
+              return (
+                <div className={`mt-2 rounded-xl p-3 space-y-2 ${darkMode ? 'bg-black/20' : 'bg-white/70'}`} style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+                  <p className={`text-sm font-semibold flex items-center gap-1.5 ${text}`}><AppWindow className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} />{String(p.action.title || 'La tua funzione')}</p>
+                  {p.state === 'sent' ? (
+                    <p className={`text-xs flex items-center gap-1.5 ${sub}`}><Clock className="w-3.5 h-3.5 flex-shrink-0" /> Richiesta inviata: la modifica verrà fatta il prima possibile e la troverai nella tua MYND.</p>
+                  ) : !latest ? (
+                    <p className={`text-xs ${sub}`}>Proposta aggiornata più sotto.</p>
+                  ) : (
+                    <>
+                      {p.state === 'failed' && p.error && <p className="text-xs text-red-400">{p.error}</p>}
+                      <p className={`text-xs ${sub}`}>{demo ? 'Nella demo non si può inviare: crea un account.' : `Usa 1 personalizzazione${plan ? ` (te ne restano ${plan.left})` : ''}. Se vuoi cambiare qualcosa, scrivimelo.`}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={() => { const userMsg: Message = { role: 'user', text: 'Confermo', id: Date.now() }; const h = [...messages, userMsg]; setMessages(h); confirmProposal(m, h); }}
+                          disabled={busy || demo || (!!plan && plan.left < 1)} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5 disabled:opacity-40">
+                          <Check className="w-3.5 h-3.5" /> {p.state === 'failed' ? 'Riprova' : 'Conferma e invia'}
+                        </button>
+                        {!demo && plan && plan.left < 1 && <button onClick={askPackage} className="text-xs font-semibold" style={{ color: 'var(--brand-ring)' }}>Richiedi un pacchetto</button>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {m.sent?.map((r, i) => (
               <div key={i} className={`mt-2 rounded-xl p-3 space-y-1 ${darkMode ? 'bg-black/20' : 'bg-white/70'}`} style={{ boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${r.ok ? 'var(--brand-ring)' : 'var(--danger)'} 25%, transparent)` }}>
                 <p className={`text-sm font-semibold flex items-center gap-1.5 ${text}`}><AppWindow className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} />{r.title}</p>

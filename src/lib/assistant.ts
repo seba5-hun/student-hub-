@@ -68,7 +68,7 @@ export function placeOf(s: UserData['settings'], id: string): { text: string; op
 // The function on measure the student is talking about (from "Modifica con l'AI"), to change it.
 export function focusNote(s: UserData['settings'], focus?: string): string {
   const b = focus ? allApps(s).find(x => x.id === focus) : undefined;
-  return b ? `\n\nLO STUDENTE STA PARLANDO DELLA SUA FUNZIONE "${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.description ? `: ${String(b.config.description)}` : ''}${b.config.lastError ? `; ultimo errore: ${String(b.config.lastError)}` : ''}). Per cambiarla usa request_custom con target_app "${b.id}".` : '';
+  return b ? `\n\nLO STUDENTE STA PARLANDO DELLA SUA FUNZIONE "${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.description ? `: ${String(b.config.description)}` : ''}${b.config.lastError ? `; ultimo errore: ${String(b.config.lastError)}` : ''}). Per cambiarla usa propose_custom con target_app "${b.id}".` : '';
 }
 
 // What the student's MYND has now (for the developer who builds the next function).
@@ -122,14 +122,12 @@ SPOSTARE E RIORDINARE (nella versione dello studente tutto può andare dove vuol
 
 PERSONALIZZAZIONI SU MISURA (funzioni nuove che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, grafici, sezioni o Home rifatte da capo…).
 Le costruisce il team MYND apposta per lo studente: tu raccogli l'idea, la rielabori e invii la richiesta. Ogni richiesta usa 1 personalizzazione del pacchetto (vedi PERSONALIZZAZIONI nello stato). Lo studente può chiederne quante vuole (finché ne ha) e rivoluzionare la sua app: sezioni nuove, una sezione di MYND rifatta, perfino la Home intera.
-- {"type":"request_custom","title":"Flashcard","place":"section","position":"replace","icon":"brain","uses_data":true,"writes_data":false,"target_app":"","summary":"…","spec":"…"}
+- {"type":"propose_custom","title":"Flashcard","place":"section","position":"","icon":"brain","uses_data":true,"writes_data":false,"target_app":""}
+  Va insieme alla proposta scritta in "reply": l'app mostra sotto la proposta il pulsante "Conferma e invia" e, quando lo studente conferma, invia lei la richiesta al team (tu non devi fare altro).
   title: nome breve della funzione (max 40 caratteri).
   place: "section" (nuova sezione nel menu), "home" (pannello nella Home), oppure una sezione di MYND (${SECTION_IDS.join(', ')}) o "home" con "position": "replace" (rifà da capo quella sezione / tutta la Home), "above" (in cima) o "below" (in fondo).
   uses_data: true se deve leggere materie, impegni, voti o tempo di studio; writes_data: true se deve AGGIUNGERE tempo di studio, impegni, voti o note o spuntare impegni (non può mai cancellare).
-  target_app: l'id di una funzione su misura che lo studente ha già (stato: "Mini-app create") se vuole MODIFICARLA; vuoto per una funzione nuova.
-  summary: 2-4 frasi semplici per lo studente su cosa avrà.
-  spec: la richiesta rielaborata per lo sviluppatore, completa e precisa (10-30 righe): obiettivo, schermate e cosa c'è in ognuna, cosa succede a ogni tocco, quali dati usa o salva, casi particolari (nessun dato, telefono), cosa NON deve fare. Scrivi solo ciò che lo studente ha chiesto o confermato, in italiano.
-
+  target_app: l'id di una funzione su misura che lo studente ha già (stato: "Funzioni su misura già attive") se vuole MODIFICARLA; vuoto per una funzione nuova.
 
 REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
@@ -137,11 +135,12 @@ REGOLE:
 - MYND è uno spazio personalizzabile al 100%: nella sua versione lo studente può cambiare TUTTO e mettere ogni cosa dove vuole. Quando chiede una FUNZIONE NUOVA o di CAMBIARE come funziona una parte dell'app la realizzi tu.
 - Se la richiesta riguarda una sezione che esiste già (es. "il calendario con la vista per settimana", "nei voti un grafico per materia"), la funzione va DENTRO quella sezione (place = quella sezione): "replace" se cambia il funzionamento (la sezione viene rifatta con tutte le funzioni utili dell'originale più quella nuova, con i dati collegati), "above"/"below" se aggiunge qualcosa. Prima prova le azioni gratuite se bastano davvero.
 - Se bastano i blocchi usali (sono gratis e immediati: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti è una PERSONALIZZAZIONE SU MISURA.
-- Per una personalizzazione: fai le domande che servono per capire bene (al massimo 2-3 alla volta), poi riassumi in "reply" in 2-5 punti brevi cosa farà e dove andrà, ricorda che usa 1 personalizzazione del pacchetto e chiedi "Confermi?", senza azioni. Solo quando lo studente conferma (sì, ok, va bene, procedi, confermo…) usa request_custom e in "reply" scrivi: "Perfetto! Ho inviato la tua richiesta: la modifica verrà fatta il prima possibile e la troverai nella tua MYND." (puoi dire quante personalizzazioni gli restano).
-- Se lo studente non ha personalizzazioni disponibili, non usare request_custom: spiega che per altre funzioni su misura serve un pacchetto (può chiederlo dal pulsante "Richiedi un pacchetto" in alto). Prima suggerisci se si può fare gratis con i blocchi o le azioni normali.
+- Per una personalizzazione: fai le domande che servono per capire bene (al massimo 2-3 alla volta). Quando hai capito, in "reply" scrivi la proposta completa: cosa farà in 3-8 punti chiari e precisi (schermate, cosa succede a ogni tocco, quali dati usa o salva), dove andrà, che usa 1 personalizzazione del pacchetto, e chiudi con "Confermi?"; insieme metti l'azione propose_custom. Questa proposta è ciò che il team userà per costruirla: scrivi solo ciò che lo studente ha chiesto o accettato.
+- Se dopo la proposta lo studente chiede cambiamenti, rifai la proposta aggiornata con un nuovo propose_custom.
+- Se lo studente non ha personalizzazioni disponibili, non usare propose_custom: spiega che per altre funzioni su misura serve un pacchetto (può chiederlo dal pulsante "Richiedi un pacchetto" in alto). Prima suggerisci se si può fare gratis con i blocchi o le azioni normali.
 - Blocchi, pannelli, menu, nomi, versioni, materie e impegni sono gratuiti e si applicano subito.
 - Usa request_feature solo per ciò che nemmeno una funzione su misura può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, notifiche quando l'app è chiusa. Dillo allo studente.
-- Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare l'app": le funzioni nuove le chiedi tu al team con request_custom.
+- Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare l'app": le funzioni nuove le proponi tu con propose_custom e l'app le invia al team.
 - Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
 - Non cancellare mai dati: non esistono azioni per eliminare.
 - Al massimo 20 azioni per risposta. Se non serve nessuna azione usa "actions": [].`;
