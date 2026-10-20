@@ -859,7 +859,7 @@ function App() {
         )}
         <Suspense fallback={<SectionFallback />}>
         {BASE_SECTIONS.includes(currentSection) && <SectionExtras section={currentSection} where="above" data={data} darkMode={darkMode} onUpdateData={updateData} onNavigate={handleSectionChange} />}
-        {currentSection === 'home' && (
+        {showBase('home') && (
           <Home
             data={data}
             darkMode={darkMode}
@@ -984,7 +984,7 @@ function App() {
       )}
       {studio && (
         <Suspense fallback={null}>
-          <AssistantStudio data={data} darkMode={darkMode} storageKey={`mynd_assistant_${user.id}`} userId={user.id} request={studio} isAdmin={isDeveloper(user.email)}
+          <AssistantStudio data={data} darkMode={darkMode} storageKey={`mynd_assistant_${user.id}`} userId={user.id} request={studio}
             onUpdateData={updateData} onNavigate={handleSectionChange} onClose={() => setStudio(null)} />
         </Suspense>
       )}

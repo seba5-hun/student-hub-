@@ -24,8 +24,9 @@ export const SECTION_ICONS = ['star', 'book', 'target', 'heart', 'flame', 'list'
 
 export const customOf = (s: UserSettings): CustomSpace => ({ ...s.custom, widgets: s.custom?.widgets || [], sections: s.custom?.sections || [] });
 
-// MYND's own sections where blocks and mini-apps can go (above, below or in place of the content).
-export const BASE_SECTIONS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
+// MYND's own sections where blocks and mini-apps can go (above, below or in place of the content),
+// the Home included (a function on measure can even redo the whole Home).
+export const BASE_SECTIONS = ['home', 'impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
 export const insideOf = (s: UserSettings, section: string): CustomBlock[] => customOf(s).inside?.[section] || [];
 // The section is shown in the student's version (a mini-app in its place) instead of MYND's.
 export const isReplaced = (s: UserSettings, section: string) =>

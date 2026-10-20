@@ -15,6 +15,9 @@ export interface Placement {
   uses_data?: boolean;
   writes_data?: boolean;
   description?: string;
+  spec?: string;           // the request rewritten for the developer (Claude)
+  context?: string;        // what the student's MYND already has
+  current_html?: string;   // for changes: the code of the function to change
 }
 
 export interface CustomRequest {

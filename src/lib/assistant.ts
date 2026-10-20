@@ -8,12 +8,12 @@ import { WIDGETS } from './homeWidgets';
 import { makeProfileApi, PRESETS, KIND_ORDER, LABEL_KEYS } from './profile';
 import { listLayouts, switchLayout, createLayout, updateActiveLayout, DEFAULT_LAYOUT_ID } from './layouts';
 import { buildSeries, untilAfter, weekdayOf } from './recurrence';
-import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, MAX_APP_HTML, addInside, allBlocks, updateBlock, takeBlock, setOriginal, isReplaced, orderMenu } from './custom';
+import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, MAX_APP_HTML, addInside, allBlocks, BASE_SECTIONS, updateBlock, takeBlock, setOriginal, isReplaced, orderMenu } from './custom';
 import { CustomBlock } from './store';
 
 export const SECTION_IDS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
 const DEFAULT_SECTION_NAMES: Record<string, string> = {
-  impegni: 'Impegni', voti: 'Voti', timer: 'Timer Studio', archivio: 'Archivio', 'cosa-studiare': 'Cosa studiare', calendario: 'Calendario', 'guida-ai': 'Guida Studio AI',
+  home: 'Home', impegni: 'Impegni', voti: 'Voti', timer: 'Timer Studio', archivio: 'Archivio', 'cosa-studiare': 'Cosa studiare', calendario: 'Calendario', 'guida-ai': 'Guida Studio AI',
 };
 const WEEKDAYS = ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica'];
 
@@ -39,7 +39,7 @@ export function describeState(data: UserData): string {
     `Materie: ${(s.subjects || []).map(x => `${x.name} (${x.color})`).join(', ') || 'nessuna'}.`,
     `Obiettivo settimanale di studio: ${s.weeklyGoal} ore.`,
     `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
-    `Mini-app create: ${allApps(s).map(b => `"${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.write ? ', modifica i dati' : ''})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
+    `Funzioni su misura già attive (mini-app): ${allApps(s).map(b => `"${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.write ? ', modifica i dati' : ''})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
     `Dentro le sezioni di MYND: ${Object.entries(customOf(s).inside || {}).filter(([, l]) => l.length).map(([k, l]) => `${k}: ${l.map(b => `${b.at === 'replace' ? 'AL POSTO DELLA SEZIONE' : b.at === 'above' ? 'sopra' : 'sotto'} ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}" (id ${b.id})`).join(', ')}${isReplaced(s, k) ? '' : l.some(b => b.at === 'replace') ? ' [ora lo studente vede l\'originale]' : ''}`).join('; ') || 'niente'}.`,
     `Ordine del menu: ${orderMenu([...SECTION_IDS, ...customOf(s).sections.map(x => `cs:${x.id}`)].map(id => ({ id })), customOf(s).menu).map(x => { const cs = customOf(s).sections.find(y => `cs:${y.id}` === x.id); return cs ? `"${cs.name}"` : x.id; }).join(', ')}.`,
     `Sezioni create con i blocchi (nel menu): ${customOf(s).sections.map(x => `"${x.name}" (${x.blocks.map(b => `${b.kind} "${b.title}"`).join(', ') || 'vuota'})`).join('; ') || 'nessuna'}.`,
@@ -53,7 +53,7 @@ export function allApps(s: UserData['settings']): CustomBlock[] {
 }
 
 // Where a block is, in words and as a section to open.
-function placeOf(s: UserData['settings'], id: string): { text: string; open?: string } {
+export function placeOf(s: UserData['settings'], id: string): { text: string; open?: string } {
   const c = customOf(s);
   if (c.widgets.some(b => b.id === id)) return { text: 'nella Home', open: 'home' };
   const sec = c.sections.find(x => x.blocks.some(b => b.id === id));
@@ -65,22 +65,23 @@ function placeOf(s: UserData['settings'], id: string): { text: string; open?: st
   return { text: '' };
 }
 
-// The code of the mini-apps the conversation is about (the one being edited, the last one made,
-// the ones named in the message), so the AI can change them without starting from zero.
-export function appContext(s: UserData['settings'], focus: string[], text: string, maxChars = 60000): string {
-  const apps = allApps(s);
-  const lower = text.toLowerCase();
-  const chosen = apps.filter(b => focus.includes(b.id) || (b.title.length > 2 && lower.includes(b.title.toLowerCase())));
-  let left = maxChars;
-  const parts: string[] = [];
-  for (const b of chosen) {
-    const html = String(b.config.html || '');
-    if (html.length > left) continue;
-    left -= html.length;
-    const err = b.config.lastError ? `\nUltimo errore segnalato: ${String(b.config.lastError)}` : '';
-    parts.push(`CODICE ATTUALE DELLA MINI-APP "${b.title}" (id ${b.id}, dati dello studente: ${b.config.data ? 'sì' : 'no'}):${err}\n<<<CODE>>>\n${html}\n<<<FINE>>>`);
-  }
-  return parts.length ? `\n\n${parts.join('\n\n')}\nPer modificarla usa update_app con l'id e riscrivi il codice COMPLETO (non solo le parti cambiate), mantenendo i dati salvati compatibili.` : '';
+// The function on measure the student is talking about (from "Modifica con l'AI"), to change it.
+export function focusNote(s: UserData['settings'], focus?: string): string {
+  const b = focus ? allApps(s).find(x => x.id === focus) : undefined;
+  return b ? `\n\nLO STUDENTE STA PARLANDO DELLA SUA FUNZIONE "${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.description ? `: ${String(b.config.description)}` : ''}${b.config.lastError ? `; ultimo errore: ${String(b.config.lastError)}` : ''}). Per cambiarla usa request_custom con target_app "${b.id}".` : '';
+}
+
+// What the student's MYND has now (for the developer who builds the next function).
+export function customSummary(s: UserData['settings']): string {
+  const c = customOf(s);
+  const apps = allApps(s).map(b => `- "${b.title}" (id ${b.id}) ${placeOf(s, b.id).text}${b.config.description ? `: ${String(b.config.description)}` : ''}`);
+  const replaced = Object.entries(c.inside || {}).filter(([k]) => isReplaced(s, k)).map(([k]) => k);
+  return [
+    `Versione attiva: ${listLayouts(s).find(l => l.active)?.name || 'MYND'}.`,
+    `Funzioni su misura già attive:\n${apps.join('\n') || '- nessuna'}`,
+    `Sezioni di MYND sostituite: ${replaced.join(', ') || 'nessuna'}.`,
+    `Sezioni create: ${c.sections.map(x => x.name).join(', ') || 'nessuna'}.`,
+  ].join('\n');
 }
 
 export const ASSISTANT_SYSTEM = `Sei l'Assistente MYND: aiuti lo studente a organizzare e personalizzare l'app MYND parlando in italiano, in modo breve e amichevole (dagli del tu).
@@ -119,40 +120,28 @@ SPOSTARE E RIORDINARE (nella versione dello studente tutto può andare dove vuol
 - {"type":"use_original","section":"timer","original":true}  mostra di nuovo la sezione originale di MYND al posto della versione dello studente (false = torna alla sua versione)
 - {"type":"request_feature","text":"descrizione chiara della funzione richiesta"}  invia la richiesta agli sviluppatori di MYND
 
-MINI-APP = PERSONALIZZAZIONI SU MISURA (per tutto ciò che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, tabelle, grafici, sezioni rifatte…).
-Sono a pacchetti: ogni mini-app nuova o modifica di una mini-app usa una personalizzazione del pacchetto dello studente (vedi PERSONALIZZAZIONI nello stato). Non viene attivata subito: diventa una richiesta che lo studente invia al team MYND con un pulsante; il team controlla che sia sicura e la attiva solo nel suo account, di solito entro un giorno.
-- {"type":"create_app","title":"Flashcard","place":"section","icon":"brain","code":"A1","uses_data":true,"writes_data":false,"description":"mazzi di flashcard per materia con punteggio"}
-  place: "section" (nuova sezione del menu), "home" (pannello della Home) oppure una sezione di MYND (${SECTION_IDS.join(', ')}) con "position": "replace" (prende il posto del contenuto della sezione: la sezione diventa la versione dello studente), "above" o "below";
-  uses_data true se deve leggere materie, impegni o voti; writes_data true se deve anche AGGIUNGERE dati (tempo di studio, impegni, voti, note) o spuntare impegni.
-- {"type":"update_app","app":"Flashcard","code":"A1","description":"…","writes_data":true}  sostituisce il codice di una mini-app esistente (app = titolo o id)
-Il codice NON va nel JSON: scrivilo DOPO il JSON, tra i segni <<<APP:A1>>> e <<<END>>> (A1 = il valore di "code").
-Come scrivere il codice di una mini-app:
-- Una sola pagina HTML completa e funzionante, con <style> e <script> dentro; niente librerie o risorse esterne (non vengono caricate), niente alert/prompt.
-- Testi in italiano, chiari. Deve stare bene da telefono a computer (layout fluido, niente larghezze fisse sopra 320px).
-- Grafica MYND già pronta: usa le classi card, well, btn, btn-secondary, btn-danger, input, chip, row, col, grid, bar (con <i style="width:40%">), big, muted, subtle, lime, ok, bad, e le variabili CSS var(--text), var(--text-muted), var(--brand-ring), var(--brand-fill), var(--border), var(--glass-well), var(--area-scuola)… Lo sfondo resta trasparente. Non cambiare font o colori di base.
-- Salvataggio: all'avvio const saved = await mynd.load() (null la prima volta); a ogni modifica await mynd.save(stato) (un oggetto JSON, massimo ~200 KB). Non usare localStorage.
-- Dati dello studente (solo se uses_data è true): const d = await mynd.data() → { today, subjects:[{name,color}], tasks:[{title,date,time,subject,done,type,importance}], grades:[{subject,value,scale,date,description}], studyMinutes:[{subject,minutes,date}] } (null se lo studente non lo permette: gestiscilo). Sono solo da leggere.
-- mynd.today() restituisce la data di oggi "AAAA-MM-GG". mynd.open("calendario") apre una sezione.
-- Scrivere nei dati (solo se writes_data è true; ogni funzione restituisce una Promise e lancia un errore se i dati non vanno bene: usa try/catch e mostra un messaggio):
-  await mynd.addSession({subject:"Matematica", minutes:50})  tempo di studio: conta nella Home, nelle statistiche e in "Cosa studiare" come quello del Timer
-  await mynd.addTask({title:"Verifica", date:"AAAA-MM-GG", time:"HH:MM", subject:"Storia", personal:false, importance:3, minutes:60})
-  await mynd.setTaskDone({id:"…", done:true})  (gli id arrivano da mynd.data().tasks)
-  await mynd.addGrade({subject:"Fisica", value:7.5, scale:10, date:"AAAA-MM-GG", description:"Interrogazione"})
-  await mynd.addNote({text:"…"})
-  Non si può cancellare nulla. Al massimo 30 scritture al minuto.
-- Codice completo e corretto, senza puntini o parti da completare.
+PERSONALIZZAZIONI SU MISURA (funzioni nuove che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, grafici, sezioni o Home rifatte da capo…).
+Le costruisce il team MYND apposta per lo studente: tu raccogli l'idea, la rielabori e invii la richiesta. Ogni richiesta usa 1 personalizzazione del pacchetto (vedi PERSONALIZZAZIONI nello stato). Lo studente può chiederne quante vuole (finché ne ha) e rivoluzionare la sua app: sezioni nuove, una sezione di MYND rifatta, perfino la Home intera.
+- {"type":"request_custom","title":"Flashcard","place":"section","position":"replace","icon":"brain","uses_data":true,"writes_data":false,"target_app":"","summary":"…","spec":"…"}
+  title: nome breve della funzione (max 40 caratteri).
+  place: "section" (nuova sezione nel menu), "home" (pannello nella Home), oppure una sezione di MYND (${SECTION_IDS.join(', ')}) o "home" con "position": "replace" (rifà da capo quella sezione / tutta la Home), "above" (in cima) o "below" (in fondo).
+  uses_data: true se deve leggere materie, impegni, voti o tempo di studio; writes_data: true se deve AGGIUNGERE tempo di studio, impegni, voti o note o spuntare impegni (non può mai cancellare).
+  target_app: l'id di una funzione su misura che lo studente ha già (stato: "Mini-app create") se vuole MODIFICARLA; vuoto per una funzione nuova.
+  summary: 2-4 frasi semplici per lo studente su cosa avrà.
+  spec: la richiesta rielaborata per lo sviluppatore, completa e precisa (10-30 righe): obiettivo, schermate e cosa c'è in ognuna, cosa succede a ogni tocco, quali dati usa o salva, casi particolari (nessun dato, telefono), cosa NON deve fare. Scrivi solo ciò che lo studente ha chiesto o confermato, in italiano.
+
 
 REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
 - Se la richiesta è ambigua o manca un dato importante (es. la data di una verifica), non fare azioni: chiedi in "reply".
 - MYND è uno spazio personalizzabile al 100%: nella sua versione lo studente può cambiare TUTTO e mettere ogni cosa dove vuole. Quando chiede una FUNZIONE NUOVA o di CAMBIARE come funziona una parte dell'app la realizzi tu.
-- Se la richiesta riguarda una sezione che esiste già (es. "il calendario con la vista per settimana", "nei voti un grafico per materia"), la modifica va DENTRO quella sezione, non in una sezione nuova: se cambia il funzionamento crea una mini-app con place = quella sezione e position "replace" che rifà la sezione per intero con la modifica (tutte le funzioni utili dell'originale più quella nuova) e tiene i dati collegati (es. un timer salva il tempo con mynd.addSession, così Home e statistiche continuano a funzionare); se aggiunge solo qualcosa usa "above" o "below". Prima prova le azioni esistenti se bastano davvero.
-- Se non è chiaro dove lo studente vuole una cosa, chiediglielo nella proposta (es. "La metto nella Home o dentro il Timer?"). Se bastano i blocchi usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
-- Per una mini-app PRIMA proponi: in "reply" descrivi in 2-5 punti brevi cosa farà e dove la metti, ricorda che usa 1 personalizzazione del pacchetto e chiedi "Va bene così?", senza azioni. Quando lo studente conferma (sì, ok, va bene, procedi…) scrivi create_app/update_app con il codice e in "reply" digli di toccare "Invia per l'approvazione" qui sotto. Nel campo "description" scrivi per il team una descrizione chiara e completa di cosa fa (3-6 frasi).
-- Se lo studente non ha personalizzazioni disponibili, non scrivere codice: proponi l'idea e spiega che per attivarla serve un pacchetto di personalizzazioni (può chiederlo dal pulsante "Richiedi un pacchetto" in alto). Prima suggerisci se si può fare gratis con i blocchi o le azioni normali.
+- Se la richiesta riguarda una sezione che esiste già (es. "il calendario con la vista per settimana", "nei voti un grafico per materia"), la funzione va DENTRO quella sezione (place = quella sezione): "replace" se cambia il funzionamento (la sezione viene rifatta con tutte le funzioni utili dell'originale più quella nuova, con i dati collegati), "above"/"below" se aggiunge qualcosa. Prima prova le azioni gratuite se bastano davvero.
+- Se bastano i blocchi usali (sono gratis e immediati: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti è una PERSONALIZZAZIONE SU MISURA.
+- Per una personalizzazione: fai le domande che servono per capire bene (al massimo 2-3 alla volta), poi riassumi in "reply" in 2-5 punti brevi cosa farà e dove andrà, ricorda che usa 1 personalizzazione del pacchetto e chiedi "Confermi?", senza azioni. Solo quando lo studente conferma (sì, ok, va bene, procedi, confermo…) usa request_custom e in "reply" scrivi: "Perfetto! Ho inviato la tua richiesta: la modifica verrà fatta il prima possibile e la troverai nella tua MYND." (puoi dire quante personalizzazioni gli restano).
+- Se lo studente non ha personalizzazioni disponibili, non usare request_custom: spiega che per altre funzioni su misura serve un pacchetto (può chiederlo dal pulsante "Richiedi un pacchetto" in alto). Prima suggerisci se si può fare gratis con i blocchi o le azioni normali.
 - Blocchi, pannelli, menu, nomi, versioni, materie e impegni sono gratuiti e si applicano subito.
-- Usa request_feature solo per ciò che una mini-app non può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, notifiche quando l'app è chiusa. Dillo allo studente.
-- Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare il codice".
+- Usa request_feature solo per ciò che nemmeno una funzione su misura può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, notifiche quando l'app è chiusa. Dillo allo studente.
+- Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare l'app": le funzioni nuove le chiedi tu al team con request_custom.
 - Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
 - Non cancellare mai dati: non esistono azioni per eliminare.
 - Al massimo 20 azioni per risposta. Se non serve nessuna azione usa "actions": [].`;
@@ -369,11 +358,11 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
         const app = makeApp(title, html, a.uses_data === true || writes, str(a.description, 300), writes);
         apps.push(app.id);
         const place = str(a.place, 40);
-        if (place === 'home') {
+        if (place === 'home' && str(a.position) !== 'replace') {
           data = addWidget(data, app, Math.round(num(a.position)) || undefined);
           done.push(`Nuova mini-app nella Home: "${title}"`);
           navigate = 'home';
-        } else if (SECTION_IDS.includes(place)) {
+        } else if (SECTION_IDS.includes(place) || place === 'home') {
           const at = position(a.position);
           data = addInside(data, place, app, at);
           navigate = place;
@@ -405,7 +394,7 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
         done.push(`Aggiornata la mini-app "${target.title}"`);
         const where = placeOf(settings(), target.id);
         if (where.open) navigate = where.open;
-        if (where.open && SECTION_IDS.includes(where.open) && (target.at === 'replace')) data = setOriginal(data, where.open, false);
+        if (where.open && BASE_SECTIONS.includes(where.open) && (target.at === 'replace')) data = setOriginal(data, where.open, false);
         break;
       }
       case 'move_block': {
@@ -448,7 +437,7 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
       }
       case 'use_original': {
         const id = str(a.section, 40);
-        if (!SECTION_IDS.includes(id)) { skipped.push(`sezione "${id}"`); break; }
+        if (!BASE_SECTIONS.includes(id)) { skipped.push(`sezione "${id}"`); break; }
         const original = a.original !== false;
         data = setOriginal(data, id, original);
         navigate = id;

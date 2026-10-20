@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, Send, Loader2, Undo2, Check, Trash2, X, AppWindow, ShieldCheck, Package, Clock } from 'lucide-react';
+import { Sparkles, Send, Loader2, Undo2, Check, Trash2, X, AppWindow, Package, Clock } from 'lucide-react';
 import { UserData } from '../lib/store';
 import { askAuto, autoReady, ChatTurn } from '../lib/ai';
-import { ASSISTANT_SYSTEM, describeState, parseAnswer, applyActions, appContext, allApps, Action } from '../lib/assistant';
+import { ASSISTANT_SYSTEM, describeState, parseAnswer, applyActions, focusNote, customSummary, allApps, Action } from '../lib/assistant';
 import { CustomPlan, Draft, loadMyPlan, sendRequest } from '../lib/customRequests';
 import { sendSuggestion } from '../lib/suggestions';
 
@@ -13,12 +13,14 @@ import { sendSuggestion } from '../lib/suggestions';
 // New functions with code (mini-apps) are personalisations sold in packages: the AI prepares them
 // and the student sends them to the admin, who checks them and turns them on (lib/customRequests).
 
-type DraftState = 'ready' | 'sent' | 'installed';
+// A request for a function on measure, sent when the student confirmed it.
+interface SentRequest { title: string; ok: boolean; error?: string }
 interface Message {
   role: 'user' | 'assistant'; text: string; done?: string[]; skipped?: string[]; undone?: boolean; id: number; apps?: string[];
-  drafts?: Draft[]; draftState?: DraftState[];
+  sent?: SentRequest[];
 }
-const APP_ACTIONS = ['create_app', 'update_app'];
+// Only the team installs code (after checking it): the chat never runs these.
+const BLOCKED_ACTIONS = ['create_app', 'update_app'];
 
 // Data before each applied change (for "Annulla"): kept for this session, also when Personalizza is closed.
 const SNAPSHOTS = new Map<number, UserData>();
@@ -55,10 +57,9 @@ interface Props {
   // A request from outside (e.g. "Modifica con l'AI" on a mini-app): text to complete and the app.
   request?: { text: string; appId?: string; n: number };
   onClose?: () => void;
-  isAdmin?: boolean;   // the owner can turn a function on right away, to try it
 }
 
-export default function AppAssistant({ data, darkMode, storageKey, userId, onUpdateData, onNavigate, variant = 'card', request, onClose, isAdmin = false }: Props) {
+export default function AppAssistant({ data, darkMode, storageKey, userId, onUpdateData, onNavigate, variant = 'card', request, onClose }: Props) {
   const [messages, setMessages] = useState<Message[]>(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { return []; }
   });
@@ -76,7 +77,6 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
   // The student's package of personalisations (null: loading or not available).
   const [plan, setPlan] = useState<CustomPlan | null>(null);
   const [planError, setPlanError] = useState('');
-  const [sending, setSending] = useState('');
   const refreshPlan = () => { if (!demo) loadMyPlan(userId!).then(p => { setPlan(p); setPlanError(''); }).catch(e => setPlanError(e instanceof Error ? e.message : String(e))); };
   useEffect(refreshPlan, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -106,18 +106,12 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
     setBusy(true);
     try {
       const turns: ChatTurn[] = history.slice(-10).map(m => ({ role: m.role, text: m.done?.length ? `${m.text}\n[Fatto: ${m.done.join('; ')}${m.undone ? ' — poi annullato dallo studente' : ''}]` : m.text }));
-      // The code of the app being edited, of the last one made and of those named in the chat.
-      const lastApps = [...messages].reverse().find(m => m.apps?.length && !m.undone)?.apps || [];
-      const recent = history.slice(-4).map(m => m.text).join('\n');
-      const credits = isAdmin ? 'illimitate (account del team MYND)' : demo ? 'nessuna: è la demo, serve un account' : plan ? `${plan.left} disponibili su ${plan.credits}` : 'nessuna';
-      const system = `${ASSISTANT_SYSTEM}\n\nSTATO ATTUALE DELL'APP:\n${describeState(dataRef.current)}\nPERSONALIZZAZIONI DEL PACCHETTO: ${credits}.${appContext(dataRef.current.settings, [...(focus ? [focus] : []), ...lastApps], recent)}`;
+      const credits = demo ? 'nessuna: è la demo, serve un account' : plan ? `${plan.left} disponibili su ${plan.credits}` : planError ? 'non disponibili al momento' : 'nessuna';
+      const system = `${ASSISTANT_SYSTEM}\n\nSTATO ATTUALE DELL'APP:\n${describeState(dataRef.current)}\nPERSONALIZZAZIONI DEL PACCHETTO: ${credits}.${focusNote(dataRef.current.settings, focus)}`;
       const answer = parseAnswer(await askAuto(system, turns));
       const id = Date.now() + 1;
       let done: string[] = [], skipped: string[] = [], navigate: string | undefined, apps: string[] = [];
-      // Functions with code are not turned on here: they become requests to send for approval.
-      const drafts = answer.actions.filter(a => APP_ACTIONS.includes(a.type)).map(a => makeDraft(a, answer.codes, history)).filter((d): d is Draft => !!d);
-      const actions = answer.actions.filter(a => !APP_ACTIONS.includes(a.type));
-      if (answer.actions.some(a => APP_ACTIONS.includes(a.type)) && !drafts.length) skipped.push('preparare la funzione (riprova a chiedermelo)');
+      const actions = answer.actions.filter(a => a.type !== 'request_custom' && !BLOCKED_ACTIONS.includes(a.type));
       if (actions.length) {
         const before = dataRef.current;
         const result = applyActions(before, actions, answer.codes);
@@ -135,8 +129,19 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
           }
         }
       }
-      setMessages(m => [...m, { role: 'assistant', text: answer.reply || (done.length || drafts.length ? 'Fatto!' : 'Non ho capito bene: puoi dirmelo in un altro modo?'), done, skipped, id,
-        ...(apps.length ? { apps } : {}), ...(drafts.length ? { drafts, draftState: drafts.map(() => 'ready' as const) } : {}) }]);
+      // Functions on measure: the request goes to the team (Admin → Personalizzazioni) right away.
+      const sent: SentRequest[] = [];
+      for (const a of answer.actions.filter(x => x.type === 'request_custom')) {
+        const d = makeRequest(a, history);
+        if (!d) { skipped.push('preparare la richiesta (riprova a chiedermelo)'); continue; }
+        if (demo) { sent.push({ title: d.title, ok: false, error: 'Nella demo non si può: crea un account per avere le funzioni su misura.' }); continue; }
+        try { await sendRequest(userId!, d); sent.push({ title: d.title, ok: true }); } catch (e) { sent.push({ title: d.title, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+      }
+      if (sent.some(x => x.ok)) refreshPlan();
+      // If nothing could be sent, the "Perfetto, inviata!" of the AI would be wrong.
+      const reply = sent.length && !sent.some(x => x.ok) ? 'Non sono riuscito a inviare la richiesta.' : answer.reply;
+      setMessages(m => [...m, { role: 'assistant', text: reply || (done.length || sent.length ? 'Fatto!' : 'Non ho capito bene: puoi dirmelo in un altro modo?'), done, skipped, id,
+        ...(apps.length ? { apps } : {}), ...(sent.length ? { sent } : {}) }]);
       // In the studio the student keeps talking: the new thing opens behind it.
       if (navigate && onNavigate) setTimeout(() => onNavigate(navigate!), 600);
     } catch (e) {
@@ -146,56 +151,26 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
     }
   };
 
-  // A function prepared by the AI → request for the team (with what the student asked, in words).
-  const makeDraft = (a: Action, codes: Record<string, string>, history: Message[]): Draft | null => {
-    const html = codes[String(a.code || '')] || '';
-    if (!/<(script|div|body|html|main|section)[\s>]/i.test(html)) return null;
-    const asked = history.filter(m => m.role === 'user').slice(-8).map(m => `- ${m.text}`).join('\n');
-    const description = String(a.description || '').trim();
-    const idea = `${description || 'Funzione preparata dall\'Assistente MYND.'}\n\nCosa ha chiesto lo studente:\n${asked}`;
-    if (a.type === 'update_app') {
-      const key = String(a.app || '');
-      const target = allApps(dataRef.current.settings).find(b => b.id === key || b.title.toLowerCase() === key.toLowerCase());
-      if (!target) return null;
-      return { title: target.title, idea, kind: 'update', target_app: target.id, html,
-        placement: { uses_data: target.config.data === true || a.uses_data === true || a.writes_data === true, writes_data: target.config.write === true || a.writes_data === true, description: description || String(target.config.description || '') } };
+  // The idea confirmed by the student → request for the team, with what the student asked in words,
+  // the AI's detailed version for the developer and what the student's MYND already has.
+  const makeRequest = (a: Action, history: Message[]): Draft | null => {
+    const settings = dataRef.current.settings;
+    // Only what was said after the previous request sent (an earlier idea is not part of this one).
+    const lastSent = history.map(m => !!m.sent?.some(x => x.ok)).lastIndexOf(true);
+    const asked = history.slice(lastSent + 1).filter(m => m.role === 'user').slice(-10).map(m => `- ${m.text}`).join('\n');
+    const summary = String(a.summary || '').trim();
+    const spec = String(a.spec || '').trim().slice(0, 8000);
+    if (!summary && !spec) return null;
+    const idea = `${summary || 'Funzione su misura chiesta all\'Assistente MYND.'}\n\nCosa ha scritto lo studente:\n${asked}`;
+    const key = String(a.target_app || '').trim();
+    const target = key ? allApps(settings).find(b => b.id === key || b.title.toLowerCase() === key.toLowerCase()) : undefined;
+    const base = { uses_data: a.uses_data === true || a.writes_data === true, writes_data: a.writes_data === true, description: summary, spec, context: customSummary(settings) };
+    if (target) {
+      return { title: target.title, idea, kind: 'update', target_app: target.id, html: '',
+        placement: { ...base, uses_data: base.uses_data || target.config.data === true, writes_data: base.writes_data || target.config.write === true, current_html: String(target.config.html || '').slice(0, 150000) } };
     }
-    return { title: String(a.title || 'La mia funzione').slice(0, 60), idea, kind: 'new', html,
-      placement: { place: String(a.place || 'section'), position: a.position ? String(a.position) : undefined, icon: a.icon ? String(a.icon) : undefined,
-        uses_data: a.uses_data === true || a.writes_data === true, writes_data: a.writes_data === true, description } };
-  };
-
-  const setDraftState = (id: number, i: number, state: DraftState) =>
-    setMessages(ms => ms.map(x => (x.id === id ? { ...x, draftState: (x.draftState || []).map((s0, j) => (j === i ? state : s0)) } : x)));
-
-  const submitDraft = async (m: Message, i: number) => {
-    const d = m.drafts![i];
-    setSending(`${m.id}:${i}`); setError('');
-    try {
-      await sendRequest(userId!, d);
-      setDraftState(m.id, i, 'sent');
-      refreshPlan();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSending('');
-    }
-  };
-
-  // The owner tries a function right away (no request).
-  const installNow = (m: Message, i: number) => {
-    const d = m.drafts![i];
-    const p = d.placement;
-    const action: Action = d.kind === 'update'
-      ? { type: 'update_app', app: d.target_app || d.title, code: 'R', writes_data: !!p.writes_data, description: p.description || '' }
-      : { type: 'create_app', title: d.title, place: p.place, position: p.position, icon: p.icon, code: 'R', uses_data: !!p.uses_data, writes_data: !!p.writes_data, description: p.description || '' };
-    const before = dataRef.current;
-    const result = applyActions(before, [action], { R: d.html });
-    if (result.data === before) { setError(`Non sono riuscito ad attivarla: ${result.skipped.join(', ')}`); return; }
-    onUpdateData(() => result.data);
-    setDraftState(m.id, i, 'installed');
-    if (result.apps.length) setFocus(result.apps[result.apps.length - 1]);
-    if (result.navigate && onNavigate) setTimeout(() => onNavigate(result.navigate!), 300);
+    return { title: String(a.title || 'La mia funzione').slice(0, 60), idea, kind: 'new', html: '',
+      placement: { ...base, place: String(a.place || 'section'), position: a.position ? String(a.position) : undefined, icon: a.icon ? String(a.icon) : undefined } };
   };
 
   const askPackage = async () => {
@@ -219,9 +194,9 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
   const apps = allApps(data.settings);
   const focused = apps.find(b => b.id === focus);
   const chips = studio ? CREATE_SUGGESTIONS : SUGGESTIONS;
-  const left = isAdmin ? Infinity : plan?.left ?? 0;
+  const left = plan?.left ?? 0;
   const requests = plan?.requests || [];
-  const STATUS: Record<string, [string, string]> = { pending: ['In controllo', 'var(--warning)'], approved: ['Attiva', 'var(--brand-ring)'], rejected: ['Non approvata', 'var(--danger)'] };
+  const STATUS: Record<string, [string, string]> = { pending: ['In lavorazione', 'var(--warning)'], approved: ['Attiva', 'var(--brand-ring)'], rejected: ['Non approvata', 'var(--danger)'] };
   const chip = 'text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 whitespace-nowrap';
 
   return (
@@ -247,9 +222,9 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
       {studio && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className={`${chip} ${well} ${text}`}><Package className="w-3.5 h-3.5" style={{ color: 'var(--brand-ring)' }} />
-            {isAdmin ? 'Personalizzazioni: illimitate (admin)' : demo ? 'Personalizzazioni: solo con un account' : planError ? 'Personalizzazioni: non disponibili' : plan ? `Personalizzazioni: ${plan.left} su ${plan.credits}` : 'Personalizzazioni: …'}
+            {demo ? 'Personalizzazioni: solo con un account' : planError ? 'Personalizzazioni: non disponibili' : plan ? `Personalizzazioni: ${plan.left} su ${plan.credits}` : 'Personalizzazioni: …'}
           </span>
-          {!isAdmin && !demo && !planError && plan && plan.left === 0 && (
+          {!demo && !planError && plan && plan.left === 0 && (
             <button onClick={askPackage} className={`${chip} font-semibold`} style={{ color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 12%, transparent)' }}>Richiedi un pacchetto</button>
           )}
         </div>
@@ -261,7 +236,7 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
             {studio && (
               <div className={`rounded-2xl p-4 text-sm space-y-1.5 ${well} ${sub}`}>
                 <p className={`font-medium ${text}`}>MYND si adatta a te, al 100%.</p>
-                <p>Descrivi una funzione che ti servirebbe: ti propongo come farla e, se ti va bene, la preparo con la grafica di MYND. La invii al team MYND, che controlla che sia sicura e la attiva solo nella tua MYND (di solito entro un giorno). Ogni funzione nuova usa una personalizzazione del tuo pacchetto.</p>
+                <p>Descrivi la funzione che ti servirebbe, anche una sezione o la Home rifatta come vuoi tu: ti faccio qualche domanda, ti riassumo l'idea e, quando confermi, la invio al team MYND che la costruisce apposta per te e la attiva solo nella tua MYND. Ogni funzione nuova usa una personalizzazione del tuo pacchetto.</p>
                 <p>Sistemare la Home, il menu, i nomi, le materie e gli impegni invece è gratis e immediato.</p>
               </div>
             )}
@@ -317,38 +292,18 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
                 )}
               </div>
             )}
-            {m.drafts?.map((d, i) => {
-              const state = m.draftState?.[i] || 'ready';
-              const busyHere = sending === `${m.id}:${i}`;
-              return (
-                <div key={i} className={`mt-2 rounded-xl p-3 space-y-2 ${darkMode ? 'bg-black/20' : 'bg-white/70'}`} style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 25%, transparent)' }}>
-                  <p className={`text-sm font-semibold flex items-center gap-1.5 ${text}`}><AppWindow className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} />{d.kind === 'update' ? `Modifica di «${d.title}»` : d.title}</p>
-                  {state === 'ready' ? (
-                    <>
-                      <p className={`text-xs ${sub}`}>Pronta. Il team MYND controlla che sia sicura e la attiva nella tua MYND. Usa 1 personalizzazione del pacchetto.</p>
-                      <div className="flex flex-wrap gap-2">
-                        {demo ? <p className={`text-xs ${sub}`}>Nella demo non si può inviare: crea un account.</p> : (
-                          <button onClick={() => submitDraft(m, i)} disabled={busyHere || left < 1}
-                            className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5 disabled:opacity-40">
-                            {busyHere ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Invia per l'approvazione
-                          </button>
-                        )}
-                        {!demo && !isAdmin && left < 1 && <button onClick={askPackage} className="text-xs font-semibold" style={{ color: 'var(--brand-ring)' }}>Richiedi un pacchetto</button>}
-                        {isAdmin && <button onClick={() => installNow(m, i)} className={`text-xs px-3 py-1.5 rounded-full ${well} ${text}`}>Attiva subito (admin)</button>}
-                      </div>
-                    </>
-                  ) : state === 'sent' ? (
-                    <p className={`text-xs flex items-center gap-1.5 ${sub}`}><Clock className="w-3.5 h-3.5" /> Inviata: quando il team la approva la trovi nella tua MYND.</p>
-                  ) : (
-                    <p className={`text-xs flex items-center gap-1.5 ${sub}`}><Check className="w-3.5 h-3.5" style={{ color: 'var(--brand-ring)' }} /> Attivata.</p>
-                  )}
-                </div>
-              );
-            })}
+            {m.sent?.map((r, i) => (
+              <div key={i} className={`mt-2 rounded-xl p-3 space-y-1 ${darkMode ? 'bg-black/20' : 'bg-white/70'}`} style={{ boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${r.ok ? 'var(--brand-ring)' : 'var(--danger)'} 25%, transparent)` }}>
+                <p className={`text-sm font-semibold flex items-center gap-1.5 ${text}`}><AppWindow className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} />{r.title}</p>
+                {r.ok
+                  ? <p className={`text-xs flex items-center gap-1.5 ${sub}`}><Clock className="w-3.5 h-3.5 flex-shrink-0" /> Richiesta inviata: la modifica verrà fatta il prima possibile e la troverai nella tua MYND.</p>
+                  : <p className="text-xs text-red-400">{r.error}{!demo && left < 1 && <> <button onClick={askPackage} className="font-semibold underline" style={{ color: 'var(--brand-ring)' }}>Richiedi un pacchetto</button></>}</p>}
+              </div>
+            ))}
             {!!m.skipped?.length && <p className={`text-xs mt-1 ${sub}`}>Non ho potuto: {m.skipped.join(', ')}.</p>}
           </div>
         ))}
-        {busy && <p className={`text-sm flex items-center gap-2 ${sub}`}><Loader2 className="w-4 h-4 animate-spin" /> {studio ? 'Ci lavoro… (per una mini-app può volerci un minuto)' : 'Ci penso…'}</p>}
+        {busy && <p className={`text-sm flex items-center gap-2 ${sub}`}><Loader2 className="w-4 h-4 animate-spin" /> Ci penso…</p>}
       </div>
 
       {error && <p className="text-sm text-red-400 mt-2 whitespace-pre-line">{error}</p>}

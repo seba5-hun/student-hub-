@@ -1,31 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, Check, X, Eye, Code2, ShieldCheck, ShieldAlert, ShieldX, Sparkles, Package, Plus, Minus } from 'lucide-react';
+import { Loader2, RefreshCw, Check, X, Eye, Code2, ShieldCheck, ShieldAlert, ShieldX, Sparkles, Package, Plus, Minus, Copy } from 'lucide-react';
 import { CustomRequest, RequestStatus, PlanRow, loadAllRequests, updateRequest, loadPlans, addCredits } from '../lib/customRequests';
 import { checkAppCode, SECURITY_REVIEW_SYSTEM, parseReview, AiReview } from '../lib/appSecurity';
 import { askAuto, autoReady } from '../lib/ai';
 import { createDemoData } from '../lib/demoData';
 import { UserData } from '../lib/store';
 import MiniApp from './MiniApp';
-import { SECTIONS } from './Layout';
+import { buildClaudeBrief, placeLabel } from '../lib/claudeBrief';
 import { useDialog } from './Dialog';
 
-// Admin → Personalizzazioni: the functions the students asked for (prepared by the AI). For each
-// one: the idea, the automatic security check, the AI's opinion, a preview with example data and
-// the code (editable). Approved, it appears only in that student's MYND. Below: the packages.
+// Admin → Personalizzazioni: the functions on measure the students asked for. For each one: the
+// idea rewritten by the Assistente MYND, "Copia per Claude" (the text to paste to Claude, who writes
+// the function), the place to paste Claude's answer, the automatic security check, the AI's
+// opinion, a preview with example data. Approved, it appears only in that student's MYND.
+// Below: the packages.
 
 const FILTERS: { id: RequestStatus | 'all'; label: string }[] = [
   { id: 'pending', label: 'Da controllare' }, { id: 'approved', label: 'Approvate' }, { id: 'rejected', label: 'Rifiutate' }, { id: 'all', label: 'Tutte' },
 ];
 const STATUS: Record<RequestStatus, [string, string]> = { pending: ['Da controllare', 'var(--warning)'], approved: ['Approvata', 'var(--brand-ring)'], rejected: ['Rifiutata', 'var(--danger)'] };
 const when = (v: string) => { const d = new Date(v); return `${d.toLocaleDateString('it-IT')} ${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`; };
-const placeText = (r: CustomRequest) => {
-  if (r.kind === 'update') return 'Modifica di una sua funzione già attiva';
-  const p = r.placement || {};
-  if (p.place === 'home') return 'Nella Home';
-  const base = SECTIONS.find(x => x.id === p.place)?.label;
-  if (base) return `${p.position === 'replace' ? 'Al posto di' : p.position === 'below' ? 'In fondo a' : 'In cima a'} ${base}`;
-  return 'Nuova sezione nel menu';
-};
+// What Claude answered, pasted whole: keep only the page (the ```html block), if there is one.
+const extractHtml = (v: string) => v.match(/```(?:html)?[^\n]*\n([\s\S]*?)```/i)?.[1]?.trim() ?? v;
 
 export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: boolean; onPendingCount?: (n: number) => void }) {
   const dialog = useDialog();
@@ -37,6 +33,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
   const [error, setError] = useState('');
   const [open, setOpen] = useState<Record<string, 'preview' | 'code' | undefined>>({});
   const [codes, setCodes] = useState<Record<string, string>>({});   // code being edited
+  const [copied, setCopied] = useState('');
   const [email, setEmail] = useState('');
   const [amount, setAmount] = useState(2);
   const [pack, setPack] = useState('');
@@ -68,6 +65,14 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
   };
 
   const htmlOf = (r: CustomRequest) => codes[r.id] ?? r.html;
+
+  const copyBrief = async (r: CustomRequest) => {
+    const value = buildClaudeBrief(r);
+    try { await navigator.clipboard.writeText(value); } catch {
+      const t = document.createElement('textarea'); t.value = value; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove();
+    }
+    setCopied(r.id); window.setTimeout(() => setCopied(c => (c === r.id ? '' : c)), 2500);
+  };
 
   const approve = (r: CustomRequest) => act(r.id, async () => {
     const report = checkAppCode(htmlOf(r));
@@ -134,15 +139,29 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className={`font-semibold ${text}`}>{r.kind === 'update' ? 'Modifica: ' : ''}{r.title}</p>
-                <p className={`text-xs ${sub}`}>{r.email || 'account eliminato'} · {when(r.created_at)} · {placeText(r)}</p>
+                <p className={`text-xs ${sub}`}>{r.email || 'account eliminato'} · {when(r.created_at)} · {placeLabel(r)}</p>
               </div>
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: STATUS[r.status][1], background: `color-mix(in srgb, ${STATUS[r.status][1]} 14%, transparent)` }}>{STATUS[r.status][0]}</span>
             </div>
 
             <p className={`text-sm whitespace-pre-line rounded-xl p-3 ${well} ${text}`}>{r.idea}</p>
+            {r.placement?.spec && (
+              <details className={`rounded-xl px-3 py-2 ${well}`}>
+                <summary className={`text-xs font-semibold cursor-pointer ${sub}`}>Richiesta dettagliata (scritta dall'Assistente per lo sviluppatore)</summary>
+                <p className={`text-xs whitespace-pre-line mt-2 ${text}`}>{r.placement.spec}</p>
+              </details>
+            )}
+            {r.status === 'pending' && (
+              <div className="rounded-xl p-3 space-y-2" style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+                <p className={`text-xs ${sub}`}><b className={text}>Come si fa:</b> ① copia il testo per Claude e incollalo nella chat con Claude → ② incolla qui sotto in "Codice" la sua risposta (anche tutta: tengo solo la pagina) → ③ prova l'Anteprima → ④ Approva, oppure scrivi a Claude cosa correggere.</p>
+                <button onClick={() => copyBrief(r)} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5">
+                  {copied === r.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === r.id ? 'Copiato! Ora incollalo a Claude' : 'Copia per Claude'}
+                </button>
+              </div>
+            )}
             <p className={`text-xs ${sub}`}>Permessi: {r.placement?.uses_data ? 'legge materie, impegni e voti' : 'non legge i dati'}{r.placement?.writes_data ? ' · aggiunge dati (studio, impegni, voti, note)' : ''}</p>
 
-            <div className={`rounded-xl p-3 space-y-1.5 ${well}`}>
+            {html.trim() ? <div className={`rounded-xl p-3 space-y-1.5 ${well}`}>
               <p className="text-sm font-semibold flex items-center gap-1.5" style={{ color: shieldColor }}>
                 <ShieldIcon className="w-4 h-4" /> Controllo automatico: {report.level === 'ok' ? 'nessun problema' : report.level === 'warning' ? 'da guardare' : 'problemi gravi'}
               </p>
@@ -157,7 +176,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
                   {ai.issues?.length > 0 && <span className={`block ${sub}`}>{ai.issues.map(x => `• ${x}`).join('\n')}</span>}
                 </p>
               )}
-            </div>
+            </div> : <p className={`text-xs ${sub}`}>Il controllo di sicurezza compare quando c'è il codice.</p>}
 
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setOpen(o => ({ ...o, [r.id]: o[r.id] === 'preview' ? undefined : 'preview' }))} disabled={!html.trim()} className={small}><Eye className="w-3.5 h-3.5" /> Anteprima</button>
@@ -170,13 +189,13 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
             {r.admin_note && <p className={`text-xs ${sub}`}>Nota allo studente: {r.admin_note}</p>}
 
             {open[r.id] === 'preview' && <Preview key={html} html={html} writes={!!r.placement?.writes_data} darkMode={darkMode} />}
-            {open[r.id] === 'code' && (
+            {(open[r.id] === 'code' || (r.status === 'pending' && !r.html && open[r.id] !== 'preview')) && (
               <div className="space-y-2">
-                <textarea value={html} onChange={e => setCodes(c => ({ ...c, [r.id]: e.target.value }))} spellCheck={false}
-                  className={`${input} w-full font-mono text-xs h-80`} />
+                <textarea value={html} onChange={e => { const v = extractHtml(e.target.value); setCodes(c => ({ ...c, [r.id]: v })); }} spellCheck={false}
+                  placeholder="Incolla qui la risposta di Claude" className={`${input} w-full font-mono text-xs h-80`} />
                 <div className="flex flex-wrap items-center gap-2">
                   <button onClick={() => saveCode(r)} disabled={!edited || busy === r.id} className={small}>Salva il codice</button>
-                  <span className={`text-xs ${sub}`}>Puoi correggerlo o incollare quello fatto da Claude. Il controllo qui sopra si aggiorna mentre scrivi.</span>
+                  <span className={`text-xs ${sub}`}>Incolla la risposta di Claude (tengo solo la pagina HTML) o correggi a mano. Salvalo per non perderlo; "Approva" usa comunque quello scritto qui. Il controllo qui sopra si aggiorna mentre scrivi.</span>
                 </div>
               </div>
             )}
