@@ -120,7 +120,7 @@ function App() {
   const [adminIdeas, setAdminIdeas] = useState(0);
   const [adminCustom, setAdminCustom] = useState(0);   // personalisations waiting for approval
   const [suggestOpen, setSuggestOpen] = useState(false);
-  // "Crea con l'AI": opened from the Home, Personalizza and the mini-apps (openAssistant).
+  // Assistente MYND: opened from Home → Personalizza and from the mini-apps (openAssistant).
   const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
   useEffect(() => {
     const onOpen = (e: Event) => {

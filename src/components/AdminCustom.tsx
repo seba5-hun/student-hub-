@@ -79,7 +79,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
   });
 
   const reject = (r: CustomRequest) => act(r.id, async () => {
-    const note = await dialog.prompt({ title: 'Perché non la approvi?', message: 'Lo studente lo legge in "Crea con l\'AI". La personalizzazione torna disponibile nel suo pacchetto.', defaultValue: '', confirmLabel: 'Rifiuta' });
+    const note = await dialog.prompt({ title: 'Perché non la approvi?', message: 'Lo studente lo legge nell\'Assistente MYND. La personalizzazione torna disponibile nel suo pacchetto.', defaultValue: '', confirmLabel: 'Rifiuta' });
     if (note === null) return;
     await updateRequest(r.id, { status: 'rejected', note: note.trim().slice(0, 1000) || 'Non approvata.' });
   });

@@ -1,5 +1,5 @@
 -- MYND: personalizzazioni su misura (a pacchetti).
--- Lo studente descrive la sua idea a "Crea con l'AI": l'AI prepara la funzione e la richiesta arriva
+-- Lo studente descrive la sua idea all'Assistente MYND (Home → Personalizza): l'AI prepara la funzione e la richiesta arriva
 -- in Admin → Personalizzazioni. L'admin controlla la sicurezza, prova l'anteprima e approva:
 -- solo allora la funzione compare nella MYND di quello studente (e di nessun altro).
 -- Ogni richiesta usa una personalizzazione del pacchetto (se viene rifiutata, torna disponibile).

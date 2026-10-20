@@ -1,4 +1,4 @@
-// Personalised functions, sold in packages: the student describes the idea to "Crea con l'AI", the
+// Personalised functions, sold in packages: the student describes the idea to the Assistente MYND, the
 // AI prepares the function and the request goes to Admin → Personalizzazioni. Only after the admin
 // has checked it (security) and approved it does it appear in that student's MYND.
 // Tables and functions: supabase/personalizzazioni.sql.

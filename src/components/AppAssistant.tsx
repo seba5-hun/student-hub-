@@ -9,7 +9,7 @@ import { sendSuggestion } from '../lib/suggestions';
 // "Assistente MYND": a chat with the automatic AI that changes the app for real (Home panels, menu,
 // names, versions, subjects, tasks…) and builds what is missing (blocks, sections, mini-apps).
 // Every change is listed under the answer and the last one can be undone. The chat is kept in
-// this browser. It lives in the "Crea con l'AI" studio (variant "studio").
+// this browser. It opens from Home → Personalizza in a side panel (variant "studio").
 // New functions with code (mini-apps) are personalisations sold in packages: the AI prepares them
 // and the student sends them to the admin, who checks them and turns them on (lib/customRequests).
 
@@ -232,7 +232,7 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
           <Sparkles className={studio ? 'w-5 h-5' : 'w-4 h-4'} />
         </span>
         <div className="flex-1 min-w-0">
-          <p className={`font-semibold ${studio ? 'text-lg' : ''} ${text}`}>{studio ? 'Crea con l’AI' : 'Assistente MYND'}</p>
+          <p className={`font-semibold ${studio ? 'text-lg' : ''} ${text}`}>Assistente MYND</p>
           <p className={`text-xs ${sub}`}>{studio ? 'Dimmi di cosa hai bisogno: lo progettiamo insieme e lo costruisco io' : 'Dimmi come vuoi l’app e la sistemo io · modello automatico'}</p>
         </div>
         {messages.length > 0 && (

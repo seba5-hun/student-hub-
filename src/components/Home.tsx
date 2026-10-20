@@ -233,12 +233,6 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
           </button>
         ) : <span />}
         <div className="flex items-center gap-1 ml-auto">
-        {onUpdateData && assistantKey && !editing && (
-          <button onClick={() => openAssistant('')} title="Crea con l'AI: descrivi cosa ti serve e lo aggiungo"
-            className={`text-sm px-2 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} style={{ color: 'var(--brand-ring)' }}>
-            <Sparkles className="w-4 h-4" /> <span className="whitespace-nowrap">Crea con l'AI</span>
-          </button>
-        )}
         {layoutActions && !editing && <LayoutSwitcher compact settings={settings} darkMode={darkMode} {...layoutActions} />}
         {editing ? (
           <button onClick={() => setEditing(false)} className="btn-primary text-sm flex items-center gap-2">
@@ -247,7 +241,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
         ) : (
           <button onClick={() => setEditing(true)} aria-label="Personalizza" title="Personalizza"
             className={`text-sm px-2 sm:px-3 py-1.5 -mr-2 sm:mr-0 rounded-lg flex items-center gap-1.5 sm:gap-2 ${darkMode ? 'text-white/70 hover:bg-white/10' : 'text-gray-600 hover:bg-black/5'}`}>
-            <SlidersHorizontal className="w-4 h-4" /> <span className="whitespace-nowrap hidden min-[420px]:inline">Personalizza</span>
+            <SlidersHorizontal className="w-4 h-4" /> <span className="whitespace-nowrap">Personalizza</span>
           </button>
         )}
         </div>
@@ -270,7 +264,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
                   <Sparkles className="w-4 h-4" />
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className={`block font-semibold ${textColor}`}>Assistente MYND · Crea con l'AI</span>
+                  <span className={`block font-semibold ${textColor}`}>Assistente MYND</span>
                   <span className={`block text-xs ${subTextColor}`}>Dimmi cosa ti serve: sistemo l'app o creo funzioni nuove su misura per te</span>
                 </span>
               </button>
