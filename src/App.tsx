@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, laz
 import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAccount } from './lib/legal';
 import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
-import { timerSettings, BASE_SECTIONS, isReplaced } from './lib/custom';
+import { loadMyPlan, installApproved, loadAllRequests } from './lib/customRequests';
+import { BASE_SECTIONS, isReplaced } from './lib/custom';
 import SectionExtras from './components/SectionExtras';
 import { ProfileContext, makeProfileApi } from './lib/profile';
 import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
@@ -117,6 +118,7 @@ function App() {
   const [adminPending, setAdminPending] = useState(0);
   // Admin: suggestions not read yet ("Suggerisci una modifica").
   const [adminIdeas, setAdminIdeas] = useState(0);
+  const [adminCustom, setAdminCustom] = useState(0);   // personalisations waiting for approval
   const [suggestOpen, setSuggestOpen] = useState(false);
   // "Crea con l'AI": opened from the Home, Personalizza and the mini-apps (openAssistant).
   const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
@@ -504,12 +506,33 @@ function App() {
   const handleLogin = (authUser: AuthUser) => loadUser(authUser);
 
   // Handle logout
+  // Personalised functions approved by the admin: they go into the student's own MYND by themselves
+  // (checked when the app opens and every few minutes), with a notice.
+  const dataNow = useRef(data);
+  dataNow.current = data;
+  const [customNotice, setCustomNotice] = useState<{ title: string; open?: string }[]>([]);
+  useEffect(() => {
+    if (!user || !hasData || isDemoUser(user)) return;
+    const check = () => loadMyPlan(user.id).then(plan => {
+      const current = dataNow.current;
+      if (!current) return;
+      const res = installApproved(current, plan.requests);
+      if (!res.installed.length) return;
+      updateData(res.data);
+      setCustomNotice(res.installed);
+    }).catch(() => { /* not set up yet on Supabase */ });
+    check();
+    const id = window.setInterval(check, 5 * 60000);
+    return () => window.clearInterval(id);
+  }, [user, hasData, updateData]);
+
   // Admin: how many accounts are waiting, for the badge in the menu (refreshed every minute).
   useEffect(() => {
     if (!user || !hasData || !isDeveloper(user.email)) return;
     const check = () => {
       loadAdminUsers().then(r => setAdminPending(r.users.filter(u => u.status === 'pending').length)).catch(() => {});
       loadSuggestions().then(list => setAdminIdeas(list.filter(x => x.status === 'new').length)).catch(() => {});
+      loadAllRequests().then(list => setAdminCustom(list.filter(x => x.status === 'pending').length)).catch(() => {});
     };
     check();
     const id = window.setInterval(check, 60000);
@@ -813,7 +836,7 @@ function App() {
         colorTheme={data?.settings.colorTheme}
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
-        adminBadge={adminPending + adminIdeas}
+        adminBadge={adminPending + adminIdeas + adminCustom}
         onSuggest={() => setSuggestOpen(true)}
         onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
         onThemeChange={(theme) => {
@@ -866,8 +889,6 @@ function App() {
             subjectDefs={data.settings.subjects || []}
             onUpdateSubjects={updateSubjects}
             onRenameSubject={renameSubject}
-            timerSettings={data.settings.timer}
-            onTimerSettings={patch => updateData(prev => ({ ...prev, settings: { ...prev.settings, timer: { ...timerSettings(prev.settings), ...patch } } }))}
           />
         )}
         {showBase('archivio') && (
@@ -908,7 +929,7 @@ function App() {
           />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
-          <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} />
+          <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} onCustomChange={setAdminCustom} />
         )}
         {currentSection.startsWith('cs:') && (() => {
           const section = (data.settings.custom?.sections || []).find(cs => `cs:${cs.id}` === currentSection);
@@ -932,6 +953,21 @@ function App() {
         </Suspense>
       </Layout>
       <SaveIndicator />
+      {customNotice.length > 0 && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-32px)] max-w-md animate-scale-in" style={{ bottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+          <div className="glass-float rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-xl">✨</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{customNotice.length === 1 ? `«${customNotice[0].title}» è pronta!` : `${customNotice.length} personalizzazioni pronte!`}</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Approvata dal team MYND: la trovi nella tua MYND.</p>
+            </div>
+            {customNotice[customNotice.length - 1].open && (
+              <button onClick={() => { handleSectionChange(customNotice[customNotice.length - 1].open!); setCustomNotice([]); }} className="btn-primary text-xs !py-1.5 !px-3">Apri</button>
+            )}
+            <button onClick={() => setCustomNotice([])} aria-label="Chiudi" className="p-1 text-lg leading-none" style={{ color: 'var(--text-muted)' }}>×</button>
+          </div>
+        </div>
+      )}
       {showGuide && (
         <Suspense fallback={<div className="fixed inset-0 z-[60] gradient-bg mesh-gradient" />}>
           <Onboarding data={data} onClose={closeGuide} onNavigate={section => handleSectionChange(section)} />
@@ -948,7 +984,7 @@ function App() {
       )}
       {studio && (
         <Suspense fallback={null}>
-          <AssistantStudio data={data} darkMode={darkMode} storageKey={`mynd_assistant_${user.id}`} userId={user.id} request={studio}
+          <AssistantStudio data={data} darkMode={darkMode} storageKey={`mynd_assistant_${user.id}`} userId={user.id} request={studio} isAdmin={isDeveloper(user.email)}
             onUpdateData={updateData} onNavigate={handleSectionChange} onClose={() => setStudio(null)} />
         </Suspense>
       )}

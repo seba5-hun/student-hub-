@@ -78,7 +78,7 @@ export default function MiniApp({ html, store, allowData, data, onSave, onError,
   const srcDoc = useMemo(() => {
     const cs = getComputedStyle(document.documentElement);
     const vars = TOKENS.map(t => `--${t}:${cs.getPropertyValue(`--${t}`).trim() || 'initial'}`).join(';');
-    const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:">`
+    const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'">`
       + `<meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{${vars};color-scheme:${theme}}${MINI_APP_CSS}</style><script>${SDK.replace('__TODAY__', todayKey())}</script>`;
     return /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => `${m}${head}`) : `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
   }, [html, theme]);

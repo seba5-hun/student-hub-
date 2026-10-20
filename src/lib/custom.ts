@@ -2,7 +2,7 @@
 // countdown, progress, note, links, filtered tasks) that the student or the Assistente MYND puts
 // on the Home or in new menu sections. Only data: there is no code to run, so they are safe.
 
-import { UserData, UserSettings, CustomBlock, CustomSection, CustomSpace, BlockKind, TimerSettings, createId } from './store';
+import { UserData, UserSettings, CustomBlock, CustomSection, CustomSpace, BlockKind, createId } from './store';
 
 export const BLOCK_KINDS: { kind: BlockKind; label: string; wide: boolean; hint: string }[] = [
   { kind: 'checklist', label: 'Lista', wide: false, hint: 'config: {"items":[{"text":"Ripassare cap. 3","done":false}]}' },
@@ -21,8 +21,6 @@ export const blockWide = (k: BlockKind) => k === 'app' || !!BLOCK_KINDS.find(b =
 
 export const SECTION_ICONS = ['star', 'book', 'target', 'heart', 'flame', 'list', 'calendar', 'sparkles', 'music', 'dumbbell', 'brain', 'coffee'];
 
-export const DEFAULT_TIMER: TimerSettings = { mode: 'stopwatch', work: 25, shortBreak: 5, longBreak: 15, cycles: 4, autoStart: true };
-export const timerSettings = (s: UserSettings): TimerSettings => ({ ...DEFAULT_TIMER, ...s.timer });
 
 export const customOf = (s: UserSettings): CustomSpace => ({ ...s.custom, widgets: s.custom?.widgets || [], sections: s.custom?.sections || [] });
 

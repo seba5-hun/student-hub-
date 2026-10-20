@@ -8,7 +8,7 @@ import { WIDGETS } from './homeWidgets';
 import { makeProfileApi, PRESETS, KIND_ORDER, LABEL_KEYS } from './profile';
 import { listLayouts, switchLayout, createLayout, updateActiveLayout, DEFAULT_LAYOUT_ID } from './layouts';
 import { buildSeries, untilAfter, weekdayOf } from './recurrence';
-import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, timerSettings, MAX_APP_HTML, addInside, allBlocks, updateBlock, takeBlock, setOriginal, isReplaced, orderMenu } from './custom';
+import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, MAX_APP_HTML, addInside, allBlocks, updateBlock, takeBlock, setOriginal, isReplaced, orderMenu } from './custom';
 import { CustomBlock } from './store';
 
 export const SECTION_IDS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
@@ -38,7 +38,6 @@ export function describeState(data: UserData): string {
     `Nomi delle cose: ${LABEL_KEYS.filter(k => !SECTION_IDS.includes(k)).map(k => `${k} = "${prof.L(k)}"`).join('; ')}.`,
     `Materie: ${(s.subjects || []).map(x => `${x.name} (${x.color})`).join(', ') || 'nessuna'}.`,
     `Obiettivo settimanale di studio: ${s.weeklyGoal} ore.`,
-    (() => { const t = timerSettings(s); return `Timer Studio: ${t.mode === 'pomodoro' ? `Pomodoro (${t.work} min studio, ${t.shortBreak} pausa, ${t.longBreak} pausa lunga ogni ${t.cycles} cicli)` : 'cronometro libero'}.`; })(),
     `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
     `Mini-app create: ${allApps(s).map(b => `"${b.title}" (id ${b.id}, ${placeOf(s, b.id).text}${b.config.write ? ', modifica i dati' : ''})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
     `Dentro le sezioni di MYND: ${Object.entries(customOf(s).inside || {}).filter(([, l]) => l.length).map(([k, l]) => `${k}: ${l.map(b => `${b.at === 'replace' ? 'AL POSTO DELLA SEZIONE' : b.at === 'above' ? 'sopra' : 'sotto'} ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}" (id ${b.id})`).join(', ')}${isReplaced(s, k) ? '' : l.some(b => b.at === 'replace') ? ' [ora lo studente vede l\'originale]' : ''}`).join('; ') || 'niente'}.`,
@@ -106,7 +105,6 @@ AZIONI DISPONIBILI (usa esattamente questi nomi e campi):
    repeat facoltativo: freq daily|weekly|monthly, days solo per weekly con 0=lunedì … 6=domenica, until data finale (se non detta: fine dell'anno scolastico o 3 mesi).
 - {"type":"add_note","text":"Portare la calcolatrice"}  aggiunge una riga alle note rapide
 - {"type":"open_section","section":"calendario"}  apre una sezione dopo le modifiche (per le sezioni create usa il loro nome)
-- {"type":"set_timer","mode":"pomodoro","work":25,"short_break":5,"long_break":15,"cycles":4,"auto_start":true}  Timer Studio: mode pomodoro oppure stopwatch (cronometro libero)
 
 BLOCCHI DI MYND (per creare funzioni nuove senza programmare, con la grafica dell'app):
 ${BLOCK_KINDS.map(b => `- ${b.kind}: ${b.label}. ${b.hint}`).join('\n')}
@@ -121,7 +119,8 @@ SPOSTARE E RIORDINARE (nella versione dello studente tutto può andare dove vuol
 - {"type":"use_original","section":"timer","original":true}  mostra di nuovo la sezione originale di MYND al posto della versione dello studente (false = torna alla sua versione)
 - {"type":"request_feature","text":"descrizione chiara della funzione richiesta"}  invia la richiesta agli sviluppatori di MYND
 
-MINI-APP (per tutto ciò che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, tabelle, grafici, timer speciali…):
+MINI-APP = PERSONALIZZAZIONI SU MISURA (per tutto ciò che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, tabelle, grafici, sezioni rifatte…).
+Sono a pacchetti: ogni mini-app nuova o modifica di una mini-app usa una personalizzazione del pacchetto dello studente (vedi PERSONALIZZAZIONI nello stato). Non viene attivata subito: diventa una richiesta che lo studente invia al team MYND con un pulsante; il team controlla che sia sicura e la attiva solo nel suo account, di solito entro un giorno.
 - {"type":"create_app","title":"Flashcard","place":"section","icon":"brain","code":"A1","uses_data":true,"writes_data":false,"description":"mazzi di flashcard per materia con punteggio"}
   place: "section" (nuova sezione del menu), "home" (pannello della Home) oppure una sezione di MYND (${SECTION_IDS.join(', ')}) con "position": "replace" (prende il posto del contenuto della sezione: la sezione diventa la versione dello studente), "above" o "below";
   uses_data true se deve leggere materie, impegni o voti; writes_data true se deve anche AGGIUNGERE dati (tempo di studio, impegni, voti, note) o spuntare impegni.
@@ -147,9 +146,11 @@ REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
 - Se la richiesta è ambigua o manca un dato importante (es. la data di una verifica), non fare azioni: chiedi in "reply".
 - MYND è uno spazio personalizzabile al 100%: nella sua versione lo studente può cambiare TUTTO e mettere ogni cosa dove vuole. Quando chiede una FUNZIONE NUOVA o di CAMBIARE come funziona una parte dell'app la realizzi tu.
-- Se la richiesta riguarda una sezione che esiste già (es. "le pause del timer proporzionali allo studio", "il calendario con la vista per settimana"), la modifica va DENTRO quella sezione, non in una sezione nuova: se cambia il funzionamento crea una mini-app con place = quella sezione e position "replace" che rifà la sezione per intero con la modifica (tutte le funzioni utili dell'originale più quella nuova) e tiene i dati collegati (es. un timer salva il tempo con mynd.addSession, così Home e statistiche continuano a funzionare); se aggiunge solo qualcosa usa "above" o "below". Prima prova le azioni esistenti (es. set_timer) se bastano davvero.
-- Se non è chiaro dove lo studente vuole una cosa, chiediglielo nella proposta (es. "La metto nella Home o dentro il Timer?"). Se bastano i blocchi o set_timer usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
-- Per una mini-app nuova o una modifica importante PRIMA proponi: in "reply" descrivi in 2-5 punti brevi cosa farà e dove la metti, e chiedi "Va bene così?", senza azioni. Quando lo studente conferma (sì, ok, va bene, procedi…) creala con create_app/update_app e il codice. Per piccole correzioni o se lo studente ti ha già detto esattamente cosa vuole puoi farlo subito.
+- Se la richiesta riguarda una sezione che esiste già (es. "il calendario con la vista per settimana", "nei voti un grafico per materia"), la modifica va DENTRO quella sezione, non in una sezione nuova: se cambia il funzionamento crea una mini-app con place = quella sezione e position "replace" che rifà la sezione per intero con la modifica (tutte le funzioni utili dell'originale più quella nuova) e tiene i dati collegati (es. un timer salva il tempo con mynd.addSession, così Home e statistiche continuano a funzionare); se aggiunge solo qualcosa usa "above" o "below". Prima prova le azioni esistenti se bastano davvero.
+- Se non è chiaro dove lo studente vuole una cosa, chiediglielo nella proposta (es. "La metto nella Home o dentro il Timer?"). Se bastano i blocchi usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
+- Per una mini-app PRIMA proponi: in "reply" descrivi in 2-5 punti brevi cosa farà e dove la metti, ricorda che usa 1 personalizzazione del pacchetto e chiedi "Va bene così?", senza azioni. Quando lo studente conferma (sì, ok, va bene, procedi…) scrivi create_app/update_app con il codice e in "reply" digli di toccare "Invia per l'approvazione" qui sotto. Nel campo "description" scrivi per il team una descrizione chiara e completa di cosa fa (3-6 frasi).
+- Se lo studente non ha personalizzazioni disponibili, non scrivere codice: proponi l'idea e spiega che per attivarla serve un pacchetto di personalizzazioni (può chiederlo dal pulsante "Richiedi un pacchetto" in alto). Prima suggerisci se si può fare gratis con i blocchi o le azioni normali.
+- Blocchi, pannelli, menu, nomi, versioni, materie e impegni sono gratuiti e si applicano subito.
 - Usa request_feature solo per ciò che una mini-app non può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, notifiche quando l'app è chiusa. Dillo allo studente.
 - Le modifiche vanno sempre nella versione personale dello studente: la MYND di base resta com'è (l'app crea "La mia MYND" da sola se serve) e lo studente può tornare all'originale di una sezione quando vuole. Non dire mai che "non puoi modificare il codice".
 - Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
@@ -359,18 +360,6 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
         else if (custom) navigate = `cs:${custom.id}`;
         break;
       }
-      case 'set_timer': {
-        const t = timerSettings(settings());
-        const mins = (v: unknown, min: number, max: number, d: number) => { const x = Math.round(num(v)); return x >= min && x <= max ? x : d; };
-        const next = {
-          mode: str(a.mode) === 'stopwatch' ? 'stopwatch' as const : str(a.mode) === 'pomodoro' ? 'pomodoro' as const : t.mode,
-          work: mins(a.work, 5, 120, t.work), shortBreak: mins(a.short_break, 1, 30, t.shortBreak), longBreak: mins(a.long_break, 5, 60, t.longBreak),
-          cycles: mins(a.cycles, 2, 8, t.cycles), autoStart: typeof a.auto_start === 'boolean' ? a.auto_start : t.autoStart,
-        };
-        setSettings({ timer: next });
-        done.push(next.mode === 'pomodoro' ? `Pomodoro nel Timer Studio: ${next.work} min di studio, ${next.shortBreak} di pausa, pausa lunga di ${next.longBreak} ogni ${next.cycles} cicli` : 'Timer Studio: cronometro libero');
-        break;
-      }
       case 'create_app': {
         const html = appCode(a.code);
         const title = str(a.title, 60) || 'Mini-app';
@@ -401,6 +390,7 @@ export function applyActions(input: UserData, actions: Action[], codes: Record<s
       case 'update_app': {
         const html = appCode(a.code);
         const key = str(a.app, 60);
+        if (html) ownVersion();
         const target = findBlock(key, true);
         if (!target || !html) { skipped.push(`modifica di "${key}"`); break; }
         const writes = a.writes_data === true;

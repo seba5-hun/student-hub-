@@ -245,9 +245,9 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
             <Check className="w-4 h-4" /> Fatto
           </button>
         ) : (
-          <button onClick={() => setEditing(true)}
+          <button onClick={() => setEditing(true)} aria-label="Personalizza" title="Personalizza"
             className={`text-sm px-2 sm:px-3 py-1.5 -mr-2 sm:mr-0 rounded-lg flex items-center gap-1.5 sm:gap-2 ${darkMode ? 'text-white/70 hover:bg-white/10' : 'text-gray-600 hover:bg-black/5'}`}>
-            <SlidersHorizontal className="w-4 h-4" /> <span className="whitespace-nowrap">Personalizza</span>
+            <SlidersHorizontal className="w-4 h-4" /> <span className="whitespace-nowrap hidden min-[420px]:inline">Personalizza</span>
           </button>
         )}
         </div>

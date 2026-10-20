@@ -14,6 +14,7 @@ interface Props {
   onUpdateData: (update: (prev: UserData) => UserData) => void;
   onNavigate: (section: string) => void;
   onClose: () => void;
+  isAdmin?: boolean;
 }
 
 export default function AssistantStudio({ onClose, darkMode, ...rest }: Props) {
