@@ -1,19 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, Check, X, Eye, Code2, ShieldCheck, ShieldAlert, ShieldX, Sparkles, Package, Plus, Minus, Copy } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, RefreshCw, Check, X, Eye, Code2, ShieldCheck, ShieldAlert, ShieldX, Sparkles, Package, Plus, Minus, Copy, Wand2, RotateCcw } from 'lucide-react';
 import { CustomRequest, RequestStatus, PlanRow, loadAllRequests, updateRequest, loadPlans, addCredits } from '../lib/customRequests';
 import { checkAppCode, SECURITY_REVIEW_SYSTEM, parseReview, AiReview } from '../lib/appSecurity';
-import { askAuto, autoReady } from '../lib/ai';
+import { askAuto, askForCode, autoReady } from '../lib/ai';
 import { createDemoData } from '../lib/demoData';
 import { UserData } from '../lib/store';
 import MiniApp from './MiniApp';
 import { buildClaudeBrief, placeLabel } from '../lib/claudeBrief';
 import { useDialog } from './Dialog';
 
-// Admin → Personalizzazioni: the functions on measure the students asked for. For each one: the
-// idea rewritten by the Assistente MYND, "Copia per Claude" (the text to paste to Claude, who writes
-// the function), the place to paste Claude's answer, the automatic security check, the AI's
-// opinion, a preview with example data. Approved, it appears only in that student's MYND.
+// Admin → Personalizzazioni: the functions on measure the students asked for. When the page opens,
+// the AI prepares each new one by itself (code, security check, AI's opinion) so the admin only
+// looks at the preview and approves; a correction can be asked in words ("Correggi con l'AI").
+// "Copia per Claude" stays as an alternative. Approved, it appears only in that student's MYND.
 // Below: the packages.
+
+const CODE_SYSTEM = 'Sei lo sviluppatore di MYND e scrivi funzioni su misura (mini-app) per gli studenti, seguendo esattamente le regole che ti vengono date. Rispondi con UN SOLO blocco ```html con la pagina completa e funzionante, senza parti da completare.';
 
 const FILTERS: { id: RequestStatus | 'all'; label: string }[] = [
   { id: 'pending', label: 'Da controllare' }, { id: 'approved', label: 'Approvate' }, { id: 'rejected', label: 'Rifiutate' }, { id: 'all', label: 'Tutte' },
@@ -31,9 +33,13 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [open, setOpen] = useState<Record<string, 'preview' | 'code' | undefined>>({});
+  const [open, setOpen] = useState<Record<string, 'preview' | 'code' | 'none' | undefined>>({});
   const [codes, setCodes] = useState<Record<string, string>>({});   // code being edited
   const [copied, setCopied] = useState('');
+  // The AI preparing a function: 'working' or the error. Each request is started once by itself.
+  const [gen, setGen] = useState<Record<string, string>>({});
+  const [fixes, setFixes] = useState<Record<string, string>>({});
+  const started = useRef(new Set<string>());
   const [email, setEmail] = useState('');
   const [amount, setAmount] = useState(2);
   const [pack, setPack] = useState('');
@@ -100,6 +106,37 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
     await updateRequest(r.id, { review: { ...parseReview(raw), at: new Date().toISOString() } });
   });
 
+  // The AI writes the function (or rewrites it with the admin's corrections), then checks it.
+  const build = async (r: CustomRequest, correction = '') => {
+    started.current.add(r.id);
+    setGen(g => ({ ...g, [r.id]: 'working' })); setError('');
+    try {
+      let prompt = buildClaudeBrief(r);
+      if (correction) prompt += `\n\nCODICE ATTUALE:\n\`\`\`html\n${htmlOf(r)}\n\`\`\`\n\nCORREZIONI CHIESTE DAL TEAM MYND:\n${correction}\n\nRiscrivi la pagina completa con queste correzioni.`;
+      const html = extractHtml(await askForCode(CODE_SYSTEM, prompt)).trim();
+      if (!/<(html|body|div|main|section|script)[\s>]/i.test(html)) throw new Error('L\'AI non ha restituito una pagina valida. Riprova.');
+      await updateRequest(r.id, { html: html.slice(0, 150000) });
+      setCodes(c => { const n = { ...c }; delete n[r.id]; return n; });
+      setFixes(f => ({ ...f, [r.id]: '' }));
+      setGen(g => { const n = { ...g }; delete n[r.id]; return n; });
+      // Second opinion on security, by itself (if it fails, the automatic check is still there).
+      try {
+        const raw = await askAuto(SECURITY_REVIEW_SYSTEM, [{ role: 'user', text: `Descrizione: ${r.idea}\n\nPermessi chiesti: legge i dati ${r.placement?.uses_data ? 'sì' : 'no'}, aggiunge dati ${r.placement?.writes_data ? 'sì' : 'no'}.\n\nCODICE:\n${html}` }]);
+        await updateRequest(r.id, { review: { ...parseReview(raw), at: new Date().toISOString() } });
+      } catch { /* optional */ }
+      await load();
+    } catch (e) {
+      setGen(g => ({ ...g, [r.id]: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
+  // New requests without code: prepared one at a time as soon as the page is open.
+  useEffect(() => {
+    if (Object.values(gen).includes('working')) return;
+    const next = items.find(r => r.status === 'pending' && !r.html.trim() && !started.current.has(r.id));
+    if (next) build(next);
+  }, [items, gen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const givePackage = () => act('plans', async () => {
     if (!email.trim()) throw new Error('Scrivi l\'email dell\'account.');
     const res = await addCredits(email.trim(), amount, pack.trim() || undefined);
@@ -132,6 +169,8 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
         const report = checkAppCode(html);
         const ai = r.review as AiReview | null;
         const edited = codes[r.id] !== undefined && codes[r.id] !== r.html;
+        // A pending function that is ready opens with its preview.
+        const view = open[r.id] ?? (r.status === 'pending' && html.trim() && report.level !== 'danger' ? 'preview' : 'none');
         const ShieldIcon = report.level === 'ok' ? ShieldCheck : report.level === 'warning' ? ShieldAlert : ShieldX;
         const shieldColor = report.level === 'ok' ? 'var(--brand-ring)' : report.level === 'warning' ? 'var(--warning)' : 'var(--danger)';
         return (
@@ -151,12 +190,27 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
                 <p className={`text-xs whitespace-pre-line mt-2 ${text}`}>{r.placement.spec}</p>
               </details>
             )}
-            {r.status === 'pending' && (
+            {r.status === 'pending' && gen[r.id] === 'working' && (
+              <div className="rounded-xl p-3 flex items-center gap-2.5" style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: 'var(--brand-ring)' }} />
+                <p className={`text-xs ${sub}`}><b className={text}>L'AI sta preparando la funzione</b> e poi la controlla: può volerci qualche minuto, lascia aperta questa pagina.</p>
+              </div>
+            )}
+            {r.status === 'pending' && gen[r.id] && gen[r.id] !== 'working' && (
+              <div className="rounded-xl p-3 space-y-2 bg-red-500/10">
+                <p className="text-xs text-red-400 whitespace-pre-line">Non sono riuscito a prepararla: {gen[r.id]}</p>
+                <button onClick={() => build(r)} className={small}><RotateCcw className="w-3.5 h-3.5" /> Riprova</button>
+              </div>
+            )}
+            {r.status === 'pending' && html.trim() && gen[r.id] !== 'working' && (
               <div className="rounded-xl p-3 space-y-2" style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
-                <p className={`text-xs ${sub}`}><b className={text}>Come si fa:</b> ① copia il testo per Claude e incollalo nella chat con Claude → ② incolla qui sotto in "Codice" la sua risposta (anche tutta: tengo solo la pagina) → ③ prova l'Anteprima → ④ Approva, oppure scrivi a Claude cosa correggere.</p>
-                <button onClick={() => copyBrief(r)} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5">
-                  {copied === r.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === r.id ? 'Copiato! Ora incollalo a Claude' : 'Copia per Claude'}
-                </button>
+                <p className={`text-xs ${sub}`}><b className={text}>Pronta:</b> guarda l'anteprima qui sotto e, se va bene, tocca Approva. Se vuoi cambiare qualcosa, scrivilo e l'AI la corregge.</p>
+                <div className="flex flex-wrap gap-2">
+                  <input value={fixes[r.id] || ''} onChange={e => setFixes(f => ({ ...f, [r.id]: e.target.value }))} placeholder="Es. il pulsante Avvia più grande e la pausa lunga di 20 minuti"
+                    onKeyDown={e => { if (e.key === 'Enter' && (fixes[r.id] || '').trim()) build(r, fixes[r.id]); }}
+                    className={`${input} flex-1 min-w-[220px]`} />
+                  <button onClick={() => build(r, fixes[r.id] || '')} disabled={!(fixes[r.id] || '').trim()} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1.5 disabled:opacity-40"><Wand2 className="w-3.5 h-3.5" /> Correggi con l'AI</button>
+                </div>
               </div>
             )}
             <p className={`text-xs ${sub}`}>Permessi: {r.placement?.uses_data ? 'legge materie, impegni e voti' : 'non legge i dati'}{r.placement?.writes_data ? ' · aggiunge dati (studio, impegni, voti, note)' : ''}</p>
@@ -179,23 +233,25 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
             </div> : <p className={`text-xs ${sub}`}>Il controllo di sicurezza compare quando c'è il codice.</p>}
 
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setOpen(o => ({ ...o, [r.id]: o[r.id] === 'preview' ? undefined : 'preview' }))} disabled={!html.trim()} className={small}><Eye className="w-3.5 h-3.5" /> Anteprima</button>
-              <button onClick={() => setOpen(o => ({ ...o, [r.id]: o[r.id] === 'code' ? undefined : 'code' }))} className={small}><Code2 className="w-3.5 h-3.5" /> Codice</button>
+              <button onClick={() => setOpen(o => ({ ...o, [r.id]: view === 'preview' ? 'none' : 'preview' }))} disabled={!html.trim()} className={small}><Eye className="w-3.5 h-3.5" /> Anteprima</button>
+              <button onClick={() => setOpen(o => ({ ...o, [r.id]: view === 'code' ? 'none' : 'code' }))} className={small}><Code2 className="w-3.5 h-3.5" /> Codice</button>
               <button onClick={() => aiReview(r)} disabled={busy === r.id || !html.trim()} className={small}><Sparkles className="w-3.5 h-3.5" /> {ai ? 'Rifai analisi AI' : 'Analisi AI'}</button>
               {r.status !== 'approved' && <button onClick={() => approve(r)} disabled={busy === r.id || !html.trim()} className="btn-primary text-xs !py-1.5 !px-3 flex items-center gap-1 disabled:opacity-40"><Check className="w-3.5 h-3.5" /> Approva</button>}
               {r.status === 'pending' && <button onClick={() => reject(r)} disabled={busy === r.id} className="text-xs font-medium px-2.5 py-1.5 rounded-lg flex items-center gap-1 bg-red-500/10 text-red-400 hover:bg-red-500/20"><X className="w-3.5 h-3.5" /> Rifiuta</button>}
+              {r.status === 'pending' && html.trim() && gen[r.id] !== 'working' && <button onClick={() => build(r)} className={small}><RotateCcw className="w-3.5 h-3.5" /> Rifai da capo</button>}
+              {r.status === 'pending' && <button onClick={() => copyBrief(r)} className={small}>{copied === r.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === r.id ? 'Copiato' : 'Copia per Claude'}</button>}
               {busy === r.id && <Loader2 className={`w-4 h-4 animate-spin self-center ${sub}`} />}
             </div>
             {r.admin_note && <p className={`text-xs ${sub}`}>Nota allo studente: {r.admin_note}</p>}
 
-            {open[r.id] === 'preview' && <Preview key={html} html={html} writes={!!r.placement?.writes_data} darkMode={darkMode} />}
-            {(open[r.id] === 'code' || (r.status === 'pending' && !r.html && open[r.id] !== 'preview')) && (
+            {view === 'preview' && html.trim() && <Preview key={html} html={html} writes={!!r.placement?.writes_data} darkMode={darkMode} />}
+            {view === 'code' && (
               <div className="space-y-2">
                 <textarea value={html} onChange={e => { const v = extractHtml(e.target.value); setCodes(c => ({ ...c, [r.id]: v })); }} spellCheck={false}
                   placeholder="Incolla qui la risposta di Claude" className={`${input} w-full font-mono text-xs h-80`} />
                 <div className="flex flex-wrap items-center gap-2">
                   <button onClick={() => saveCode(r)} disabled={!edited || busy === r.id} className={small}>Salva il codice</button>
-                  <span className={`text-xs ${sub}`}>Incolla la risposta di Claude (tengo solo la pagina HTML) o correggi a mano. Salvalo per non perderlo; "Approva" usa comunque quello scritto qui. Il controllo qui sopra si aggiorna mentre scrivi.</span>
+                  <span className={`text-xs ${sub}`}>Puoi correggere a mano o incollare una versione fatta da Claude (tengo solo la pagina HTML). Salvalo per non perderlo; "Approva" usa comunque quello scritto qui. Il controllo qui sopra si aggiorna mentre scrivi.</span>
                 </div>
               </div>
             )}

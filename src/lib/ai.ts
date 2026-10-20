@@ -584,6 +584,26 @@ export async function locateInImage(data: string, mimeType: string, passage: str
   return [y0, x0, y1, x1];
 }
 
+// Writing a function on measure (Admin → Personalizzazioni): the AI chosen in the settings first
+// (e.g. Claude or ChatGPT, better at code), then the free ones. Slow is fine here.
+export async function askForCode(system: string, prompt: string): Promise<string> {
+  const chosen = getProvider();
+  const chain: KeyProvider[] = chosen !== 'free' && getKey(chosen) ? [chosen] : [];
+  FREE_CHAIN.filter(x => getKey(x) && !chain.includes(x)).forEach(x => chain.push(x));
+  if (!chain.length) throw new Error('Per preparare le funzioni collega una chiave AI nella Guida Studio AI.');
+  const errors: string[] = [];
+  for (const x of chain) {
+    try {
+      const answer = await askOne(x, system, '', [{ role: 'user', text: prompt }]);
+      if (answer) { lastAnsweredBy = PROVIDER_NAMES[x]; return answer; }
+      throw new Error('risposta vuota');
+    } catch (err) {
+      errors.push(`${PROVIDER_NAMES[x]}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  throw new Error(`Nessuna AI è riuscita a preparare la funzione.\n${errors.join('\n')}`);
+}
+
 // "Modello automatico" (Assistente MYND): the free AIs in order, the first that answers, whatever is
 // chosen for the tutor; without free keys, the AI chosen in the settings.
 export function autoReady(): boolean {
