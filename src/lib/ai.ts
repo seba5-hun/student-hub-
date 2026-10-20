@@ -419,7 +419,8 @@ async function askGroq(system: string, context: string, turns: ChatTurn[]): Prom
 
 // ---------------------------------------------------------------- Gemini
 
-function askGemini(system: string, context: string, turns: ChatTurn[]): Promise<string> {
+// quick: the Assistente MYND (short JSON answers): flash models, and one that is slow is skipped.
+function askGemini(system: string, context: string, turns: ChatTurn[], quick = false): Promise<string> {
   const contents: GeminiContent[] = [];
   if (context) {
     contents.push({ role: 'user', parts: [{ text: context }] });
@@ -431,7 +432,9 @@ function askGemini(system: string, context: string, turns: ChatTurn[]): Promise<
     t.images?.forEach(img => parts.push({ inline_data: { mime_type: img.mimeType, data: img.data } }));
     if (parts.length) contents.push({ role: t.role === 'assistant' ? 'model' : 'user', parts });
   });
-  return generateContent(getKey('gemini'), contents, { systemInstruction: system, maxOutputTokens: 32768, signal: stopSignal })
+  return generateContent(getKey('gemini'), contents, quick
+    ? { systemInstruction: system, maxOutputTokens: 16384, fast: true, timeoutMs: 60_000, signal: stopSignal }
+    : { systemInstruction: system, maxOutputTokens: 32768, signal: stopSignal })
     .catch(err => { throw stopSignal?.aborted ? new StoppedError() : err; });
 }
 
@@ -595,7 +598,7 @@ export async function askAuto(system: string, turns: ChatTurn[]): Promise<string
   const errors: string[] = [];
   for (const x of chain) {
     try {
-      const answer = await askOne(x, system, '', turns);
+      const answer = x === 'gemini' ? await askGemini(system, '', turns, true) : await askOne(x, system, '', turns);
       if (!answer) throw new Error('risposta vuota');
       lastAnsweredBy = PROVIDER_NAMES[x];
       return answer;

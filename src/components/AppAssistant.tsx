@@ -13,6 +13,14 @@ import { sendSuggestion } from '../lib/suggestions';
 // New functions with code (mini-apps) are personalisations sold in packages: the AI prepares them
 // and the student sends them to the admin, who checks them and turns them on (lib/customRequests).
 
+// Nothing waits forever: after `ms` the chat shows an error instead of spinning.
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(message)), ms);
+    p.then(v => { window.clearTimeout(t); resolve(v); }, e => { window.clearTimeout(t); reject(e); });
+  });
+}
+
 // A request for a function on measure, sent when the student confirmed it.
 interface SentRequest { title: string; ok: boolean; error?: string }
 interface Message {
@@ -108,7 +116,7 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
       const turns: ChatTurn[] = history.slice(-10).map(m => ({ role: m.role, text: m.done?.length ? `${m.text}\n[Fatto: ${m.done.join('; ')}${m.undone ? ' — poi annullato dallo studente' : ''}]` : m.text }));
       const credits = demo ? 'nessuna: è la demo, serve un account' : plan ? `${plan.left} disponibili su ${plan.credits}` : planError ? 'non disponibili al momento' : 'nessuna';
       const system = `${ASSISTANT_SYSTEM}\n\nSTATO ATTUALE DELL'APP:\n${describeState(dataRef.current)}\nPERSONALIZZAZIONI DEL PACCHETTO: ${credits}.${focusNote(dataRef.current.settings, focus)}`;
-      const answer = parseAnswer(await askAuto(system, turns));
+      const answer = parseAnswer(await withTimeout(askAuto(system, turns), 150_000, 'L\'AI non ha risposto in tempo. Riprova tra poco.'));
       const id = Date.now() + 1;
       let done: string[] = [], skipped: string[] = [], navigate: string | undefined, apps: string[] = [];
       const actions = answer.actions.filter(a => a.type !== 'request_custom' && !BLOCKED_ACTIONS.includes(a.type));
@@ -135,7 +143,7 @@ export default function AppAssistant({ data, darkMode, storageKey, userId, onUpd
         const d = makeRequest(a, history);
         if (!d) { skipped.push('preparare la richiesta (riprova a chiedermelo)'); continue; }
         if (demo) { sent.push({ title: d.title, ok: false, error: 'Nella demo non si può: crea un account per avere le funzioni su misura.' }); continue; }
-        try { await sendRequest(userId!, d); sent.push({ title: d.title, ok: true }); } catch (e) { sent.push({ title: d.title, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        try { await withTimeout(sendRequest(userId!, d), 30_000, 'Il server non ha risposto: controlla la connessione e riprova.'); sent.push({ title: d.title, ok: true }); } catch (e) { sent.push({ title: d.title, ok: false, error: e instanceof Error ? e.message : String(e) }); }
       }
       if (sent.some(x => x.ok)) refreshPlan();
       // If nothing could be sent, the "Perfetto, inviata!" of the AI would be wrong.
