@@ -8,6 +8,7 @@ import { WIDGETS } from './homeWidgets';
 import { makeProfileApi, PRESETS, KIND_ORDER, LABEL_KEYS } from './profile';
 import { listLayouts, switchLayout, createLayout, updateActiveLayout, DEFAULT_LAYOUT_ID } from './layouts';
 import { buildSeries, untilAfter, weekdayOf } from './recurrence';
+import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, addWidget, addSection, customOf, timerSettings } from './custom';
 
 export const SECTION_IDS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
 const DEFAULT_SECTION_NAMES: Record<string, string> = {
@@ -36,6 +37,9 @@ export function describeState(data: UserData): string {
     `Nomi delle cose: ${LABEL_KEYS.filter(k => !SECTION_IDS.includes(k)).map(k => `${k} = "${prof.L(k)}"`).join('; ')}.`,
     `Materie: ${(s.subjects || []).map(x => `${x.name} (${x.color})`).join(', ') || 'nessuna'}.`,
     `Obiettivo settimanale di studio: ${s.weeklyGoal} ore.`,
+    (() => { const t = timerSettings(s); return `Timer Studio: ${t.mode === 'pomodoro' ? `Pomodoro (${t.work} min studio, ${t.shortBreak} pausa, ${t.longBreak} pausa lunga ogni ${t.cycles} cicli)` : 'cronometro libero'}.`; })(),
+    `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
+    `Sezioni create con i blocchi (nel menu): ${customOf(s).sections.map(x => `"${x.name}" (${x.blocks.map(b => `${b.kind} "${b.title}"`).join(', ') || 'vuota'})`).join('; ') || 'nessuna'}.`,
     `Prossimi impegni: ${upcoming.map(t => `${t.title} il ${t.date}${t.time ? ` alle ${t.time}` : ''}`).join('; ') || 'nessuno'}.`,
   ].join('\n');
 }
@@ -61,12 +65,22 @@ AZIONI DISPONIBILI (usa esattamente questi nomi e campi):
    date nel formato AAAA-MM-GG; time/end_time "HH:MM" facoltativi; personal true per impegni non di studio; importance 1-5 (3 normale, 5 massima);
    repeat facoltativo: freq daily|weekly|monthly, days solo per weekly con 0=lunedì … 6=domenica, until data finale (se non detta: fine dell'anno scolastico o 3 mesi).
 - {"type":"add_note","text":"Portare la calcolatrice"}  aggiunge una riga alle note rapide
-- {"type":"open_section","section":"calendario"}  apre una sezione dopo le modifiche
+- {"type":"open_section","section":"calendario"}  apre una sezione dopo le modifiche (per le sezioni create usa il loro nome)
+- {"type":"set_timer","mode":"pomodoro","work":25,"short_break":5,"long_break":15,"cycles":4,"auto_start":true}  Timer Studio: mode pomodoro oppure stopwatch (cronometro libero)
+
+BLOCCHI DI MYND (per creare funzioni nuove senza programmare, con la grafica dell'app):
+${BLOCK_KINDS.map(b => `- ${b.kind}: ${b.label}. ${b.hint}`).join('\n')}
+- {"type":"add_widget","kind":"checklist","title":"Da fare oggi","config":{...},"position":1}  aggiunge un blocco come pannello della Home (position facoltativa, 1 = in alto)
+- {"type":"add_section","name":"Benessere","icon":"heart","blocks":[{"kind":"habits","title":"Abitudini","config":{...}}]}  crea una nuova sezione nel menu fatta di blocchi; icone: ${SECTION_ICONS.join(', ')}
+- {"type":"add_block","section":"Benessere","kind":"counter","title":"Acqua","config":{...}}  aggiunge un blocco a una sezione creata
+- {"type":"request_feature","text":"descrizione chiara della funzione richiesta"}  invia la richiesta agli sviluppatori di MYND
 
 REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
 - Se la richiesta è ambigua o manca un dato importante (es. la data di una verifica), non fare azioni: chiedi in "reply".
-- Se lo studente chiede qualcosa che le azioni non permettono, spiegalo in "reply" e suggerisci come farlo a mano nell'app.
+- Quando lo studente chiede una FUNZIONE NUOVA, prima prova a realizzarla tu: con set_timer, con un blocco nella Home (add_widget) o con una nuova sezione di blocchi (add_section). Esempi: "tracker dell'acqua" → counter; "conto alla rovescia alla maturità" → countdown; "lista della spesa per lo studio" → checklist; "sezione sport" → add_section con habits, counter e tasks filtrati personal.
+- Solo se proprio non si può fare con azioni e blocchi, usa request_feature con una descrizione chiara e di' allo studente che la richiesta è stata inviata agli sviluppatori. Non dire mai che "non puoi modificare il codice".
+- Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
 - Non cancellare mai dati: non esistono azioni per eliminare.
 - Al massimo 20 azioni per risposta. Se non serve nessuna azione usa "actions": [].`;
 
@@ -90,13 +104,14 @@ const isTime = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 const isColor = (v: string) => /^#[0-9a-f]{6}$/i.test(v);
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export interface ApplyResult { data: UserData; done: string[]; skipped: string[]; navigate?: string }
+export interface ApplyResult { data: UserData; done: string[]; skipped: string[]; navigate?: string; requests: string[] }
 
 export function applyActions(input: UserData, actions: Action[]): ApplyResult {
   let data: UserData = input;
   const done: string[] = [];
   const skipped: string[] = [];
   let navigate: string | undefined;
+  const requests: string[] = [];
   const settings = () => data.settings;
   const setSettings = (patch: Partial<UserData['settings']>) => { data = { ...data, settings: { ...data.settings, ...patch } }; };
   const homeOrder = () => {
@@ -239,12 +254,63 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
       }
       case 'open_section': {
         const id = str(a.section);
+        const custom = customOf(settings()).sections.find(x => same(x.name, id) || `cs:${x.id}` === id);
         if (id === 'home' || SECTION_IDS.includes(id)) navigate = id;
+        else if (custom) navigate = `cs:${custom.id}`;
+        break;
+      }
+      case 'set_timer': {
+        const t = timerSettings(settings());
+        const mins = (v: unknown, min: number, max: number, d: number) => { const x = Math.round(num(v)); return x >= min && x <= max ? x : d; };
+        const next = {
+          mode: str(a.mode) === 'stopwatch' ? 'stopwatch' as const : str(a.mode) === 'pomodoro' ? 'pomodoro' as const : t.mode,
+          work: mins(a.work, 5, 120, t.work), shortBreak: mins(a.short_break, 1, 30, t.shortBreak), longBreak: mins(a.long_break, 5, 60, t.longBreak),
+          cycles: mins(a.cycles, 2, 8, t.cycles), autoStart: typeof a.auto_start === 'boolean' ? a.auto_start : t.autoStart,
+        };
+        setSettings({ timer: next });
+        done.push(next.mode === 'pomodoro' ? `Pomodoro nel Timer Studio: ${next.work} min di studio, ${next.shortBreak} di pausa, pausa lunga di ${next.longBreak} ogni ${next.cycles} cicli` : 'Timer Studio: cronometro libero');
+        break;
+      }
+      case 'add_widget': {
+        const kind = str(a.kind);
+        if (!isBlockKind(kind)) { skipped.push(`blocco "${kind}"`); break; }
+        const block = makeBlock(kind, str(a.title, 60), (a.config && typeof a.config === 'object' ? a.config : {}) as Record<string, unknown>);
+        data = addWidget(data, block, Math.round(num(a.position)) || undefined);
+        done.push(`Nuovo pannello nella Home: "${block.title}"`);
+        break;
+      }
+      case 'add_section': {
+        const name = str(a.name, 28);
+        if (!name) { skipped.push('sezione senza nome'); break; }
+        if (customOf(settings()).sections.some(x => same(x.name, name))) { skipped.push(`la sezione "${name}" c'è già`); break; }
+        const blocks = (Array.isArray(a.blocks) ? a.blocks : []).slice(0, 12)
+          .map(b => (b && typeof b === 'object' ? b : {}) as Record<string, unknown>)
+          .filter(b => isBlockKind(str(b.kind)))
+          .map(b => makeBlock(str(b.kind) as Parameters<typeof makeBlock>[0], str(b.title, 60), (b.config && typeof b.config === 'object' ? b.config : {}) as Record<string, unknown>));
+        const res = addSection(data, name, str(a.icon), blocks);
+        data = res.data;
+        navigate = `cs:${res.section.id}`;
+        done.push(`Nuova sezione nel menu: "${res.section.name}"${blocks.length ? ` con ${blocks.length} ${blocks.length === 1 ? 'blocco' : 'blocchi'}` : ''}`);
+        break;
+      }
+      case 'add_block': {
+        const name = str(a.section, 28), kind = str(a.kind);
+        const c = customOf(settings());
+        const section = c.sections.find(x => same(x.name, name));
+        if (!section || !isBlockKind(kind)) { skipped.push(`blocco in "${name}"`); break; }
+        const block = makeBlock(kind, str(a.title, 60), (a.config && typeof a.config === 'object' ? a.config : {}) as Record<string, unknown>);
+        setSettings({ custom: { ...c, sections: c.sections.map(x => (x.id === section.id ? { ...x, blocks: [...x.blocks, block] } : x)) } });
+        done.push(`Aggiunto "${block.title}" in "${section.name}"`);
+        break;
+      }
+      case 'request_feature': {
+        const text = str(a.text, 1500);
+        if (text) requests.push(text);
         break;
       }
       default:
         skipped.push(`azione "${a.type}"`);
     }
   }
-  return { data, done, skipped, navigate };
+  return { data, done, skipped, navigate, requests };
 }

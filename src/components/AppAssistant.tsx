@@ -3,6 +3,7 @@ import { Sparkles, Send, Loader2, Undo2, Check, Trash2 } from 'lucide-react';
 import { UserData } from '../lib/store';
 import { askAuto, autoReady, ChatTurn } from '../lib/ai';
 import { ASSISTANT_SYSTEM, describeState, parseAnswer, applyActions } from '../lib/assistant';
+import { sendSuggestion } from '../lib/suggestions';
 
 // "Assistente MYND" in Personalizza: a chat with the automatic AI that changes the app for real
 // (Home panels, menu, names, versions, subjects, tasks…). Every change is listed under the answer
@@ -20,17 +21,21 @@ const SUGGESTIONS = [
   'Obiettivo di 15 ore a settimana',
   'Crea una versione per preparare un esame universitario',
   'Aggiungi la materia Filosofia in viola',
+  'Attiva il Pomodoro da 25 minuti nel timer',
+  'Crea una sezione Sport con le abitudini e gli allenamenti',
+  'Conto alla rovescia alla fine della scuola nella Home',
 ];
 
 interface Props {
   data: UserData;
   darkMode: boolean;
   storageKey: string;
+  userId?: string;   // to send the requests that need new code (Admin → Suggerimenti)
   onUpdateData: (update: (prev: UserData) => UserData) => void;
   onNavigate?: (section: string) => void;
 }
 
-export default function AppAssistant({ data, darkMode, storageKey, onUpdateData, onNavigate }: Props) {
+export default function AppAssistant({ data, darkMode, storageKey, userId, onUpdateData, onNavigate }: Props) {
   const [messages, setMessages] = useState<Message[]>(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { return []; }
   });
@@ -48,7 +53,7 @@ export default function AppAssistant({ data, darkMode, storageKey, onUpdateData,
   const sub = darkMode ? 'text-white/60' : 'text-gray-500';
   const well = darkMode ? 'bg-white/5' : 'bg-black/[0.04]';
   const ready = autoReady();
-  const lastActionId = [...messages].reverse().find(m => m.done?.length && !m.undone)?.id;
+  const lastActionId = [...messages].reverse().find(m => SNAPSHOTS.has(m.id) && !m.undone)?.id;
 
   const send = async (raw?: string) => {
     const question = (raw ?? input).trim();
@@ -68,7 +73,17 @@ export default function AppAssistant({ data, darkMode, storageKey, onUpdateData,
         const before = dataRef.current;
         const result = applyActions(before, answer.actions);
         done = result.done; skipped = result.skipped; navigate = result.navigate;
-        if (done.length) { SNAPSHOTS.set(id, before); onUpdateData(() => result.data); }
+        if (done.length && result.data !== before) { SNAPSHOTS.set(id, before); onUpdateData(() => result.data); }
+        // Things that need new code go to the developers (Admin → Suggerimenti).
+        for (const r of result.requests) {
+          if (!userId || userId === 'demo') { skipped.push('invio della richiesta (nella demo non si può)'); continue; }
+          try {
+            await sendSuggestion(userId, 'idea', `[Assistente MYND] ${r}`, 'assistente');
+            done.push('Richiesta inviata agli sviluppatori di MYND');
+          } catch {
+            skipped.push('invio della richiesta: riprova più tardi o usa "Suggerisci una modifica" nel menu');
+          }
+        }
       }
       setMessages(m => [...m, { role: 'assistant', text: answer.reply || (done.length ? 'Fatto!' : 'Non ho capito bene: puoi dirmelo in un altro modo?'), done, skipped, id }]);
       if (navigate && onNavigate) setTimeout(() => onNavigate(navigate!), 600);

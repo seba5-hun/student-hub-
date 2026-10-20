@@ -8,6 +8,8 @@ import { useProfile, overallAverage, universityStats } from '../lib/profile';
 import LayoutSwitcher, { LayoutActions } from './LayoutSwitcher';
 import { WIDGETS } from '../lib/homeWidgets';
 import AppAssistant from './AppAssistant';
+import CustomBlockView from './CustomBlockView';
+import { customOf, blockWide, updateBlock } from '../lib/custom';
 
 
 interface HomeProps {
@@ -22,9 +24,10 @@ interface HomeProps {
   // Assistente MYND: changes the data on request (and its chat is kept under this key).
   onUpdateData?: (update: (prev: UserData) => UserData) => void;
   assistantKey?: string;
+  userId?: string;
 }
 
-export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, layoutActions, onUpdateData, assistantKey }: HomeProps) {
+export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onOpenGuide, layoutActions, onUpdateData, assistantKey, userId }: HomeProps) {
   const { tasks, grades, sessions, settings } = data;
   const prof = useProfile();
   const quote = useMemo(() => getRandomQuote(), []);
@@ -60,9 +63,12 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
 
   const [editing, setEditing] = useState(false);
   const layout = settings.homeLayout;
+  // MYND's panels plus the ones built from blocks (by the student or the Assistente MYND).
+  const custom = customOf(settings);
+  const ALL = [...WIDGETS, ...custom.widgets.map(b => ({ id: `cw:${b.id}`, label: b.title, wide: blockWide(b.kind) }))];
   const order = [
-    ...(layout?.order || []).filter(id => WIDGETS.some(w => w.id === id)),
-    ...WIDGETS.map(w => w.id).filter(id => !(layout?.order || []).includes(id)),
+    ...(layout?.order || []).filter(id => ALL.some(w => w.id === id)),
+    ...ALL.map(w => w.id).filter(id => !(layout?.order || []).includes(id)),
   ];
   const hidden = layout?.hidden || [];
   const visible = order.filter(id => !hidden.includes(id));
@@ -72,8 +78,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
   // the end) takes the full row, so no row is left half empty.
   const fullRow = new Set<string>();
   for (let i = 0; i < visible.length; i++) {
-    const w = WIDGETS.find(x => x.id === visible[i]);
-    const next = WIDGETS.find(x => x.id === visible[i + 1]);
+    const w = ALL.find(x => x.id === visible[i]);
+    const next = ALL.find(x => x.id === visible[i + 1]);
     if (w?.wide) { fullRow.add(visible[i]); continue; }
     if (next && !next.wide) { i++; continue; }
     fullRow.add(visible[i]);
@@ -97,7 +103,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
   const toggleSection = (id: string) => onUpdateSettings?.({
     hiddenSections: hiddenSections.includes(id) ? hiddenSections.filter(h => h !== id) : [...hiddenSections, id],
   });
-  const resetAll = () => onUpdateSettings?.({ homeLayout: { order: WIDGETS.map(w => w.id), hidden: [] }, hiddenSections: [] });
+  const resetAll = () => onUpdateSettings?.({ homeLayout: { order: ALL.map(w => w.id), hidden: [] }, hiddenSections: [] });
 
   const renderWidget = (id: string): React.ReactNode => {
     switch (id) {
@@ -197,8 +203,15 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
             />
           </div>
         );
-      default:
-        return null;
+      default: {
+        const block = id.startsWith('cw:') ? custom.widgets.find(b => `cw:${b.id}` === id) : undefined;
+        if (!block || !onUpdateData) return null;
+        return (
+          <CustomBlockView block={block} data={data} darkMode={darkMode} onNavigate={onNavigate}
+            onChange={next => onUpdateData(prev => updateBlock(prev, block.id, () => next))}
+            onRemove={() => onUpdateData(prev => updateBlock(prev, block.id, () => null))} />
+        );
+      }
     }
   };
 
@@ -245,7 +258,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
             )}
             {onUpdateData && assistantKey && (
               <div className="mb-5">
-                <AppAssistant data={data} darkMode={darkMode} storageKey={assistantKey} onUpdateData={onUpdateData} onNavigate={onNavigate} />
+                <AppAssistant data={data} darkMode={darkMode} storageKey={assistantKey} userId={userId} onUpdateData={onUpdateData} onNavigate={onNavigate} />
               </div>
             )}
             <h3 className={`font-semibold ${textColor}`}>Personalizza la tua dashboard</h3>
@@ -261,7 +274,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
                 {order.filter(id => hidden.includes(id)).map(id => (
                   <button key={id} onClick={() => showWidget(id)}
                     className={`text-sm px-3 py-1.5 rounded-full border flex items-center gap-1.5 ${darkMode ? 'border-white/15 text-white/80 hover:bg-white/10' : 'border-black/10 text-gray-700 hover:bg-black/5'}`}>
-                    <Plus className="w-3.5 h-3.5" /> {id === 'chart' ? `Tempo di studio per ${prof.l('subject')}` : WIDGETS.find(w => w.id === id)?.label}
+                    <Plus className="w-3.5 h-3.5" /> {id === 'chart' ? `Tempo di studio per ${prof.l('subject')}` : ALL.find(w => w.id === id)?.label}
                   </button>
                 ))}
               </div>
@@ -303,7 +316,7 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {visible.map((id, i) => {
-          const widget = WIDGETS.find(w => w.id === id)!;
+          const widget = ALL.find(w => w.id === id)!;
           return (
             <div key={id} className={`relative h-full ${fullRow.has(id) ? 'md:col-span-2' : ''} ${editing ? `rounded-2xl outline-2 outline-dashed outline-offset-4 ${darkMode ? 'outline-indigo-400/60' : 'outline-indigo-500/50'}` : ''}`}>
               {editing && (

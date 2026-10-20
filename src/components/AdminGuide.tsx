@@ -224,7 +224,8 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
           <li><b className={text}>Nuovi utenti</b>: se l'approvazione è attiva restano "In attesa" finché non li approvi in Admin → Utenti.</li>
           <li><b className={text}>Suggerimenti</b>: arrivano in Admin → Suggerimenti; il pallino arancione sul menu ti avvisa dei nuovi.</li>
           <li><b className={text}>AI</b>: ogni utente collega la propria chiave (Gemini gratis consigliata) nella Guida Studio AI; i costi AI non sono tuoi.</li>
-          <li><b className={text}>Assistente MYND</b> (Home → Personalizza): chat con il modello automatico che sistema l'app su richiesta (pannelli, menu, nomi, versioni, materie, impegni anche ripetuti, note). Non può cancellare dati e ogni modifica si può annullare.</li>
+          <li><b className={text}>Assistente MYND</b> (Home → Personalizza): chat con il modello automatico che sistema l'app su richiesta (pannelli, menu, nomi, versioni, materie, impegni anche ripetuti, note, Pomodoro) e crea funzioni nuove con i <b className={text}>blocchi MYND</b> (liste, contatori, abitudini, conti alla rovescia, avanzamenti, note, link, impegni filtrati) come pannelli della Home o nuove sezioni del menu. Ogni modifica si può annullare.</li>
+          <li><b className={text}>Richieste che servono codice nuovo</b>: l'assistente le manda da solo in Admin → Suggerimenti (iniziano con "[Assistente MYND]"): passale a Claude per farle davvero.</li>
           <li><b className={text}>Le tue MYND</b>: gli utenti possono creare versioni adattate (università, test…) da Home → Personalizza.</li>
           <li><b className={text}>Demo</b>: "Dai un'occhiata, senza account" mostra l'app con dati finti, niente viene salvato.</li>
           <li><b className={text}>Verifica email</b>: chi si registra con email e password entra solo dopo aver scritto il codice ricevuto; se prova ad accedere senza averlo fatto, riceve un nuovo codice.</li>

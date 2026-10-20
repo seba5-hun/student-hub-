@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Play, Pause, Save, Trash2, Palette, Plus, RotateCcw, Split, Minus, SkipForward, Settings2, Timer as TimerIcon } from 'lucide-react';
 import { useDialog } from './Dialog';
 import SubjectManager from './SubjectManager';
 import StudyStats from './StudyStats';
 import WeekDistribution from './WeekDistribution';
-import { StudySession, Grade, SubjectDef, subjectColor, createId, formatDate } from '../lib/store';
+import { StudySession, Grade, SubjectDef, TimerSettings, subjectColor, createId, formatDate } from '../lib/store';
+import { DEFAULT_TIMER } from '../lib/custom';
 import { useProfile } from '../lib/profile';
 
 interface TimerProps {
@@ -17,6 +18,38 @@ interface TimerProps {
   subjectDefs: SubjectDef[];
   onUpdateSubjects: (subjects: SubjectDef[]) => void;
   onRenameSubject: (oldName: string, newName: string) => void;
+  // Stopwatch or Pomodoro, and the Pomodoro's minutes.
+  timerSettings?: TimerSettings;
+  onTimerSettings?: (patch: Partial<TimerSettings>) => void;
+}
+
+// ---- Pomodoro: study rounds and breaks. The study time is counted by the stopwatch only during
+// the study rounds; the phase is saved, so it goes on when changing section.
+type Phase = 'work' | 'short' | 'long';
+interface PomoState { phase: Phase; round: number; endsAt: number | null; leftMs: number }
+const POMO_KEY = 'mynd_pomodoro';
+const PHASE_LABEL: Record<Phase, string> = { work: 'Studio', short: 'Pausa breve', long: 'Pausa lunga' };
+
+function loadPomo(): PomoState | null {
+  try { const raw = localStorage.getItem(POMO_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+// A soft two-note chime (and a notification if allowed) when a phase ends.
+function chime(text: string) {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    [660, 880].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.22);
+      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + i * 0.22 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.22 + 0.5);
+      o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + i * 0.22); o.stop(ctx.currentTime + i * 0.22 + 0.55);
+    });
+    setTimeout(() => ctx.close(), 1500);
+  } catch { /* no audio */ }
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification('MYND · Pomodoro', { body: text, icon: '/icon-192.png' }); } catch { /* ignore */ }
 }
 
 const TIMER_KEY = 'studenthub_timer';
@@ -59,7 +92,7 @@ function saveTimerState(state: TimerState | null): void {
   } catch { /* ignore */ }
 }
 
-export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects, onRenameSubject }: TimerProps) {
+export default function Timer({ sessions, extraSubjects = [], grades, darkMode, onUpdate, preselectedSubject, subjectDefs, onUpdateSubjects, onRenameSubject, timerSettings, onTimerSettings }: TimerProps) {
   const prof = useProfile();
   const dialog = useDialog();
   // Time is computed from timestamps (not by counting ticks), so it stays correct when the
@@ -137,6 +170,67 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
     setSegments({});
     setStartedAt(null);
     setSplitting(null);
+    resetPomo();
+  };
+
+  // ---- Pomodoro ----
+  const pomo = { ...DEFAULT_TIMER, ...timerSettings };
+  const pomoOn = pomo.mode === 'pomodoro';
+  const phaseMs = (ph: Phase) => Math.max(1, ph === 'work' ? pomo.work : ph === 'short' ? pomo.shortBreak : pomo.longBreak) * 60000;
+  const [ps, setPs] = useState<PomoState>(() => loadPomo() || { phase: 'work', round: 1, endsAt: null, leftMs: phaseMs('work') });
+  const [showPomoSettings, setShowPomoSettings] = useState(false);
+  const leftMs = ps.endsAt ? Math.max(0, ps.endsAt - now) : ps.leftMs;
+  function resetPomo() { setPs({ phase: 'work', round: 1, endsAt: null, leftMs: phaseMs('work') }); }
+  useEffect(() => { try { localStorage.setItem(POMO_KEY, JSON.stringify(ps)); } catch { /* ignore */ } }, [ps]);
+  // New lengths apply to a phase that isn't running (not on the first render: a paused phase keeps its time).
+  const firstLengths = useRef(true);
+  useEffect(() => {
+    if (firstLengths.current) { firstLengths.current = false; return; }
+    setPs(p => (p.endsAt ? p : { ...p, leftMs: phaseMs(p.phase) }));
+  }, [pomo.work, pomo.shortBreak, pomo.longBreak]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!pomoOn || !ps.endsAt) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [pomoOn, ps.endsAt]);
+
+  const advance = (keepRunning: boolean) => {
+    const t = Date.now();
+    let next: Phase, round = ps.round;
+    if (ps.phase === 'work') {
+      pause();
+      next = ps.round % Math.max(1, pomo.cycles) === 0 ? 'long' : 'short';
+    } else {
+      next = 'work';
+      round = ps.phase === 'long' ? 1 : ps.round + 1;
+    }
+    const run = keepRunning;
+    if (next === 'work' && run) setStartedAt(t);
+    setPs({ phase: next, round, endsAt: run ? t + phaseMs(next) : null, leftMs: phaseMs(next) });
+    return next;
+  };
+  useEffect(() => {
+    if (!pomoOn || !ps.endsAt || now < ps.endsAt) return;
+    const next = advance(pomo.autoStart);
+    chime(next === 'work' ? 'Pausa finita: si torna a studiare.' : next === 'long' ? 'Ottimo lavoro! Pausa lunga.' : 'Tempo di una pausa.');
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pomoStart = () => {
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+    setPs(p => ({ ...p, endsAt: Date.now() + p.leftMs }));
+    if (ps.phase === 'work') start();
+  };
+  const pomoPause = () => {
+    setPs(p => ({ ...p, endsAt: null, leftMs: p.endsAt ? Math.max(0, p.endsAt - Date.now()) : p.leftMs }));
+    if (isRunning) pause();
+  };
+  const pomoSkip = () => advance(ps.endsAt !== null);
+  const setMode = (mode: TimerSettings['mode']) => {
+    if (mode === pomo.mode) return;
+    pause();
+    setPs(p => ({ ...p, endsAt: null, leftMs: p.endsAt ? Math.max(0, p.endsAt - Date.now()) : p.leftMs }));
+    onTimerSettings?.({ mode });
   };
 
   const saveParts = (minutesBySubject: Record<string, number>) => {
@@ -234,6 +328,37 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
       <h2 className={`text-[34px] leading-[1.1] font-bold tracking-[-0.035em] ${textColor}`}>{prof.L('timer')}.</h2>
 
       <div className={`${cardClass} p-8 text-center`}>
+        {onTimerSettings && (
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <div className={`inline-flex p-1 rounded-full ${darkMode ? 'bg-white/10' : 'bg-black/5'}`} role="tablist" aria-label="Tipo di timer">
+              {([['stopwatch', 'Cronometro'], ['pomodoro', '🍅 Pomodoro']] as const).map(([m, label]) => (
+                <button key={m} role="tab" aria-selected={pomo.mode === m} onClick={() => setMode(m)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${pomo.mode === m ? 'bg-[var(--brand-fill)] text-[var(--on-brand)]' : subTextColor}`}>{label}</button>
+              ))}
+            </div>
+            {pomoOn && (
+              <button onClick={() => setShowPomoSettings(v => !v)} aria-label="Impostazioni Pomodoro" title="Impostazioni Pomodoro"
+                className={`p-2 rounded-full ${subTextColor} ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}><Settings2 className="w-4 h-4" /></button>
+            )}
+          </div>
+        )}
+        {pomoOn && showPomoSettings && onTimerSettings && (
+          <div className={`max-w-md mx-auto mb-6 p-4 rounded-2xl text-left ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {([['work', 'Studio', 5, 120], ['shortBreak', 'Pausa', 1, 30], ['longBreak', 'Pausa lunga', 5, 60], ['cycles', 'Cicli', 2, 8]] as const).map(([key, label, min, max]) => (
+                <label key={key} className="block">
+                  <span className={`block text-xs mb-1 ${subTextColor}`}>{label}{key === 'cycles' ? '' : ' (min)'}</span>
+                  <input type="number" min={min} max={max} value={pomo[key]} onChange={e => onTimerSettings({ [key]: Math.min(max, Math.max(min, Number(e.target.value) || min)) })}
+                    className={`${darkMode ? 'input-glass' : 'input-light'} w-full text-sm py-1.5`} />
+                </label>
+              ))}
+            </div>
+            <label className={`flex items-center gap-2 mt-3 text-sm cursor-pointer ${subTextColor}`}>
+              <input type="checkbox" checked={pomo.autoStart} onChange={e => onTimerSettings({ autoStart: e.target.checked })} className="w-4 h-4" />
+              La fase successiva parte da sola
+            </label>
+          </div>
+        )}
         <div className="mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
             <label className={`text-sm ${subTextColor}`}>{prof.L('subject')}</label>
@@ -271,6 +396,21 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
           />
         )}
 
+        {pomoOn ? (
+          <div className="pt-4 pb-4">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] px-3 py-1 rounded-full"
+              style={ps.phase === 'work' ? { background: 'color-mix(in srgb, var(--brand-fill) 16%, transparent)', color: 'var(--brand-ring)' } : { background: 'rgba(110,170,255,.14)', color: '#8DB7FF' }}>
+              <TimerIcon className="w-3.5 h-3.5" /> {PHASE_LABEL[ps.phase]} · ciclo {ps.round} di {Math.max(1, pomo.cycles)}
+            </span>
+            <p className={`font-mono font-bold tabular-nums text-7xl sm:text-8xl mt-4 ${textColor}`} aria-live="polite">
+              {String(Math.floor(leftMs / 60000)).padStart(2, '0')}:{String(Math.floor((leftMs % 60000) / 1000)).padStart(2, '0')}
+            </p>
+            <div className="max-w-xs mx-auto h-1.5 rounded-full mt-4 overflow-hidden" style={{ background: 'var(--glass-well)' }}>
+              <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${100 - (leftMs / phaseMs(ps.phase)) * 100}%`, background: ps.phase === 'work' ? 'var(--brand-fill)' : '#8DB7FF' }} />
+            </div>
+            <p className={`text-sm mt-3 ${subTextColor}`}>Studio di questa sessione: <span className="font-mono">{formatTime(seconds)}</span> · le pause non contano</p>
+          </div>
+        ) : (
         <div className={`flex items-start justify-center gap-1 sm:gap-2 font-mono font-bold ${textColor} pt-8 pb-4`} aria-label={`${Math.floor(seconds / 3600)} ore, ${Math.floor((seconds % 3600) / 60)} minuti, ${seconds % 60} secondi`}>
           {[
             { value: Math.floor(seconds / 3600), unit: 'ore' },
@@ -286,6 +426,7 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
             </React.Fragment>
           ))}
         </div>
+        )}
 
         {totalMs > 0 && (() => {
           const shown: Record<string, number> = splitting
@@ -324,7 +465,23 @@ export default function Timer({ sessions, extraSubjects = [], grades, darkMode, 
           />
         ) : (
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mt-6">
-            {!isRunning ? (
+            {pomoOn ? (
+              <>
+                {ps.endsAt === null ? (
+                  <button onClick={pomoStart} className="btn-primary flex items-center gap-2 px-6 py-3">
+                    <Play className="w-5 h-5" /> {ps.leftMs < phaseMs(ps.phase) ? 'Riprendi' : ps.phase === 'work' ? 'Inizia a studiare' : 'Inizia la pausa'}
+                  </button>
+                ) : (
+                  <button onClick={pomoPause} className="px-6 py-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold flex items-center gap-2">
+                    <Pause className="w-5 h-5" /> Pausa
+                  </button>
+                )}
+                <button onClick={pomoSkip} title={ps.phase === 'work' ? 'Passa alla pausa' : 'Torna a studiare'}
+                  className={`px-4 py-3 rounded-xl flex items-center gap-2 ${darkMode ? 'bg-white/5 text-white/70' : 'bg-black/5 text-gray-600'}`}>
+                  <SkipForward className="w-5 h-5" /> Salta
+                </button>
+              </>
+            ) : !isRunning ? (
               <button onClick={start} className="btn-primary flex items-center gap-2 px-6 py-3">
                 <Play className="w-5 h-5" /> {seconds > 0 ? 'Riprendi' : 'Avvia'}
               </button>

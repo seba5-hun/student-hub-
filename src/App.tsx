@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense, laz
 import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAccount } from './lib/legal';
 import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
+import { timerSettings } from './lib/custom';
 import { ProfileContext, makeProfileApi } from './lib/profile';
 import { switchLayout, createLayout, updateActiveLayout, deleteLayout, normalizeLayouts, listLayouts, nextName } from './lib/layouts';
 import confetti from 'canvas-confetti';
@@ -40,6 +41,7 @@ const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
 const ProfileEditor = lazy(() => import('./components/ProfileEditor'));
 const SuggestionDialog = lazy(() => import('./components/SuggestionDialog'));
+const CustomSectionView = lazy(() => import('./components/CustomSectionView'));
 
 function preloadSections() {
   const run = () => Object.values(loaders).forEach(load => { load().catch(() => { /* retried on open */ }); });
@@ -827,6 +829,7 @@ function App() {
             layoutActions={layoutActions}
             onUpdateData={updateData}
             assistantKey={`mynd_assistant_${user.id}`}
+            userId={user.id}
           />
         )}
         {currentSection === 'impegni' && (
@@ -846,6 +849,8 @@ function App() {
             subjectDefs={data.settings.subjects || []}
             onUpdateSubjects={updateSubjects}
             onRenameSubject={renameSubject}
+            timerSettings={data.settings.timer}
+            onTimerSettings={patch => updateData(prev => ({ ...prev, settings: { ...prev.settings, timer: { ...timerSettings(prev.settings), ...patch } } }))}
           />
         )}
         {currentSection === 'archivio' && (
@@ -888,6 +893,12 @@ function App() {
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
           <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} />
         )}
+        {currentSection.startsWith('cs:') && (() => {
+          const section = (data.settings.custom?.sections || []).find(cs => `cs:${cs.id}` === currentSection);
+          return section
+            ? <CustomSectionView section={section} data={data} darkMode={darkMode} onUpdateData={updateData} onNavigate={handleSectionChange} />
+            : <Home data={data} darkMode={darkMode} onNavigate={handleSectionChange} />;
+        })()}
         {currentSection === 'guida-ai' && isDemo && <DemoGuide onSignup={() => exitDemo(true)} />}
         {currentSection === 'guida-ai' && !isDemo && (
           <GuidaStudioAI

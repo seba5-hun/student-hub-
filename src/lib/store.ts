@@ -110,6 +110,41 @@ export interface UserSettings {
   defaultLayout?: LayoutSnapshot;   // Home and menu of the default MYND while another is active
   // Terms and Privacy accepted (version and when), with the age declaration: proof of consent.
   legal?: { version: string; at: string; adult14: boolean };
+  // Timer Studio: free stopwatch or Pomodoro (minutes of study, short and long break, cycles).
+  timer?: TimerSettings;
+  // Panels and sections the student (or the Assistente MYND) built from MYND's blocks.
+  custom?: CustomSpace;
+}
+
+export interface TimerSettings {
+  mode: 'stopwatch' | 'pomodoro';
+  work: number;
+  shortBreak: number;
+  longBreak: number;
+  cycles: number;       // long break every N study rounds
+  autoStart: boolean;   // the next phase starts by itself
+}
+
+export type BlockKind = 'checklist' | 'counter' | 'habits' | 'countdown' | 'progress' | 'note' | 'links' | 'tasks';
+
+export interface CustomBlock {
+  id: string;
+  kind: BlockKind;
+  title: string;
+  // Settings and contents of the block (depend on the kind, see lib/custom.ts).
+  config: Record<string, unknown>;
+}
+
+export interface CustomSection {
+  id: string;
+  name: string;
+  icon: string;
+  blocks: CustomBlock[];
+}
+
+export interface CustomSpace {
+  widgets: CustomBlock[];      // on the Home (ids "cw:<id>" in the Home order)
+  sections: CustomSection[];   // in the menu (ids "cs:<id>")
 }
 
 export interface LayoutSnapshot {
