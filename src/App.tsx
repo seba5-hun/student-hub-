@@ -41,6 +41,8 @@ const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
 const ProfileEditor = lazy(() => import('./components/ProfileEditor'));
 const SuggestionDialog = lazy(() => import('./components/SuggestionDialog'));
+const AssistantStudio = lazy(() => import('./components/AssistantStudio'));
+import type { AssistantRequest } from './lib/assistantBus';
 const CustomSectionView = lazy(() => import('./components/CustomSectionView'));
 
 function preloadSections() {
@@ -115,6 +117,16 @@ function App() {
   // Admin: suggestions not read yet ("Suggerisci una modifica").
   const [adminIdeas, setAdminIdeas] = useState(0);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  // "Crea con l'AI": opened from the Home, Personalizza and the mini-apps (openAssistant).
+  const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { text, appId } = (e as CustomEvent<AssistantRequest>).detail || { text: '' };
+      setStudio({ text: text || '', appId, n: Date.now() });
+    };
+    window.addEventListener('mynd-assistant', onOpen);
+    return () => window.removeEventListener('mynd-assistant', onOpen);
+  }, []);
   // Opened as …/admin: go straight to the admin panel after login.
   const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
   // Opened as …/?mindset=sera (iPhone automation): straight to Mindset's evening reset.
@@ -926,6 +938,12 @@ function App() {
         <Suspense fallback={null}>
           <SuggestionDialog userId={isDemo ? null : user.id} section={currentSection} darkMode={darkMode}
             onClose={() => setSuggestOpen(false)} onSignup={() => { setSuggestOpen(false); exitDemo(true); }} />
+        </Suspense>
+      )}
+      {studio && (
+        <Suspense fallback={null}>
+          <AssistantStudio data={data} darkMode={darkMode} storageKey={`mynd_assistant_${user.id}`} userId={user.id} request={studio}
+            onUpdateData={updateData} onNavigate={handleSectionChange} onClose={() => setStudio(null)} />
         </Suspense>
       )}
       {profileEditor && (

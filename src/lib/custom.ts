@@ -15,7 +15,9 @@ export const BLOCK_KINDS: { kind: BlockKind; label: string; wide: boolean; hint:
   { kind: 'tasks', label: 'Impegni filtrati', wide: true, hint: 'config: {"filter":"upcoming|school|personal","subject":"Matematica","limit":5}' },
 ];
 export const isBlockKind = (k: string): k is BlockKind => BLOCK_KINDS.some(b => b.kind === k);
-export const blockWide = (k: BlockKind) => !!BLOCK_KINDS.find(b => b.kind === k)?.wide;
+export const MAX_APP_HTML = 150_000;      // characters of a mini-app page
+export const MAX_APP_STORE = 200_000;     // characters of a mini-app's saved data (as JSON)
+export const blockWide = (k: BlockKind) => k === 'app' || !!BLOCK_KINDS.find(b => b.kind === k)?.wide;
 
 export const SECTION_ICONS = ['star', 'book', 'target', 'heart', 'flame', 'list', 'calendar', 'sparkles', 'music', 'dumbbell', 'brain', 'coffee'];
 
@@ -50,6 +52,13 @@ export function cleanConfig(kind: BlockKind, raw: Record<string, unknown> = {}):
         const url = text(o.url, 400);
         return { label: text(o.label, 60) || url, url: /^https?:\/\//i.test(url) ? url : '' };
       }).filter((l: { url: string }) => l.url) };
+    case 'app': {
+      // A mini-app written by the Assistente MYND: its page (HTML + JS), whether it may read the
+      // student's subjects/tasks/grades, its own saved data and the previous versions of the page.
+      const html = typeof raw.html === 'string' ? raw.html.slice(0, MAX_APP_HTML) : '';
+      const history = (Array.isArray(raw.history) ? raw.history : []).filter((h: unknown) => h && typeof (h as { html?: unknown }).html === 'string').slice(-5);
+      return { html, data: raw.data === true, store: raw.store ?? null, history, description: text(raw.description, 300), lastError: '' };
+    }
     case 'tasks':
       return { filter: ['upcoming', 'school', 'personal'].includes(text(raw.filter)) ? text(raw.filter) : 'upcoming', subject: text(raw.subject, 40), limit: Math.min(15, Math.max(1, Math.round(n(raw.limit, 5)))) };
   }
@@ -87,4 +96,9 @@ export function updateBlock(data: UserData, blockId: string, update: (b: CustomB
 export function removeSection(data: UserData, sectionId: string): UserData {
   const c = customOf(data.settings);
   return withCustom(data, { ...c, sections: c.sections.filter(s => s.id !== sectionId) });
+}
+
+// A mini-app written by the Assistente MYND.
+export function makeApp(title: string, html: string, useData: boolean, description = ''): CustomBlock {
+  return { id: createId(), kind: 'app', title: title.trim().slice(0, 60) || 'Mini-app', config: cleanConfig('app', { html, data: useData, description }) };
 }

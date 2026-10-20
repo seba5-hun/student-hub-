@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw, Wand2 } from 'lucide-react';
+import { Pencil, Minus, Target, BookOpen, Clock, Flame, TrendingUp, TrendingDown, Award, CheckCircle2, SlidersHorizontal, ChevronUp, ChevronDown, EyeOff, Plus, Check, RotateCcw, Wand2, Sparkles } from 'lucide-react';
 import { SECTIONS } from './Layout';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { UserData, getSubjectAverages, getSubjectStudyTime, getStudyStreak, getWeeklyStudyHours, getHeatmapData, getRandomQuote, IMPORTANCE_CONFIG, formatDateWithDay, formatTaskTime, compareTasks, effectiveImportance } from '../lib/store';
@@ -7,7 +7,7 @@ import { nextOfEachSeries } from '../lib/recurrence';
 import { useProfile, overallAverage, universityStats } from '../lib/profile';
 import LayoutSwitcher, { LayoutActions } from './LayoutSwitcher';
 import { WIDGETS } from '../lib/homeWidgets';
-import AppAssistant from './AppAssistant';
+import { openAssistant } from '../lib/assistantBus';
 import CustomBlockView from './CustomBlockView';
 import { customOf, blockWide, updateBlock } from '../lib/custom';
 
@@ -224,15 +224,21 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 pt-3">
         {onOpenGuide && !editing ? (
           <button onClick={onOpenGuide}
-            className={`text-sm font-semibold px-3 py-1.5 -ml-3 rounded-lg flex items-center gap-2 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
+            className={`text-sm font-semibold px-3 py-1.5 -ml-3 rounded-lg flex items-center gap-2 whitespace-nowrap ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
             style={{ color: 'var(--brand-ring)' }}>
             <Wand2 className="w-4 h-4" /> Crea la tua MYND
           </button>
         ) : <span />}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 ml-auto">
+        {onUpdateData && assistantKey && !editing && (
+          <button onClick={() => openAssistant('')} title="Crea con l'AI: descrivi cosa ti serve e lo aggiungo"
+            className={`text-sm px-2 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`} style={{ color: 'var(--brand-ring)' }}>
+            <Sparkles className="w-4 h-4" /> <span className="whitespace-nowrap">Crea con l'AI</span>
+          </button>
+        )}
         {layoutActions && !editing && <LayoutSwitcher compact settings={settings} darkMode={darkMode} {...layoutActions} />}
         {editing ? (
           <button onClick={() => setEditing(false)} className="btn-primary text-sm flex items-center gap-2">
@@ -240,8 +246,8 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
           </button>
         ) : (
           <button onClick={() => setEditing(true)}
-            className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 ${darkMode ? 'text-white/70 hover:bg-white/10' : 'text-gray-600 hover:bg-black/5'}`}>
-            <SlidersHorizontal className="w-4 h-4" /> Personalizza
+            className={`text-sm px-2 sm:px-3 py-1.5 -mr-2 sm:mr-0 rounded-lg flex items-center gap-1.5 sm:gap-2 ${darkMode ? 'text-white/70 hover:bg-white/10' : 'text-gray-600 hover:bg-black/5'}`}>
+            <SlidersHorizontal className="w-4 h-4" /> <span className="whitespace-nowrap">Personalizza</span>
           </button>
         )}
         </div>
@@ -257,9 +263,17 @@ export default function Home({ data, darkMode, onNavigate, onUpdateSettings, onO
               </div>
             )}
             {onUpdateData && assistantKey && (
-              <div className="mb-5">
-                <AppAssistant data={data} darkMode={darkMode} storageKey={assistantKey} userId={userId} onUpdateData={onUpdateData} onNavigate={onNavigate} />
-              </div>
+              <button onClick={() => openAssistant('')}
+                className={`mb-5 w-full text-left rounded-2xl p-4 flex items-center gap-3 ${darkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-black/5 hover:bg-black/10'}`}
+                style={{ boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--brand-ring) 30%, transparent)' }}>
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--brand-fill) 16%, transparent)', color: 'var(--brand-ring)' }}>
+                  <Sparkles className="w-4 h-4" />
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className={`block font-semibold ${textColor}`}>Assistente MYND · Crea con l'AI</span>
+                  <span className={`block text-xs ${subTextColor}`}>Dimmi cosa ti serve: sistemo l'app o creo funzioni nuove su misura per te</span>
+                </span>
+              </button>
             )}
             <h3 className={`font-semibold ${textColor}`}>Personalizza la tua dashboard</h3>
             <p className={`text-sm ${subTextColor}`}>Usa le frecce per spostare i pannelli e l'occhio per nasconderli. Le scelte valgono su tutti i tuoi dispositivi.</p>

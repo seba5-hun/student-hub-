@@ -8,7 +8,8 @@ import { WIDGETS } from './homeWidgets';
 import { makeProfileApi, PRESETS, KIND_ORDER, LABEL_KEYS } from './profile';
 import { listLayouts, switchLayout, createLayout, updateActiveLayout, DEFAULT_LAYOUT_ID } from './layouts';
 import { buildSeries, untilAfter, weekdayOf } from './recurrence';
-import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, addWidget, addSection, customOf, timerSettings } from './custom';
+import { BLOCK_KINDS, SECTION_ICONS, isBlockKind, makeBlock, makeApp, addWidget, addSection, customOf, timerSettings, MAX_APP_HTML } from './custom';
+import { CustomBlock } from './store';
 
 export const SECTION_IDS = ['impegni', 'voti', 'timer', 'archivio', 'cosa-studiare', 'calendario', 'guida-ai'];
 const DEFAULT_SECTION_NAMES: Record<string, string> = {
@@ -38,10 +39,35 @@ export function describeState(data: UserData): string {
     `Materie: ${(s.subjects || []).map(x => `${x.name} (${x.color})`).join(', ') || 'nessuna'}.`,
     `Obiettivo settimanale di studio: ${s.weeklyGoal} ore.`,
     (() => { const t = timerSettings(s); return `Timer Studio: ${t.mode === 'pomodoro' ? `Pomodoro (${t.work} min studio, ${t.shortBreak} pausa, ${t.longBreak} pausa lunga ogni ${t.cycles} cicli)` : 'cronometro libero'}.`; })(),
-    `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
+    `Pannelli creati con i blocchi (sono nella Home, id "cw:…"): ${customOf(s).widgets.map(b => `cw:${b.id} = ${b.kind === 'app' ? 'mini-app' : b.kind} "${b.title}"`).join('; ') || 'nessuno'}.`,
+    `Mini-app create: ${allApps(s).map(b => `"${b.title}" (id ${b.id})${b.config.description ? `: ${String(b.config.description)}` : ''}`).join('; ') || 'nessuna'}.`,
     `Sezioni create con i blocchi (nel menu): ${customOf(s).sections.map(x => `"${x.name}" (${x.blocks.map(b => `${b.kind} "${b.title}"`).join(', ') || 'vuota'})`).join('; ') || 'nessuna'}.`,
     `Prossimi impegni: ${upcoming.map(t => `${t.title} il ${t.date}${t.time ? ` alle ${t.time}` : ''}`).join('; ') || 'nessuno'}.`,
   ].join('\n');
+}
+
+// Every mini-app of the active version (Home and sections).
+export function allApps(s: UserData['settings']): CustomBlock[] {
+  const c = customOf(s);
+  return [...c.widgets, ...c.sections.flatMap(x => x.blocks)].filter(b => b.kind === 'app');
+}
+
+// The code of the mini-apps the conversation is about (the one being edited, the last one made,
+// the ones named in the message), so the AI can change them without starting from zero.
+export function appContext(s: UserData['settings'], focus: string[], text: string, maxChars = 60000): string {
+  const apps = allApps(s);
+  const lower = text.toLowerCase();
+  const chosen = apps.filter(b => focus.includes(b.id) || (b.title.length > 2 && lower.includes(b.title.toLowerCase())));
+  let left = maxChars;
+  const parts: string[] = [];
+  for (const b of chosen) {
+    const html = String(b.config.html || '');
+    if (html.length > left) continue;
+    left -= html.length;
+    const err = b.config.lastError ? `\nUltimo errore segnalato: ${String(b.config.lastError)}` : '';
+    parts.push(`CODICE ATTUALE DELLA MINI-APP "${b.title}" (id ${b.id}, dati dello studente: ${b.config.data ? 'sì' : 'no'}):${err}\n<<<CODE>>>\n${html}\n<<<FINE>>>`);
+  }
+  return parts.length ? `\n\n${parts.join('\n\n')}\nPer modificarla usa update_app con l'id e riscrivi il codice COMPLETO (non solo le parti cambiate), mantenendo i dati salvati compatibili.` : '';
 }
 
 export const ASSISTANT_SYSTEM = `Sei l'Assistente MYND: aiuti lo studente a organizzare e personalizzare l'app MYND parlando in italiano, in modo breve e amichevole (dagli del tu).
@@ -75,16 +101,43 @@ ${BLOCK_KINDS.map(b => `- ${b.kind}: ${b.label}. ${b.hint}`).join('\n')}
 - {"type":"add_block","section":"Benessere","kind":"counter","title":"Acqua","config":{...}}  aggiunge un blocco a una sezione creata
 - {"type":"request_feature","text":"descrizione chiara della funzione richiesta"}  invia la richiesta agli sviluppatori di MYND
 
+MINI-APP (per tutto ciò che i blocchi non bastano a fare: quiz, flashcard, calcolatori, giochi di ripasso, diari, tabelle, grafici, timer speciali…):
+- {"type":"create_app","title":"Flashcard","place":"section","icon":"brain","code":"A1","uses_data":true,"description":"mazzi di flashcard per materia con punteggio"}
+  place: "section" (nuova sezione del menu) oppure "home" (pannello della Home); uses_data true se deve leggere materie, impegni o voti.
+- {"type":"update_app","app":"Flashcard","code":"A1","description":"…"}  sostituisce il codice di una mini-app esistente (app = titolo o id)
+Il codice NON va nel JSON: scrivilo DOPO il JSON, tra i segni <<<APP:A1>>> e <<<END>>> (A1 = il valore di "code").
+Come scrivere il codice di una mini-app:
+- Una sola pagina HTML completa e funzionante, con <style> e <script> dentro; niente librerie o risorse esterne (non vengono caricate), niente alert/prompt.
+- Testi in italiano, chiari. Deve stare bene da telefono a computer (layout fluido, niente larghezze fisse sopra 320px).
+- Grafica MYND già pronta: usa le classi card, well, btn, btn-secondary, btn-danger, input, chip, row, col, grid, bar (con <i style="width:40%">), big, muted, subtle, lime, ok, bad, e le variabili CSS var(--text), var(--text-muted), var(--brand-ring), var(--brand-fill), var(--border), var(--glass-well), var(--area-scuola)… Lo sfondo resta trasparente. Non cambiare font o colori di base.
+- Salvataggio: all'avvio const saved = await mynd.load() (null la prima volta); a ogni modifica await mynd.save(stato) (un oggetto JSON, massimo ~200 KB). Non usare localStorage.
+- Dati dello studente (solo se uses_data è true): const d = await mynd.data() → { today, subjects:[{name,color}], tasks:[{title,date,time,subject,done,type,importance}], grades:[{subject,value,scale,date,description}], studyMinutes:[{subject,minutes,date}] } (null se lo studente non lo permette: gestiscilo). Sono solo da leggere.
+- mynd.today() restituisce la data di oggi "AAAA-MM-GG".
+- Codice completo e corretto, senza puntini o parti da completare.
+
 REGOLE:
 - Usa lo STATO ATTUALE qui sotto per id, nomi e date (calcola le date relative come "martedì prossimo" partendo da oggi).
 - Se la richiesta è ambigua o manca un dato importante (es. la data di una verifica), non fare azioni: chiedi in "reply".
-- Quando lo studente chiede una FUNZIONE NUOVA, prima prova a realizzarla tu: con set_timer, con un blocco nella Home (add_widget) o con una nuova sezione di blocchi (add_section). Esempi: "tracker dell'acqua" → counter; "conto alla rovescia alla maturità" → countdown; "lista della spesa per lo studio" → checklist; "sezione sport" → add_section con habits, counter e tasks filtrati personal.
-- Solo se proprio non si può fare con azioni e blocchi, usa request_feature con una descrizione chiara e di' allo studente che la richiesta è stata inviata agli sviluppatori. Non dire mai che "non puoi modificare il codice".
+- MYND è uno spazio personalizzabile al 100%: quando lo studente chiede una FUNZIONE NUOVA la realizzi tu. Se bastano i blocchi o set_timer usali (sono più semplici: "tracker dell'acqua" → counter, "conto alla rovescia alla maturità" → countdown, "sezione sport" → add_section con habits, counter e tasks personal). Altrimenti crei una MINI-APP.
+- Per una mini-app nuova o una modifica importante PRIMA proponi: in "reply" descrivi in 2-5 punti brevi cosa farà e dove la metti, e chiedi "Va bene così?", senza azioni. Quando lo studente conferma (sì, ok, va bene, procedi…) creala con create_app/update_app e il codice. Per piccole correzioni o se lo studente ti ha già detto esattamente cosa vuole puoi farlo subito.
+- Usa request_feature solo per ciò che una mini-app non può fare: contatti con altre persone (classifiche tra amici, chat, condivisione), invio di email, pagamenti, siti esterni, o cambiare il funzionamento interno delle sezioni base. Dillo allo studente. Non dire mai che "non puoi modificare il codice".
 - Se lo studente chiede qualcosa che riguarda solo l'uso dell'app, spiegalo in "reply".
 - Non cancellare mai dati: non esistono azioni per eliminare.
 - Al massimo 20 azioni per risposta. Se non serve nessuna azione usa "actions": [].`;
 
-export function parseAnswer(text: string): AssistantAnswer {
+export interface ParsedAnswer extends AssistantAnswer { codes: Record<string, string> }
+
+// The JSON reply and the code of the mini-apps written after it (<<<APP:id>>> … <<<END>>>).
+export function parseAnswer(raw: string): ParsedAnswer {
+  const codes: Record<string, string> = {};
+  const text = raw.replace(/<<<APP:([\w-]+)>>>([\s\S]*?)(?:<<<END>>>|$)/g, (_, id: string, code: string) => {
+    codes[id] = code.replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    return '';
+  });
+  return { ...parseJson(text), codes };
+}
+
+function parseJson(text: string): AssistantAnswer {
   const match = text.match(/\{[\s\S]*\}/);
   if (match) {
     try {
@@ -104,23 +157,36 @@ const isTime = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 const isColor = (v: string) => /^#[0-9a-f]{6}$/i.test(v);
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-export interface ApplyResult { data: UserData; done: string[]; skipped: string[]; navigate?: string; requests: string[] }
+export interface ApplyResult { data: UserData; done: string[]; skipped: string[]; navigate?: string; requests: string[]; apps: string[] }
 
-export function applyActions(input: UserData, actions: Action[]): ApplyResult {
+export function applyActions(input: UserData, actions: Action[], codes: Record<string, string> = {}): ApplyResult {
   let data: UserData = input;
+  const apps: string[] = [];   // the mini-apps created or changed (the next message is probably about them)
   const done: string[] = [];
   const skipped: string[] = [];
   let navigate: string | undefined;
   const requests: string[] = [];
   const settings = () => data.settings;
   const setSettings = (patch: Partial<UserData['settings']>) => { data = { ...data, settings: { ...data.settings, ...patch } }; };
+  const panels = () => [...WIDGETS, ...customOf(settings()).widgets.map(b => ({ id: `cw:${b.id}`, label: b.title }))];
   const homeOrder = () => {
-    const s = settings();
-    return [...(s.homeLayout?.order || []).filter(id => WIDGETS.some(w => w.id === id)), ...WIDGETS.map(w => w.id).filter(id => !(s.homeLayout?.order || []).includes(id))];
+    const s = settings(), all = panels();
+    return [...(s.homeLayout?.order || []).filter(id => all.some(w => w.id === id)), ...all.map(w => w.id).filter(id => !(s.homeLayout?.order || []).includes(id))];
   };
-  const panelName = (id: string) => WIDGETS.find(w => w.id === id)?.label || id;
+  const panelName = (id: string) => panels().find(w => w.id === id)?.label || id;
   const sectionName = (id: string) => makeProfileApi(settings().profile).section(id, DEFAULT_SECTION_NAMES[id] || id);
   const activeName = () => listLayouts(settings()).find(l => l.active)?.name || 'MYND';
+  // The basic MYND stays as it is: new sections, panels and mini-apps go into the student's own version.
+  const ownVersion = () => {
+    if (activeName() !== 'MYND' || listLayouts(settings()).find(l => l.active)?.custom) return;
+    const existing = listLayouts(settings()).find(l => l.custom && l.name === 'La mia MYND');
+    data = { ...data, settings: existing ? switchLayout(settings(), existing.id) : createLayout(settings(), 'La mia MYND', settings().profile || { kind: 'superiori' }) };
+    done.push(existing ? 'Sei passato a "La mia MYND", la tua versione personalizzata' : 'Creata "La mia MYND": la tua versione personalizzata (la MYND base resta com\'è)');
+  };
+  const appCode = (key: unknown) => {
+    const code = codes[str(key, 40)] || '';
+    return /<(script|div|body|html|main|section)[\s>]/i.test(code) ? code.slice(0, MAX_APP_HTML) : '';
+  };
 
   for (const a of actions) {
     switch (a.type) {
@@ -131,7 +197,7 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
       }
       case 'hide_panel': case 'show_panel': {
         const id = str(a.panel);
-        if (!WIDGETS.some(w => w.id === id)) { skipped.push(`pannello "${id}"`); break; }
+        if (!panels().some(w => w.id === id)) { skipped.push(`pannello "${id}"`); break; }
         const hidden = settings().homeLayout?.hidden || [];
         const next = a.type === 'hide_panel' ? [...new Set([...hidden, id])] : hidden.filter(h => h !== id);
         setSettings({ homeLayout: { order: homeOrder(), hidden: next } });
@@ -140,7 +206,7 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
       }
       case 'move_panel': {
         const id = str(a.panel);
-        if (!WIDGETS.some(w => w.id === id)) { skipped.push(`pannello "${id}"`); break; }
+        if (!panels().some(w => w.id === id)) { skipped.push(`pannello "${id}"`); break; }
         const order = homeOrder().filter(x => x !== id);
         const pos = Math.max(1, Math.min(order.length + 1, Math.round(num(a.position)) || 1));
         order.splice(pos - 1, 0, id);
@@ -271,9 +337,46 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
         done.push(next.mode === 'pomodoro' ? `Pomodoro nel Timer Studio: ${next.work} min di studio, ${next.shortBreak} di pausa, pausa lunga di ${next.longBreak} ogni ${next.cycles} cicli` : 'Timer Studio: cronometro libero');
         break;
       }
+      case 'create_app': {
+        const html = appCode(a.code);
+        const title = str(a.title, 60) || 'Mini-app';
+        if (!html) { skipped.push(`mini-app "${title}" senza codice valido`); break; }
+        ownVersion();
+        const app = makeApp(title, html, a.uses_data === true, str(a.description, 300));
+        apps.push(app.id);
+        if (str(a.place) === 'home') {
+          data = addWidget(data, app, Math.round(num(a.position)) || undefined);
+          done.push(`Nuova mini-app nella Home: "${title}"`);
+        } else {
+          const res = addSection(data, title, str(a.icon), [app]);
+          data = res.data;
+          navigate = `cs:${res.section.id}`;
+          done.push(`Nuova sezione nel menu con la mini-app "${title}"`);
+        }
+        break;
+      }
+      case 'update_app': {
+        const html = appCode(a.code);
+        const key = str(a.app, 60);
+        const target = allApps(settings()).find(b => b.id === key || same(b.title, key));
+        if (!target || !html) { skipped.push(`modifica di "${key}"`); break; }
+        const c = customOf(settings());
+        const upd = (b: CustomBlock): CustomBlock => (b.id !== target.id ? b : {
+          ...b, title: str(a.title, 60) || b.title,
+          config: { ...b.config, html, lastError: '', ...(str(a.description) ? { description: str(a.description, 300) } : {}), ...(typeof a.uses_data === 'boolean' ? { data: a.uses_data } : {}),
+            history: [...((b.config.history as unknown[]) || []), { html: String(b.config.html || ''), at: new Date().toISOString() }].slice(-5) },
+        });
+        setSettings({ custom: { widgets: c.widgets.map(upd), sections: c.sections.map(x => ({ ...x, blocks: x.blocks.map(upd) })) } });
+        done.push(`Aggiornata la mini-app "${target.title}"`);
+        apps.push(target.id);
+        const inSection = c.sections.find(x => x.blocks.some(b => b.id === target.id));
+        if (inSection) navigate = `cs:${inSection.id}`;
+        break;
+      }
       case 'add_widget': {
         const kind = str(a.kind);
         if (!isBlockKind(kind)) { skipped.push(`blocco "${kind}"`); break; }
+        ownVersion();
         const block = makeBlock(kind, str(a.title, 60), (a.config && typeof a.config === 'object' ? a.config : {}) as Record<string, unknown>);
         data = addWidget(data, block, Math.round(num(a.position)) || undefined);
         done.push(`Nuovo pannello nella Home: "${block.title}"`);
@@ -282,6 +385,7 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
       case 'add_section': {
         const name = str(a.name, 28);
         if (!name) { skipped.push('sezione senza nome'); break; }
+        ownVersion();
         if (customOf(settings()).sections.some(x => same(x.name, name))) { skipped.push(`la sezione "${name}" c'è già`); break; }
         const blocks = (Array.isArray(a.blocks) ? a.blocks : []).slice(0, 12)
           .map(b => (b && typeof b === 'object' ? b : {}) as Record<string, unknown>)
@@ -312,5 +416,5 @@ export function applyActions(input: UserData, actions: Action[]): ApplyResult {
         skipped.push(`azione "${a.type}"`);
     }
   }
-  return { data, done, skipped, navigate, requests };
+  return { data, done, skipped, navigate, requests, apps };
 }

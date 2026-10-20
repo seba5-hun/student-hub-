@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Minus, X, Trash2, ExternalLink, Check, CalendarClock } from 'lucide-react';
+import { Plus, Minus, X, Trash2, ExternalLink, Check, CalendarClock, Sparkles, History, Database } from 'lucide-react';
+import MiniApp from './MiniApp';
+import { openAssistant } from '../lib/assistantBus';
 import { UserData, CustomBlock, todayKey, parseDate, toDateKey, compareTasks, formatDateWithDay } from '../lib/store';
 import { nextOfEachSeries } from '../lib/recurrence';
 import { useDialog } from './Dialog';
@@ -186,6 +188,41 @@ export default function CustomBlockView({ block, data, darkMode, onChange, onRem
             <input value={draft2} onChange={e => setDraft2(e.target.value)} placeholder="Indirizzo" className={input} />
             <button type="submit" className={round} aria-label="Aggiungi link"><Plus className="w-4 h-4" /></button>
           </form>
+        </div>
+      );
+      break;
+    }
+    case 'app': {
+      const history = (c.history as { html: string; at: string }[]) || [];
+      const [appError, setAppError] = [String(c.lastError || ''), (msg: string) => { if (msg !== c.lastError) set({ lastError: msg }); }];
+      corner = (
+        <>
+          <button onClick={() => set({ data: !c.data })} title={c.data ? 'Può leggere materie, impegni e voti: tocca per toglierlo' : 'Non legge i tuoi dati: tocca per permetterlo'}
+            className="text-xs px-2 py-1 rounded-full flex items-center gap-1" style={c.data ? { color: 'var(--brand-ring)', background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' } : { color: 'var(--text-subtle)' }}>
+            <Database className="w-3.5 h-3.5" /> {c.data ? 'Dati: sì' : 'Dati: no'}
+          </button>
+          {history.length > 0 && (
+            <button onClick={async () => {
+              if (!(await dialog.confirm({ title: 'Tornare alla versione precedente?', message: `"${block.title}" torna com'era prima dell'ultima modifica. I dati salvati restano.`, confirmLabel: 'Torna indietro' }))) return;
+              const prev = history[history.length - 1];
+              set({ html: prev.html, history: history.slice(0, -1), lastError: '' });
+            }} title="Versione precedente" aria-label="Versione precedente" className={`p-1.5 rounded-lg opacity-60 hover:opacity-100 ${sub}`}><History className="w-3.5 h-3.5" /></button>
+          )}
+          <button onClick={() => openAssistant(`Modifica la mini-app «${block.title}»: `, block.id)} title="Modifica con l'AI" aria-label="Modifica con l'AI"
+            className="p-1.5 rounded-lg" style={{ color: 'var(--brand-ring)' }}><Sparkles className="w-3.5 h-3.5" /></button>
+        </>
+      );
+      body = (
+        <div>
+          {String(c.html || '') ? (
+            <MiniApp html={String(c.html)} store={c.store} allowData={c.data === true} data={data}
+              onSave={store => set({ store })} onError={setAppError} />
+          ) : <p className={`text-sm ${sub}`}>Questa mini-app è vuota.</p>}
+          {appError && (
+            <p className="text-xs mt-2 text-amber-400">
+              Qualcosa non funziona ({appError}). <button className="underline" onClick={() => openAssistant(`La mini-app «${block.title}» dà questo errore: ${appError}. Correggila.`, block.id)}>Chiedi all'AI di correggerla</button>
+            </p>
+          )}
         </div>
       );
       break;

@@ -125,7 +125,7 @@ export interface TimerSettings {
   autoStart: boolean;   // the next phase starts by itself
 }
 
-export type BlockKind = 'checklist' | 'counter' | 'habits' | 'countdown' | 'progress' | 'note' | 'links' | 'tasks';
+export type BlockKind = 'checklist' | 'counter' | 'habits' | 'countdown' | 'progress' | 'note' | 'links' | 'tasks' | 'app';
 
 export interface CustomBlock {
   id: string;
@@ -149,6 +149,7 @@ export interface CustomSpace {
 
 export interface LayoutSnapshot {
   profile?: StudyProfile;
+  custom?: CustomSpace;   // sections, panels and mini-apps of this version
   homeLayout?: { order: string[]; hidden: string[] };
   hiddenSections?: string[];
 }

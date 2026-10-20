@@ -13,7 +13,7 @@ export const DEFAULT_LAYOUT_ID = 'default';
 const isPlainProfile = (p?: StudyProfile) =>
   !p || (p.kind === 'superiori' && !p.description && !p.focus && !p.gradeScale && !Object.keys(p.labels || {}).length);
 
-const snapshot = (s: UserSettings): LayoutSnapshot => ({ profile: s.profile, homeLayout: s.homeLayout, hiddenSections: s.hiddenSections });
+const snapshot = (s: UserSettings): LayoutSnapshot => ({ profile: s.profile, homeLayout: s.homeLayout, hiddenSections: s.hiddenSections, custom: s.custom });
 
 // Accounts that adapted MYND before versions existed: that adaptation becomes their first version.
 export function normalizeLayouts(s: UserSettings): UserSettings {
@@ -21,7 +21,7 @@ export function normalizeLayouts(s: UserSettings): UserSettings {
   const layout: MyndLayout = { id: createId(), name: PRESETS[s.profile!.kind]?.title || 'La mia MYND', ...snapshot(s) };
   return {
     ...s, layouts: [...(s.layouts || []), layout], activeLayout: layout.id,
-    defaultLayout: { homeLayout: s.homeLayout, hiddenSections: s.hiddenSections },
+    defaultLayout: { homeLayout: s.homeLayout, hiddenSections: s.hiddenSections, custom: s.custom },
   };
 }
 
@@ -46,21 +46,23 @@ export function switchLayout(settings: UserSettings, id: string): UserSettings {
   if (current === id) return s;
   // Save the version being left…
   const layouts = (s.layouts || []).map(l => (l.id === current ? { ...l, ...snapshot(s) } : l));
-  const defaultLayout = current === DEFAULT_LAYOUT_ID ? { homeLayout: s.homeLayout, hiddenSections: s.hiddenSections } : s.defaultLayout;
+  const defaultLayout = current === DEFAULT_LAYOUT_ID ? { homeLayout: s.homeLayout, hiddenSections: s.hiddenSections, custom: s.custom } : s.defaultLayout;
   // …and load the other one.
   const target: LayoutSnapshot | undefined = id === DEFAULT_LAYOUT_ID ? { ...defaultLayout, profile: undefined } : layouts.find(l => l.id === id);
   if (!target) return s;
   return {
     ...s, layouts, defaultLayout,
     activeLayout: id === DEFAULT_LAYOUT_ID ? undefined : id,
-    profile: target.profile, homeLayout: target.homeLayout, hiddenSections: target.hiddenSections,
+    profile: target.profile, homeLayout: target.homeLayout, hiddenSections: target.hiddenSections, custom: target.custom,
   };
 }
 
 // A new version, starting from the Home and menu of the active one, becomes the active one.
 export function createLayout(settings: UserSettings, name: string, profile: StudyProfile): UserSettings {
   const s = normalizeLayouts(settings);
-  const layout: MyndLayout = { id: createId(), name: name.trim() || nextName(s), profile, homeLayout: s.homeLayout, hiddenSections: s.hiddenSections };
+  // A new version starts from the Home and menu of the active one, with no sections or mini-apps of its own.
+  const ownHome = s.homeLayout ? { order: s.homeLayout.order.filter(id => !id.startsWith('cw:')), hidden: s.homeLayout.hidden.filter(id => !id.startsWith('cw:')) } : undefined;
+  const layout: MyndLayout = { id: createId(), name: name.trim() || nextName(s), profile, homeLayout: ownHome, hiddenSections: (s.hiddenSections || []).filter(id => !id.startsWith('cs:')), custom: { widgets: [], sections: [] } };
   const withNew = { ...s, layouts: [...(s.layouts || []), layout] };
   return { ...switchLayout(withNew, layout.id), profile };
 }
