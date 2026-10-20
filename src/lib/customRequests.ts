@@ -55,6 +55,8 @@ const MISSING = 'Manca la parte "Personalizzazioni" su Supabase: esegui lo scrip
 function friendly(error: { message: string; code?: string }): Error {
   if (/row-level security/i.test(error.message)) return new Error('Non hai personalizzazioni disponibili nel tuo pacchetto (oppure hai già inviato molte richieste oggi).');
   if (/not allowed|42501/i.test(error.message)) return new Error('Questo account non è admin.');
+  // Messages written for the student by the database (send_custom_request).
+  if (error.code === 'P0001') return new Error(error.message);
   if (/infinite recursion/i.test(error.message)) return new Error('Va aggiornato lo script "Personalizzazioni" su Supabase (Admin → Guida → Script Supabase): rieseguilo.');
   // Only a missing table or function means the script was never run; anything else is shown as it is.
   if (error.code === '42P01' || /PGRST20[25]|does not exist|Could not find the (table|function)/i.test(error.message)) return new Error(MISSING);
@@ -76,10 +78,11 @@ export async function loadMyPlan(userId: string): Promise<CustomPlan> {
   return { credits, used, left: Math.max(0, credits - used), package: plan.data?.package || null, requests };
 }
 
-export async function sendRequest(userId: string, d: Draft): Promise<void> {
-  const { error } = await client().from('custom_requests').insert({
-    user_id: userId, title: d.title.slice(0, 60) || 'Personalizzazione', idea: d.idea.slice(0, 4000), kind: d.kind,
-    target_app: d.target_app || null, placement: d.placement, html: d.html.slice(0, 150000),
+// Sent through a database function that checks the package and says exactly what is wrong.
+export async function sendRequest(_userId: string, d: Draft): Promise<void> {
+  const { error } = await client().rpc('send_custom_request', {
+    p_title: d.title.slice(0, 60) || 'Personalizzazione', p_idea: d.idea.slice(0, 4000), p_kind: d.kind,
+    p_target_app: d.target_app || null, p_placement: d.placement,
   });
   if (error) throw friendly(error);
 }

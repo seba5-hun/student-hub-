@@ -85,6 +85,39 @@ create policy "custom_requests_select_own" on public.custom_requests
 -- Nessuna policy di modifica o eliminazione per gli utenti: una richiesta approvata non si può
 -- cambiare dopo il controllo.
 
+-- Invio di una richiesta dall'app: controlla account, personalizzazioni rimaste e limite giornaliero
+-- e, se qualcosa non va, dice esattamente cosa (es. "ne hai usate 2 su 2").
+create or replace function public.send_custom_request(p_title text, p_idea text, p_kind text, p_target_app text, p_placement jsonb)
+returns uuid language plpgsql security definer set search_path = public, auth as $$
+declare v_user uuid := auth.uid(); v_credits integer; v_used integer; v_today integer; v_id uuid;
+begin
+  if v_user is null then
+    raise exception 'Per inviare la richiesta devi essere entrato nel tuo account.';
+  end if;
+  if char_length(trim(coalesce(p_idea, ''))) < 3 then
+    raise exception 'La richiesta è vuota: descrivi meglio la tua idea.';
+  end if;
+  select coalesce(max(credits), 2) into v_credits from public.custom_plans where user_id = v_user;
+  select count(*) into v_used from public.custom_requests where user_id = v_user and status <> 'rejected';
+  if v_used >= v_credits then
+    raise exception 'Hai finito le personalizzazioni: ne hai usate % su %.', v_used, v_credits;
+  end if;
+  select count(*) into v_today from public.custom_requests where user_id = v_user and created_at > now() - interval '1 day';
+  if v_today >= 10 then
+    raise exception 'Hai già inviato 10 richieste oggi: riprova domani.';
+  end if;
+  insert into public.custom_requests (user_id, title, idea, kind, target_app, placement, html)
+  values (v_user, left(coalesce(nullif(trim(p_title), ''), 'Personalizzazione'), 60), left(p_idea, 4000),
+          case when p_kind = 'update' then 'update' else 'new' end,
+          nullif(left(coalesce(p_target_app, ''), 80), ''), coalesce(p_placement, '{}'::jsonb), '')
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.send_custom_request(text, text, text, text, jsonb) from public, anon;
+grant execute on function public.send_custom_request(text, text, text, text, jsonb) to authenticated;
+
 -- ───────────────────────── Funzioni dell'admin ─────────────────────────
 
 create or replace function public.admin_custom_requests()
