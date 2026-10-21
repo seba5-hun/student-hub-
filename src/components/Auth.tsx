@@ -191,6 +191,13 @@ function GoogleButton({ onError, onLogin }: { onError: (msg: string) => void; on
             if (!r.credential) return;
             setBusy(true);
             const { data, error } = await supabase!.auth.signInWithIdToken({ provider: 'google', token: r.credential, nonce: nonce.raw });
+            // Supabase doesn't (yet) accept this Client ID ("Unacceptable audience"): the login goes on
+            // with Google's page instead, which always works, so the student is never stuck.
+            if (error && /audience/i.test(error.message)) {
+              const res = await supabase!.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo() } });
+              if (res.error) { handlers.current.onError(authErrorMessage(res.error)); setBusy(false); }
+              return;
+            }
             if (error || !data.user) { handlers.current.onError(authErrorMessage(error || new Error('Accesso con Google non riuscito.'))); setBusy(false); return; }
             handlers.current.onLogin({ id: data.user.id, email: data.user.email || '' });
           },
