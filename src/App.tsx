@@ -44,6 +44,8 @@ const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
 const ProfileEditor = lazy(() => import('./components/ProfileEditor'));
 const SuggestionDialog = lazy(() => import('./components/SuggestionDialog'));
+const Landing = lazy(() => import('./components/Landing'));
+import { isStandaloneApp } from './lib/googleSignIn';
 const AssistantStudio = lazy(() => import('./components/AssistantStudio'));
 import type { AssistantRequest } from './lib/assistantBus';
 const CustomSectionView = lazy(() => import('./components/CustomSectionView'));
@@ -111,7 +113,22 @@ function App() {
   // "Dai un'occhiata": the app with an example student, in memory only (nothing is saved).
   const isDemo = isDemoUser(user);
   // The access screen to show when coming back from the demo ("Crea il tuo account").
-  const [authStart, setAuthStart] = useState<'register' | undefined>();
+  const [authStart, setAuthStart] = useState<'register' | 'login' | undefined>();
+  // The site (myndspace.world) comes before the login; the login is at /accedi. Straight to the
+  // login: the home-screen app, links from emails or Google with an error, /accedi itself.
+  const [onAuthPage, setOnAuthPage] = useState(() =>
+    window.location.pathname.startsWith('/accedi') || isStandaloneApp() || !!linkErrorMessage);
+  useEffect(() => {
+    const onPop = () => setOnAuthPage(window.location.pathname.startsWith('/accedi') || isStandaloneApp());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openAuth = (mode: 'register' | 'login') => {
+    if (!window.location.pathname.startsWith('/accedi')) window.history.pushState({}, '', '/accedi');
+    setAuthStart(mode);
+    setOnAuthPage(true);
+    window.scrollTo({ top: 0 });
+  };
   const [prefillImpegniDate, setPrefillImpegniDate] = useState<string | undefined>();
   const [initialized, setInitialized] = useState(false);
   const [isResetPassword, setIsResetPassword] = useState(openedFromRecoveryLink);
@@ -153,8 +170,12 @@ function App() {
   }, [initialized, user]);
   useEffect(() => {
     if (!initialized) return;
-    setAnalyticsSection(user && data ? (isDemoUser(user) ? `demo-${currentSection}` : currentSection) : isResetPassword ? 'reset-password' : 'accesso');
-  }, [initialized, user, data, currentSection, isResetPassword]);
+    setAnalyticsSection(user && data ? (isDemoUser(user) ? `demo-${currentSection}` : currentSection) : isResetPassword ? 'reset-password' : onAuthPage ? 'accesso' : 'sito');
+  }, [initialized, user, data, currentSection, isResetPassword, onAuthPage]);
+  // Logged in from /accedi: the address goes back to myndspace.world.
+  useEffect(() => {
+    if (user && data && window.location.pathname.startsWith('/accedi')) window.history.replaceState({}, '', '/' + window.location.search + window.location.hash);
+  }, [user, data]);
   const pendingSave = useRef<{ userId: string; data: UserData } | null>(null);
   const lastRemoteJson = useRef('');
   const saveTimer = useRef<number | undefined>(undefined);
@@ -597,7 +618,8 @@ function App() {
     setData(null);
     setAccountStatus(null);
     setCurrentSection('home');
-    setAuthStart(toSignup ? 'register' : undefined);
+    if (toSignup) openAuth('register');
+    else { setAuthStart(undefined); setOnAuthPage(isStandaloneApp()); if (window.location.pathname.startsWith('/accedi')) window.history.pushState({}, '', '/'); }
   };
 
   const handleLogout = async () => {
@@ -612,6 +634,7 @@ function App() {
     setData(null);
     setLoadError('');
     setAccountStatus(null);
+    setOnAuthPage(isStandaloneApp());   // back to the site (the home-screen app: to the login)
     setAdminPending(0);
     setAdminIdeas(0);
     setCurrentSection('home');
@@ -819,7 +842,14 @@ function App() {
     );
   }
 
-  // Auth screen
+  // The site before the login, then the login screen
+  if (!user && !onAuthPage) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#050606' }} />}>
+        <Landing onStart={() => openAuth('register')} onLogin={() => openAuth('login')} onDemo={startDemo} />
+      </Suspense>
+    );
+  }
   if (!user || !data) {
     return <Auth key={authStart || 'auth'} onLogin={handleLogin} onDemo={startDemo} startMode={authStart} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }

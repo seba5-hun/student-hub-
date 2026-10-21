@@ -11,7 +11,7 @@ interface AuthProps {
   initialError?: string;
   // "Dai un'occhiata": opens the app with example data, without an account.
   onDemo?: () => void;
-  startMode?: 'register';
+  startMode?: 'register' | 'login';
 }
 
 // The app returns here after the links in confirmation and reset emails.
