@@ -3,6 +3,7 @@ import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAcco
 import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
 import { loadMyPlan, installApproved, loadAllRequests } from './lib/customRequests';
+import { applyAccountPrefs, setPrefsPusher, clearLocalPrefs } from './lib/cloudPrefs';
 import { BASE_SECTIONS, isReplaced } from './lib/custom';
 import SectionExtras from './components/SectionExtras';
 import { ProfileContext, makeProfileApi } from './lib/profile';
@@ -506,6 +507,27 @@ function App() {
   const handleLogin = (authUser: AuthUser) => loadUser(authUser);
 
   // Handle logout
+  // AI keys and the other things typed once: saved in the account too, so every device has them.
+  // The account's values go into this browser; values only here (older) go up to the account.
+  const prefsJson = JSON.stringify(data?.settings.prefs || {});
+  useEffect(() => {
+    if (!user || !hasData || isDemoUser(user)) return;
+    const missing = applyAccountPrefs(JSON.parse(prefsJson));
+    if (Object.keys(missing).length) updateData(prev => ({ ...prev, settings: { ...prev.settings, prefs: { ...prev.settings.prefs, ...missing } } }));
+  }, [user, hasData, prefsJson, updateData]);
+  // Keys arrived from the account: everything that reads them is drawn again.
+  const [, setPrefsTick] = useState(0);
+  useEffect(() => {
+    const redraw = () => setPrefsTick(t => t + 1);
+    window.addEventListener('mynd-prefs', redraw);
+    return () => window.removeEventListener('mynd-prefs', redraw);
+  }, []);
+  useEffect(() => {
+    if (!user || isDemoUser(user)) { setPrefsPusher(null); return; }
+    setPrefsPusher((key, value) => updateData(prev => ({ ...prev, settings: { ...prev.settings, prefs: { ...prev.settings.prefs, [key]: value } } })));
+    return () => setPrefsPusher(null);
+  }, [user, updateData]);
+
   // Personalised functions approved by the admin: they go into the student's own MYND by themselves
   // (checked when the app opens and every few minutes), with a notice.
   const dataNow = useRef(data);
@@ -583,6 +605,8 @@ function App() {
     analyzeQueue.current = [];
     setAnalyzing([]);
     await flushSave();
+    setPrefsPusher(null);
+    clearLocalPrefs();   // the keys stay in the account, not on this device
     await supabase?.auth.signOut();
     setUser(null);
     setData(null);
@@ -602,6 +626,8 @@ function App() {
       if (id) Object.keys(localStorage).filter(k => k.includes(id)).forEach(k => localStorage.removeItem(k));
       localStorage.removeItem('mynd_name');
     } catch { /* ignore */ }
+    setPrefsPusher(null);
+    clearLocalPrefs();
     analyzeQueue.current = [];
     setAnalyzing([]);
     setUser(null);

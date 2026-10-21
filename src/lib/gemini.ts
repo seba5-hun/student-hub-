@@ -1,5 +1,7 @@
 // Google Gemini API, called directly from the browser with the user's own API key.
 
+import { savePref } from './cloudPrefs';
+
 const KEY_STORAGE = 'gemini_api_key';
 
 export function getGeminiKey(): string {
@@ -10,10 +12,9 @@ export function getGeminiKey(): string {
   }
 }
 
+// Kept in this browser and in the account, so every device of the student has it.
 export function setGeminiKey(key: string): void {
-  try {
-    localStorage.setItem(KEY_STORAGE, key);
-  } catch { /* ignore */ }
+  savePref(KEY_STORAGE, key);
 }
 
 export type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };

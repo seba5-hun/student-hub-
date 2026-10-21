@@ -114,6 +114,8 @@ export interface UserSettings {
   custom?: CustomSpace;
   // Personalised functions approved by the admin and already put in the student's MYND (request ids).
   customInstalled?: string[];
+  // What the student typed once and every device must remember (AI keys, chosen AI…), see lib/cloudPrefs.
+  prefs?: Record<string, string>;
 }
 
 export type BlockKind = 'checklist' | 'counter' | 'habits' | 'countdown' | 'progress' | 'note' | 'links' | 'tasks' | 'app';

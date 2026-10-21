@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { savePref } from '../lib/cloudPrefs';
 import {
   Plus, Trash2, Search, FolderOpen, FileText, ExternalLink, ChevronRight, ChevronDown,
   Upload, Image as ImageIcon, File as FileIcon, Link as LinkIcon, Pencil, Check, X, Loader2, Sparkles, RotateCw,
@@ -61,8 +62,9 @@ type StorageChoice = 'app' | 'drive';
 function readPref(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
+// The storage choice is remembered on every device (lib/cloudPrefs); "Drive connected" stays per device.
 function writePref(key: string, value: string | null) {
-  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* ignore */ }
+  savePref(key, value ?? '');
 }
 
 function formatGB(bytes: number): string {

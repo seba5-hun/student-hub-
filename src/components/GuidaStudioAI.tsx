@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
 import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin, Mic, Volume2, VolumeX } from 'lucide-react';
 import { dictationSupported, readingSupported, startDictation, speak, stopSpeaking } from '../lib/voice';
+import { savePref } from '../lib/cloudPrefs';
 import { Grade, Task, UserData, createId, gradeOn10 } from '../lib/store';
 import { useProfile, ProfileApi } from '../lib/profile';
 import { askTutor, isReady, providerLabel, ChatTurn, StoppedError } from '../lib/ai';
@@ -157,6 +158,11 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [listening, setListening] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [autoRead, setAutoRead] = useState(() => { try { return localStorage.getItem('mynd_tutor_read') === '1'; } catch { return false; } });
+  useEffect(() => {
+    const sync = () => { try { setAutoRead(localStorage.getItem('mynd_tutor_read') === '1'); } catch { /* ignore */ } };
+    window.addEventListener('mynd-prefs', sync);
+    return () => window.removeEventListener('mynd-prefs', sync);
+  }, []);
   const stopDictation = useRef<(() => void) | null>(null);
   const spokenQuestion = useRef(false);
   const readNext = useRef(false);
@@ -629,7 +635,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   ) : null;
 
   const autoReadToggle = readingSupported() ? (
-    <button onClick={() => { const v = !autoRead; setAutoRead(v); try { localStorage.setItem('mynd_tutor_read', v ? '1' : '0'); } catch { /* private mode */ } if (!v) { stopSpeaking(); setSpeakingId(null); } }}
+    <button onClick={() => { const v = !autoRead; setAutoRead(v); savePref('mynd_tutor_read', v ? '1' : '0'); if (!v) { stopSpeaking(); setSpeakingId(null); } }}
       className={`text-xs flex items-center gap-1.5 ${autoRead ? '' : subTextColor}`} style={autoRead ? { color: 'var(--brand-ring)' } : undefined}
       title="Legge ad alta voce ogni nuova risposta">
       {autoRead ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />} Leggi le risposte: {autoRead ? 'sì' : 'no'}

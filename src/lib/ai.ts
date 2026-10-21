@@ -1,5 +1,5 @@
 // The AI behind the tutor and the reading of archive files. The student chooses the provider
-// and pastes their own key (kept only in this browser):
+// and pastes their own key (kept in this browser and in their account, so every device has it):
 //  - Google Gemini: free, with daily limits;
 //  - Claude (Anthropic): the best quality, paid per use with prepaid credit;
 //  - OpenRouter: one key for many models, including free and very cheap ones;
@@ -10,6 +10,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import { generateContent, getGeminiKey, setGeminiKey, GeminiContent, GeminiPart, GeminiRecitationError } from './gemini';
+import { savePref } from './cloudPrefs';
 
 export type AIProvider = 'free' | 'gemini' | 'groq' | 'claude' | 'openrouter' | 'openai';
 export type KeyProvider = Exclude<AIProvider, 'free'>;
@@ -45,7 +46,7 @@ function read(key: string): string {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
 }
 function write(key: string, value: string) {
-  try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch { /* ignore */ }
+  savePref(key, value);   // this browser + the account (every device)
 }
 
 export function getProvider(): AIProvider {
