@@ -3,7 +3,7 @@ import { LEGAL_VERSION, acceptanceFromAccount, acceptedNow, saveAcceptanceToAcco
 import LegalGate from './components/LegalGate';
 import { loadSuggestions } from './lib/suggestions';
 import { loadMyPlan, installApproved, loadAllRequests } from './lib/customRequests';
-import { applyAccountPrefs, setPrefsPusher, clearLocalPrefs } from './lib/cloudPrefs';
+import { syncWithAccount, setPrefsPusher, forgetLocalPrefs } from './lib/cloudPrefs';
 import { BASE_SECTIONS, isReplaced } from './lib/custom';
 import SectionExtras from './components/SectionExtras';
 import { ProfileContext, makeProfileApi } from './lib/profile';
@@ -529,12 +529,14 @@ function App() {
 
   // Handle logout
   // AI keys and the other things typed once: saved in the account too, so every device has them.
-  // The account's values go into this browser; values only here (older) go up to the account.
-  const prefsJson = JSON.stringify(data?.settings.prefs || {});
+  // Between this browser and the account the value typed last wins (lib/cloudPrefs).
+  const prefsJson = JSON.stringify([data?.settings.prefs || {}, data?.settings.prefsAt || {}]);
   useEffect(() => {
     if (!user || !hasData || isDemoUser(user)) return;
-    const missing = applyAccountPrefs(JSON.parse(prefsJson));
-    if (Object.keys(missing).length) updateData(prev => ({ ...prev, settings: { ...prev.settings, prefs: { ...prev.settings.prefs, ...missing } } }));
+    const [values, times] = JSON.parse(prefsJson) as [Record<string, string>, Record<string, number>];
+    const up = syncWithAccount(user.id, { values, times });
+    if (Object.keys(up.values).length) updateData(prev => ({ ...prev, settings: { ...prev.settings,
+      prefs: { ...prev.settings.prefs, ...up.values }, prefsAt: { ...prev.settings.prefsAt, ...up.times } } }));
   }, [user, hasData, prefsJson, updateData]);
   // Keys arrived from the account: everything that reads them is drawn again.
   const [, setPrefsTick] = useState(0);
@@ -545,7 +547,8 @@ function App() {
   }, []);
   useEffect(() => {
     if (!user || isDemoUser(user)) { setPrefsPusher(null); return; }
-    setPrefsPusher((key, value) => updateData(prev => ({ ...prev, settings: { ...prev.settings, prefs: { ...prev.settings.prefs, [key]: value } } })));
+    setPrefsPusher((key, value, at) => updateData(prev => ({ ...prev, settings: { ...prev.settings,
+      prefs: { ...prev.settings.prefs, [key]: value }, prefsAt: { ...prev.settings.prefsAt, [key]: at } } })));
     return () => setPrefsPusher(null);
   }, [user, updateData]);
 
@@ -627,8 +630,7 @@ function App() {
     analyzeQueue.current = [];
     setAnalyzing([]);
     await flushSave();
-    setPrefsPusher(null);
-    clearLocalPrefs();   // the keys stay in the account, not on this device
+    setPrefsPusher(null);   // the keys stay on this device and in the account
     await supabase?.auth.signOut();
     setUser(null);
     setData(null);
@@ -650,7 +652,7 @@ function App() {
       localStorage.removeItem('mynd_name');
     } catch { /* ignore */ }
     setPrefsPusher(null);
-    clearLocalPrefs();
+    forgetLocalPrefs();
     analyzeQueue.current = [];
     setAnalyzing([]);
     setUser(null);

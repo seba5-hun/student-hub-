@@ -868,13 +868,13 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       {renderChatList()}
     </aside>
     <div className="flex flex-col flex-1 min-w-0">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1 basis-[240px]">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h2 className={`text-xl font-bold ${textColor}`}>Guida Studio AI</h2>
+          <div className="min-w-0">
+            <h2 className={`text-xl font-bold whitespace-nowrap ${textColor}`}>Guida Studio AI</h2>
             <p className={`text-xs ${subTextColor} flex flex-wrap items-center gap-x-1`}>
               Studia sul tuo materiale • {aiName}
               {onOpenProfile && (

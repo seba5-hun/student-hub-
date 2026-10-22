@@ -116,6 +116,7 @@ export interface UserSettings {
   customInstalled?: string[];
   // What the student typed once and every device must remember (AI keys, chosen AI…), see lib/cloudPrefs.
   prefs?: Record<string, string>;
+  prefsAt?: Record<string, number>;   // when each one was typed (the newest wins between devices)
 }
 
 export type BlockKind = 'checklist' | 'counter' | 'habits' | 'countdown' | 'progress' | 'note' | 'links' | 'tasks' | 'app';
