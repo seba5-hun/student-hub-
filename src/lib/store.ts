@@ -1,4 +1,3 @@
-import type { MindsetData } from './mindset';
 import { v4 as uuidv4 } from 'uuid';
 
 // Types
@@ -98,7 +97,7 @@ export interface UserSettings {
   hiddenSections?: string[];
   // The "App" guide was shown (opened by itself only once, for new accounts).
   onboardingSeen?: boolean;
-  // When the study statistics were reset: study synced from Mindset before it is not added back.
+  // When the study statistics were reset.
   sessionsResetAt?: string;
   // Which kind of student uses the app (school, university, online school, a test…): names of
   // the sections and of things, grade scale and the tutor adapt to it.
@@ -211,7 +210,6 @@ export interface UserData {
   sessions: StudySession[];
   archive: ArchiveItem[];
   settings: UserSettings;
-  mindset?: MindsetData; // only for the accounts that have the Mindset section
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -335,7 +333,6 @@ export function normalizeData(parsed: any): UserData {
     sessions: arr(parsed?.sessions),
     archive: arr(parsed?.archive),
     settings: { ...DEFAULT_SETTINGS, ...(parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : {}) },
-    ...(parsed?.mindset && typeof parsed.mindset === 'object' ? { mindset: parsed.mindset as MindsetData } : {}),
   };
 }
 

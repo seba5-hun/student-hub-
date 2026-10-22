@@ -45,8 +45,8 @@ export const SECTIONS = [
 
 // Only for the developer account (statistics of the whole site).
 const DEVELOPER_SECTION = { id: 'sviluppatori', label: 'Admin', icon: ShieldCheck };
-// Mindset: for now only on the developer account.
-const MINDSET_SECTION = { id: 'mindset', label: 'Performance', icon: Compass };
+// Performance (projects): for now only on the developer account.
+const PERFORMANCE_SECTION = { id: 'performance', label: 'Performance', icon: Compass };
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
@@ -171,7 +171,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {[...(showDeveloper ? [SECTIONS[0], MINDSET_SECTION, BUSINESS_SECTION] : [SECTIONS[0]]), ...orderMenu([...SECTIONS.slice(1), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) }))].filter(section => !hiddenSections.includes(section.id)), customOf(data.settings).menu), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
+              {[...(showDeveloper ? [SECTIONS[0], PERFORMANCE_SECTION, BUSINESS_SECTION] : [SECTIONS[0]]), ...orderMenu([...SECTIONS.slice(1), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) }))].filter(section => !hiddenSections.includes(section.id)), customOf(data.settings).menu), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}

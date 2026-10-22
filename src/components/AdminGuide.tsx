@@ -7,6 +7,7 @@ import businessSql from '../../supabase/business.sql?raw';
 import business2Sql from '../../supabase/business_2.sql?raw';
 import newsletterSql from '../../supabase/newsletter.sql?raw';
 import customSql from '../../supabase/personalizzazioni.sql?raw';
+import projectsSql from '../../supabase/progetti.sql?raw';
 import emailTemplate from '../../supabase/email_conferma.html?raw';
 import { LEGAL_VERSION } from '../lib/legal';
 
@@ -26,6 +27,7 @@ const TODO: { id: string; title: string; detail: string; link?: [string, string]
   { id: 'email-template', title: 'Imposta l\'email con il codice', detail: 'Copia oggetto e testo dalla sezione "Email con il codice" qui sotto e incollali in Supabase → Emails → Confirm signup. Così arriva solo il numero, senza link.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/templates`, 'Apri i template email'] },
   { id: 'smtp', title: 'Collega un servizio email (SMTP)', detail: 'Il servizio email incluso in Supabase manda pochissime email all\'ora (e nei progetti nuovi solo al tuo team): per i codici a tutti serve un SMTP, ad es. Brevo (300 email/giorno gratis) o Resend. Mittente consigliato: noreply@myndspace.world, poi aggiungi i record DNS (SPF/DKIM) che ti indicano. Supabase → Authentication → Emails → SMTP Settings.', link: [`https://supabase.com/dashboard/project/${PROJECT}/auth/smtp`, 'Apri SMTP Settings'] },
   { id: 'sql-newsletter', title: 'Esegui lo script "Newsletter" su Supabase', detail: 'Serve per vedere gli iscritti in Admin → Newsletter.' },
+  { id: 'sql-progetti', title: 'Esegui lo script "Progetti" su Supabase', detail: 'Serve per la nuova sezione Performance (progetti, attività, note e link).' },
   { id: 'sql-custom', title: 'Esegui lo script "Personalizzazioni" su Supabase', detail: 'Senza, le richieste di funzioni su misura non arrivano e non puoi assegnare i pacchetti.' },
   { id: 'sql-suggestions', title: 'Esegui lo script "Suggerimenti" su Supabase', detail: 'Senza, i suggerimenti degli utenti non vengono salvati. Lo trovi qui sotto in "Script Supabase".' },
   { id: 'sql-account', title: 'Esegui lo script "Elimina account" su Supabase', detail: 'Senza, il pulsante "Elimina il mio account" in Privacy e dati non funziona.' },
@@ -48,6 +50,7 @@ const SCRIPTS: { id: string; title: string; when: string; sql: string }[] = [
   { id: 'suggerimenti', title: 'Suggerimenti (suggerimenti.sql)', when: 'Da eseguire una volta: salva i messaggi di "Suggerisci una modifica".', sql: suggestionsSql },
   { id: 'account', title: 'Elimina account (account.sql)', when: 'Da eseguire una volta: permette agli utenti di cancellare il proprio account (GDPR).', sql: accountSql },
   { id: 'personalizzazioni', title: 'Personalizzazioni (personalizzazioni.sql)', when: 'Da eseguire una volta: richieste di funzioni su misura, approvazione e pacchetti.', sql: customSql },
+  { id: 'progetti', title: 'Progetti di Performance (progetti.sql)', when: 'Da eseguire una volta: progetti, attività, note e link della sezione Performance. Si può rieseguire senza perdere dati.', sql: projectsSql },
   { id: 'newsletter', title: 'Newsletter (newsletter.sql)', when: 'Da eseguire una volta: mostra in Admin → Newsletter chi ha dato il consenso.', sql: newsletterSql },
   { id: 'business', title: 'MYND Business (business.sql + business_2.sql)', when: 'Solo per la sezione Business (account admin).', sql: `${businessSql}\n\n${business2Sql}` },
 ];
@@ -226,6 +229,7 @@ export default function AdminGuide({ darkMode }: { darkMode: boolean }) {
         <ul className={`text-sm space-y-2 list-disc pl-5 ${sub}`}>
           <li><b className={text}>Account admin</b>: flowbase.service@gmail.com. Solo questo account vede Admin, Performance e Business.</li>
           <li><b className={text}>Nuovi utenti</b>: se l'approvazione è attiva restano "In attesa" finché non li approvi in Admin → Utenti.</li>
+          <li><b className={text}>Performance</b>: progetti personali o di lavoro, con attività, sottoattività, fasi, scadenze, note e link. "Crea con MYND AI" trasforma una descrizione in un piano da modificare; dentro il progetto MYND AI risponde sui dati reali e propone modifiche che applichi solo se vuoi. Per ora è solo per l'account admin.</li>
           <li><b className={text}>Suggerimenti</b>: arrivano in Admin → Suggerimenti; il pallino arancione sul menu ti avvisa dei nuovi.</li>
           <li><b className={text}>AI</b>: ogni utente collega la propria chiave (Gemini gratis consigliata) nella Guida Studio AI; i costi AI non sono tuoi.</li>
           <li><b className={text}>Assistente MYND</b> (Home → Personalizza → Assistente MYND): chat con il modello automatico che sistema l'app su richiesta (pannelli, menu, nomi, versioni, materie, impegni anche ripetuti, note) e crea funzioni nuove: prima con i <b className={text}>blocchi MYND</b> (liste, contatori, abitudini, conti alla rovescia, avanzamenti, note, link, impegni filtrati), e quando non bastano con le <b className={text}>mini-app</b>. Ogni modifica si può annullare.</li>

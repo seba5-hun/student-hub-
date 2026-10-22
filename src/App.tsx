@@ -26,7 +26,7 @@ const loaders = {
   calendario: () => import('./components/Calendario'),
   guida: () => import('./components/GuidaStudioAI'),
   admin: () => import('./components/AdminPanel'),
-  mindset: () => import('./components/mindset/Mindset'),
+  performance: () => import('./components/performance/Performance'),
   business: () => import('./components/business/Business'),
   onboarding: () => import('./components/Onboarding'),
 };
@@ -38,7 +38,7 @@ const CosaStudiare = lazy(loaders.cosaStudiare);
 const Calendario = lazy(loaders.calendario);
 const GuidaStudioAI = lazy(loaders.guida);
 const AdminPanel = lazy(loaders.admin);
-const Mindset = lazy(loaders.mindset);
+const Performance = lazy(loaders.performance);
 const Business = lazy(loaders.business);
 const Onboarding = lazy(loaders.onboarding);
 const DemoGuide = lazy(() => import('./components/DemoGuide'));
@@ -163,9 +163,8 @@ function App() {
   }, []);
   // Opened as …/admin: go straight to the admin panel after login.
   const openAdmin = useRef(window.location.pathname.replace(/\/+$/, '') === '/admin');
-  // Opened as …/?mindset=sera (iPhone automation): straight to Mindset's evening reset.
-  const openMindset = useRef(new URLSearchParams(window.location.search).get('performance') || new URLSearchParams(window.location.search).get('mindset'));
-  const [mindsetView, setMindsetView] = useState<string | null>(null);
+  // Opened as …/?performance (a bookmark or an iPhone automation): straight to Performance.
+  const openPerformance = useRef(['performance', 'mindset'].some(k => new URLSearchParams(window.location.search).has(k)));
   const dialog = useDialog();
   // Login screens are light; inside the app the dialogs follow the dashboard theme.
   // MYND: the theme lives on <html data-theme> (the access screens are always dark).
@@ -347,27 +346,6 @@ function App() {
   const userRef = useRef(user);
   userRef.current = user;
   dataRef.current = data;
-
-  // Study done in Mindset goes into the Study Timer's sessions (and its charts), kept in sync.
-  const mindsetData = data?.mindset;
-  const isDev = !!user && isDeveloper(user.email);
-  useEffect(() => {
-    if (!isDev || !mindsetData) return;
-    let alive = true;
-    const run = () => import('./lib/mindset').then(({ normalizeMindset, mindsetStudySessions }) => {
-      const current = dataRef.current;
-      const mm = current && normalizeMindset(current.mindset);
-      if (!alive || !current || !mm) return;
-      const desired = mindsetStudySessions(mm, new Date(), current.settings.sessionsResetAt, current.tasks);
-      const synced = current.sessions.filter(s => s.id.startsWith('mindset-'));
-      const same = desired.length === synced.length && desired.every(d => synced.some(c => c.id === d.id && c.duration === d.duration && c.subject === d.subject && c.date === d.date));
-      if (same) return;
-      updateData(prev => ({ ...prev, sessions: [...prev.sessions.filter(s => !s.id.startsWith('mindset-')), ...desired] }));
-    }).catch(() => { /* retried at the next change */ });
-    run();
-    const id = window.setInterval(run, 60_000);
-    return () => { alive = false; window.clearInterval(id); };
-  }, [isDev, mindsetData, data?.tasks, updateData]);
 
   // Tasks whose date has passed are completed automatically (checked every minute).
   const hasData = !!data;
@@ -599,11 +577,10 @@ function App() {
   }, [user, hasData]);
 
   useEffect(() => {
-    if (!openMindset.current || !user || !data) return;
-    const view = openMindset.current;
-    openMindset.current = null;
+    if (!openPerformance.current || !user || !data) return;
+    openPerformance.current = false;
     window.history.replaceState({}, document.title, '/');
-    if (isDeveloper(user.email)) { setMindsetView(view); setCurrentSection('mindset'); }
+    if (isDeveloper(user.email)) setCurrentSection('performance');
   }, [user, data]);
 
   useEffect(() => {
@@ -997,16 +974,8 @@ function App() {
           />
         )}
         {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}
-        {currentSection === 'mindset' && isDeveloper(user.email) && (
-          <Mindset
-            mindset={data.mindset}
-            darkMode={darkMode}
-            initialView={mindsetView}
-            subjects={(data.settings.subjects || []).map(d => d.name)}
-            onUpdate={fn => updateData(prev => ({ ...prev, mindset: fn(prev.mindset) }))}
-            study={{ tasks: data.tasks, grades: data.grades, sessions: data.sessions, subjects: (data.settings.subjects || []).map(d => d.name), weeklyGoal: data.settings.weeklyGoal }}
-            onStudySession={(subject, minutes) => updateData(prev => ({ ...prev, sessions: [...prev.sessions, { id: createId(), subject, duration: minutes, date: new Date().toISOString() }] }))}
-          />
+        {currentSection === 'performance' && isDeveloper(user.email) && !isDemo && (
+          <Performance userId={user.id} onConnectAI={() => handleSectionChange('guida-ai')} />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
           <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} onCustomChange={setAdminCustom} />
