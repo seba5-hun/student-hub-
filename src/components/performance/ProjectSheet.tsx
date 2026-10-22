@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Loader2, Sparkles, Check, X, ArrowLeft } from 'lucide-react';
 import { KIND_HINT, KIND_LABEL, Project, ProjectInput, ProjectKind, TaskDraft } from '../../lib/projects';
 import { ProjectPlan, parsePlan, planSystem } from '../../lib/projectsAI';
+import type { ToolSpec } from '../../lib/tools';
+import { ToolIcon } from './ToolTab';
 import { askAuto, autoReady } from '../../lib/ai';
 import { Sheet, Label, TextField, TextArea, ErrorNote, shortDate } from './ui';
 import { AINote, ConnectAI } from './AIPanel';
@@ -14,7 +16,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
   project: Project | null;
   today: string;
   onClose: () => void;
-  onSave: (input: ProjectInput, drafts?: TaskDraft[]) => Promise<void>;
+  onSave: (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolSpec[]) => Promise<void>;
   onConnectAI: () => void;
 }) {
   const [kind, setKind] = useState<ProjectKind>(project?.kind || 'personale');
@@ -25,8 +27,12 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<ProjectPlan | null>(null);
   const [aiAsk, setAiAsk] = useState(false);
+  // The idea as first described (the description field then shows the AI's clearer goal).
+  const [idea, setIdea] = useState('');
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skipTools, setSkipTools] = useState<Set<number>>(new Set());
 
-  const save = async (drafts?: TaskDraft[], fromPlan?: ProjectPlan) => {
+  const save = async (drafts?: TaskDraft[], fromPlan?: ProjectPlan, tools?: ToolSpec[]) => {
     if (busy) return;
     const finalName = (fromPlan ? name || fromPlan.name : name).trim();
     if (!finalName) { setError('Scrivi il nome del progetto.'); return; }
@@ -35,7 +41,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
       await onSave({
         kind, name: finalName, description: description.trim() || null, due_date: due || null,
         ...(fromPlan ? { phases: fromPlan.phases, settings: { phases: fromPlan.phases.length > 0 } } : project ? {} : { settings: { phases: kind === 'lavoro' } }),
-      }, drafts);
+      }, drafts, tools);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy('');
@@ -43,14 +49,20 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
   };
 
   const makePlan = async () => {
-    const idea = [name.trim() && `Nome: ${name.trim()}`, description.trim(), due && `Scadenza desiderata: ${due}`, `Tipo scelto: ${KIND_LABEL[kind]}`].filter(Boolean).join('\n');
-    if (!description.trim() && !name.trim()) { setError('Descrivi in poche righe cosa vuoi realizzare.'); return; }
+    const base = idea || [name.trim() && `Nome: ${name.trim()}`, description.trim(), due && `Scadenza desiderata: ${due}`, `Tipo scelto: ${KIND_LABEL[kind]}`].filter(Boolean).join('\n');
+    if (!base.trim() || (!idea && !description.trim() && !name.trim())) { setError('Descrivi in poche righe cosa vuoi realizzare.'); return; }
+    if (!idea) setIdea(base);
+    const replies = (plan?.questions || []).filter(q => answers[q]?.trim()).map(q => `- ${q} → ${answers[q].trim()}`);
+    const text = replies.length ? `${base}\n\nRISPOSTE ALLE TUE DOMANDE:\n${replies.join('\n')}` : base;
     setBusy('ai'); setError('');
     try {
-      const reply = await askAuto(planSystem(today), [{ role: 'user', text: idea }]);
+      const reply = await askAuto(planSystem(today), [{ role: 'user', text }]);
       const p = parsePlan(reply, today);
       if (!p) throw new Error('L\'AI non ha preparato un piano leggibile. Riprova o descrivi meglio l\'idea.');
       setPlan(p);
+      setSkipTools(new Set());
+      if (replies.length) setIdea(text);
+      setAnswers({});
       if (!name.trim() && p.name) setName(p.name);
       if (p.goal && (aiAsk || !description.trim())) setDescription(p.goal);
       if (!due && p.due_date) setDue(p.due_date);
@@ -67,10 +79,51 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
         footer={<>
           <button onClick={() => setPlan(null)} className="btn-secondary h-11 px-4 mr-auto inline-flex items-center gap-1.5"><ArrowLeft className="w-4 h-4" /> Indietro</button>
           <button onClick={makePlan} disabled={!!busy} className="btn-secondary h-11 px-4 disabled:opacity-40 inline-flex items-center gap-2">{busy === 'ai' && <Loader2 className="w-4 h-4 animate-spin" />} Rifai</button>
-          <button onClick={() => save(plan.tasks.map(t => ({ ...t, subtasks: t.subtasks })), plan)} disabled={!!busy || !plan.tasks.length}
+          <button onClick={() => save(plan.tasks.map(t => ({ ...t, subtasks: t.subtasks })), plan, plan.tools.filter((_, i) => !skipTools.has(i)))} disabled={!!busy || (!plan.tasks.length && plan.tools.every((_, i) => skipTools.has(i)))}
             className="btn-primary h-11 px-5 inline-flex items-center gap-2 disabled:opacity-40">{busy === 'save' && <Loader2 className="w-4 h-4 animate-spin" />} Crea progetto</button>
         </>}>
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>È solo un punto di partenza: togli, rinomina o aggiungi quello che vuoi. Dopo potrai cambiare tutto.</p>
+        {plan.questions.length > 0 && (
+          <div className="rounded-2xl p-4 space-y-3" style={{ background: 'color-mix(in srgb, var(--brand-fill) 10%, transparent)' }}>
+            <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>Per prepararlo meglio, MYND AI ti chiede:</p>
+            {plan.questions.map((q, i) => (
+              <div key={q}>
+                <label htmlFor={`pl-q${i}`} className="block text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{q}</label>
+                <input id={`pl-q${i}`} value={answers[q] || ''} onChange={e => setAnswers(a => ({ ...a, [q]: e.target.value }))} placeholder="La tua risposta (facoltativa)"
+                  className="input-glass w-full h-11 text-[15px]" />
+              </div>
+            ))}
+            <button onClick={makePlan} disabled={!!busy || !plan.questions.some(q => answers[q]?.trim())} className="btn-primary h-10 px-4 text-sm inline-flex items-center gap-2 disabled:opacity-40">
+              {busy === 'ai' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Aggiorna la proposta
+            </button>
+          </div>
+        )}
+        {plan.tools.length > 0 && (
+          <div>
+            <Label>Strumenti su misura · {plan.tools.length - skipTools.size}</Label>
+            <ul className="space-y-1.5">
+              {plan.tools.map((t, i) => {
+                const on = !skipTools.has(i);
+                return (
+                  <li key={i}>
+                    <button type="button" role="switch" aria-checked={on} onClick={() => setSkipTools(s0 => { const n = new Set(s0); if (on) n.add(i); else n.delete(i); return n; })}
+                      className="w-full text-left rounded-2xl px-3.5 py-3 flex gap-3 items-start transition-opacity" style={{ background: 'var(--glass-well)', opacity: on ? 1 : 0.5 }}>
+                      <span className="mt-0.5" style={{ color: 'var(--brand-ring)' }}><ToolIcon name={t.icon} /></span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[15px] font-medium" style={{ color: 'var(--text)' }}>{t.name}</span>
+                        <span className="block text-xs mt-0.5" style={{ color: 'var(--text-subtle)' }}>{t.description ? `${t.description} · ` : ''}{t.config.fields.map(f => f.label).join(', ')}</span>
+                      </span>
+                      <span className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center mt-0.5" style={on ? { background: 'var(--brand-fill)', color: 'var(--on-brand)' } : { border: '1.5px solid var(--text-subtle)' }}>
+                        {on && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--text-subtle)' }}>Tocca per togliere quelli che non ti servono. Potrai aggiungerne altri quando vuoi.</p>
+          </div>
+        )}
         <TextField id="pl-name" label="Nome" value={name} onChange={setName} />
         <TextArea id="pl-goal" label="Obiettivo" value={description} onChange={setDescription} rows={2} />
         <div className="grid grid-cols-2 gap-3">
@@ -110,13 +163,6 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
             ))}
           </ol>
         </div>
-        {plan.questions.length > 0 && (
-          <div className="rounded-2xl p-4" style={{ background: 'var(--glass-well)' }}>
-            <p className="text-sm font-medium mb-1.5" style={{ color: 'var(--text)' }}>Da chiarire</p>
-            <ul className="space-y-1 text-sm list-disc pl-5" style={{ color: 'var(--text-muted)' }}>{plan.questions.map(q => <li key={q}>{q}</li>)}</ul>
-            <p className="text-xs mt-2" style={{ color: 'var(--text-subtle)' }}>Puoi aggiungere queste informazioni alla descrizione e premere "Rifai", oppure segnartele come attività.</p>
-          </div>
-        )}
         <ErrorNote text={error} />
       </Sheet>
     );

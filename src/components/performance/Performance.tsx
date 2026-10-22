@@ -7,6 +7,8 @@ import { toDateKey } from '../../lib/store';
 import type { ArchiveItem } from '../../lib/store';
 import { useDialog } from '../Dialog';
 import { useProjects } from './useProjects';
+import { useTools } from './useTools';
+import { ToolSpec, cleanItemData, createTool, peopleOf } from '../../lib/tools';
 import { Overview } from './Overview';
 import { CardActions, ProjectList } from './ProjectList';
 import { ProjectPage } from './ProjectPage';
@@ -20,7 +22,7 @@ type Tab = 'panoramica' | 'progetti' | 'condivisi';
 const TAB_KEY = 'mynd_performance_tab';
 const savedTab = (): Tab => { try { const v = localStorage.getItem(TAB_KEY); return v === 'progetti' || v === 'condivisi' ? v : 'panoramica'; } catch { return 'panoramica'; } };
 
-const PROJECT_QUICK = ['Cosa devo fare adesso?', 'Quali attività sono ancora aperte?', 'Quali sono le prossime scadenze?', 'Cosa rischia di ritardare il progetto?', 'Riassumi gli ultimi aggiornamenti'];
+const PROJECT_QUICK = ['Cosa devo fare adesso?', 'Cosa rischia di ritardare il progetto?', 'Che altri strumenti mi servirebbero?', 'Quali sono le prossime scadenze?', 'Riassumi gli ultimi aggiornamenti'];
 const OVERVIEW_QUICK = ['Da cosa parto oggi?', 'Cosa è in ritardo?', 'Cosa scade questa settimana?'];
 
 // canCreate: the admin account. Anyone else opens Performance only for the projects shared with them.
@@ -28,10 +30,12 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
   userId: string; canCreate: boolean; archiveItems?: ArchiveItem[]; focusProjectId?: string | null; onFocusUsed?: () => void; onConnectAI: () => void;
 }) {
   const api = useProjects(userId);
+
   const { load, projects, tasks, members } = api;
   const dialog = useDialog();
   const [tab, setTab] = useState<Tab>(savedTab);
   const [openId, setOpenId] = useState<string | null>(null);
+  const toolsApi = useTools(openId);
   const [sheet, setSheet] = useState<{ kind: 'new' } | { kind: 'edit'; project: Project } | null>(null);
   const [quickTask, setQuickTask] = useState(false);
   const [ai, setAi] = useState<'overview' | 'project' | null>(null);
@@ -101,7 +105,7 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
 
   const cardActions: CardActions = { onOpen: openProject, onEdit: p => setSheet({ kind: 'edit', project: p }), onDuplicate: duplicate, onArchive: archive, onDelete: remove };
 
-  const saveSheet = async (input: ProjectInput, drafts?: TaskDraft[]) => {
+  const saveSheet = async (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolSpec[]) => {
     if (sheet?.kind === 'edit') {
       await api.saveProject(sheet.project.id, input);
       setSheet(null);
@@ -109,10 +113,14 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       return;
     }
     const p = await api.create(input, drafts);
+    // The tools MYND AI chose for this project (a missing script must not block the project).
+    let toolsMade = 0;
+    for (const [i, spec] of (tools || []).entries()) { try { await createTool(p.id, spec, i); toolsMade++; } catch { /* listed below */ } }
     setSheet(null);
     setTab(canCreate ? 'progetti' : 'condivisi');
     openProject(p);
-    notify(drafts?.length ? `Progetto creato con ${drafts.length} attività` : 'Progetto creato');
+    notify([drafts?.length ? `${drafts.length} attività` : '', toolsMade ? `${toolsMade} ${toolsMade === 1 ? 'strumento' : 'strumenti'}` : ''].filter(Boolean).join(' e ').replace(/^(.+)$/, 'Progetto creato con $1') || 'Progetto creato',
+      !!tools?.length && toolsMade < tools.length);
   };
 
   const toggle = useCallback((t: PTask) => { api.toggleTask(t).then(() => { if (t.status !== 'fatto') notify(`“${t.title}” completata`, false, { label: 'Annulla', run: () => { api.editTask(t.id, { status: t.status }).catch(err => fail(err)); } }); }).catch(err => fail(err, () => toggle(t))); }, [api, notify, fail]);
@@ -130,6 +138,11 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       else if (a.type === 'update_project') {
         const { type: _type, ...patch } = a;
         await api.saveProject(open.id, patch);
+      }
+      else if (a.type === 'add_tool') await toolsApi.addTool(a.tool);
+      else if (a.type === 'add_item') {
+        const tool = toolsApi.tools.find(t => t.id === a.tool_id);
+        if (tool) await toolsApi.putItem(tool, cleanItemData(tool.config, a.values, peopleOf(tool, toolsApi.items.filter(i => i.tool_id === tool.id), openMembers)));
       }
     }
     if (newTasks.length) await api.addTasks(open.id, newTasks);
@@ -176,7 +189,7 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
   return (
     <div className="pb-28 sm:pb-10">
       {open ? (
-        <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api} archive={archiveItems}
+        <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api} toolsApi={toolsApi} archive={archiveItems}
           onBack={() => setOpenId(null)} onEdit={() => setSheet({ kind: 'edit', project: open })} onDuplicate={() => duplicate(open)}
           onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify}
           onLeft={() => { setOpenId(null); reload(true); }} />
@@ -231,7 +244,8 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       )}
       {ai === 'project' && open && (
         <AIPanel title={`MYND AI · ${open.name}`} system={PROJECT_AI_SYSTEM} quick={PROJECT_QUICK} project={open} tasks={openTasks}
-          context={() => projectContext(open, openTasks, openMembers, aiExtra.res, aiExtra.upd, today, userId)}
+          tools={toolsApi.tools} toolItems={toolsApi.items} members={openMembers} me={userId}
+          context={() => projectContext(open, openTasks, openMembers, aiExtra.res, aiExtra.upd, today, userId, toolsApi.tools, toolsApi.items)}
           onApply={permsOf(open, members, userId).canEdit ? applyActions : undefined} onClose={() => setAi(null)} onConnect={() => { setAi(null); onConnectAI(); }} />
       )}
       <Toasts items={toasts} onClose={closeToast} />

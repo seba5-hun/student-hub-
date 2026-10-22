@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Loader2, Sparkles, Check, ShieldCheck, KeyRound } from 'lucide-react';
 import { askAuto, autoReady, ChatTurn } from '../../lib/ai';
 import { AIAction, describeAction, parseActions } from '../../lib/projectsAI';
-import { PTask, Project } from '../../lib/projects';
+import { Member, PTask, Project } from '../../lib/projects';
+import type { Tool, ToolItem } from '../../lib/tools';
 import { Sheet, ErrorNote } from './ui';
 
 // Where the AI's data goes, said once, plainly.
@@ -45,13 +46,17 @@ function Rich({ text }: { text: string }) {
 interface Msg { role: 'user' | 'assistant'; text: string; actions?: AIAction[]; state?: 'open' | 'applied' | 'ignored' }
 
 // MYND AI in a panel: questions about one project (with changes it can propose) or about all of them.
-export function AIPanel({ title, system, context, quick, project, tasks, onApply, onClose, onConnect }: {
+export function AIPanel({ title, system, context, quick, project, tasks, tools = [], toolItems = [], members = [], me = '', onApply, onClose, onConnect }: {
   title: string;
   system: string;
   context: () => string;
   quick: string[];
   project?: Project;
   tasks?: PTask[];
+  tools?: Tool[];
+  toolItems?: ToolItem[];
+  members?: Member[];
+  me?: string;
   onApply?: (actions: AIAction[]) => Promise<void>;
   onClose: () => void;
   onConnect: () => void;
@@ -74,7 +79,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, onApply
       // The data is read again at every question, so the answer follows the latest changes.
       const turns: ChatTurn[] = history.slice(-8).map((m, i, a) => ({ role: m.role, text: i === a.length - 1 ? `DATI AGGIORNATI:\n${context()}\n\nDOMANDA: ${m.text}` : m.text }));
       const reply = await askAuto(system, turns);
-      const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
+      const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project, tools) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
       setMsgs(m => [...m, { role: 'assistant', text: text || 'Ecco le modifiche che ti propongo.', actions, state: actions.length ? 'open' : undefined }]);
     } catch (err) {
       setError(err instanceof Error ? err.message.split('\n')[0] : String(err));
@@ -134,7 +139,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, onApply
                   <div className="rounded-2xl p-4 space-y-2.5" style={{ background: 'var(--glass-well)' }}>
                     <p className="text-xs font-medium uppercase tracking-[0.06em]" style={{ color: 'var(--text-muted)' }}>Modifiche proposte</p>
                     <ul className="space-y-1.5">
-                      {m.actions.map((a, j) => <li key={j} className="text-sm flex gap-2" style={{ color: 'var(--text)' }}><span style={{ color: 'var(--brand-ring)' }}>+</span>{describeAction(a, tasks)}</li>)}
+                      {m.actions.map((a, j) => <li key={j} className="text-sm flex gap-2" style={{ color: 'var(--text)' }}><span style={{ color: 'var(--brand-ring)' }}>+</span>{describeAction(a, tasks, tools, members, me, toolItems)}</li>)}
                     </ul>
                     {m.state === 'open' && (
                       <div className="flex gap-2 pt-1">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Sparkles, CalendarDays, AlertTriangle, ListChecks } from 'lucide-react';
 import {
   KIND_LABEL, Member, PTask, Project, ProjectStatus, ProjectUpdate, STATUS_LABEL, TASK_STATUS_LABEL, byPosition, lateness, listUpdates,
@@ -6,6 +6,10 @@ import {
 } from '../../lib/projects';
 import { useDialog } from '../Dialog';
 import { PeopleTab } from './PeopleTab';
+import { ToolIcon, ToolTab } from './ToolTab';
+import { ToolSheet } from './ToolSheet';
+import type { ToolsApi } from './useTools';
+import { Tool, computeSummary } from '../../lib/tools';
 import { Avatars, BackButton, CheckButton, MoreMenu, Pills, ProgressBar, SectionTitle, StatusBadge, shortDate } from './ui';
 import { TaskForm, TaskSheet } from './TaskSheet';
 import { ResourcesTab } from './ResourcesTab';
@@ -13,12 +17,12 @@ import { PhasesSheet } from './PhasesSheet';
 import type { ProjectsApi } from './useProjects';
 import type { ArchiveItem } from '../../lib/store';
 
-type Tab = 'panoramica' | 'attivita' | 'file' | 'persone';
+type Tab = 'panoramica' | 'attivita' | 'file' | 'persone' | `tool:${string}`;
 type Sort = 'ordine' | 'scadenza' | 'stato' | 'responsabile';
 const STATUSES: ProjectStatus[] = ['da_iniziare', 'in_corso', 'completato'];
 
-export function ProjectPage({ project: p, tasks, members, me, today, api, archive, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
-  project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; archive: ArchiveItem[];
+export function ProjectPage({ project: p, tasks, members, me, today, api, toolsApi, archive, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
+  project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; toolsApi: ToolsApi; archive: ArchiveItem[];
   onBack: () => void; onEdit: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void; onAskAI: () => void;
   onLeft: () => void; notify: (text: string, error?: boolean) => void;
 }) {
@@ -28,6 +32,17 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, archiv
   const [tab, setTab] = useState<Tab>('panoramica');
   const [editing, setEditing] = useState<PTask | 'new' | null>(null);
   const [phasesOpen, setPhasesOpen] = useState(false);
+  const [toolSheet, setToolSheet] = useState<Tool | 'new' | null>(null);
+  const { tools, items: toolItems } = toolsApi;
+  const canAddTools = perms.canEditProject && toolsApi.ready === true;
+  const openTool = tab.startsWith('tool:') ? tools.find(t => `tool:${t.id}` === tab) || null : null;
+  useEffect(() => { if (tab.startsWith('tool:') && toolsApi.ready !== null && !openTool) setTab('panoramica'); }, [tab, openTool, toolsApi.ready]);
+  const removeTool = async (t: Tool) => {
+    const n = toolItems.filter(i => i.tool_id === t.id).length;
+    const ok = await dialog.confirm({ title: `Eliminare “${t.name}”?`, message: n ? `Verranno cancellate anche le sue ${n} voci, per tutte le persone del progetto.` : 'Lo strumento verrà tolto dal progetto.', confirmLabel: 'Elimina', danger: true });
+    if (!ok) return;
+    try { await toolsApi.removeTool(t.id); setTab('panoramica'); notify('Strumento eliminato'); } catch (err) { fail(err); }
+  };
   const [updates, setUpdates] = useState<ProjectUpdate[] | null>(null);
   const prog = progressOf(tasks);
   const { late, overdue } = lateness(p, tasks, today);
@@ -68,6 +83,7 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, archiv
           <MoreMenu label="Impostazioni del progetto" items={[
             { label: 'Modifica progetto', onClick: onEdit, hidden: !perms.canEditProject },
             { label: p.settings.phases ? 'Modifica le fasi' : 'Organizza in fasi', onClick: () => setPhasesOpen(true), hidden: !perms.canEditProject },
+            { label: 'Aggiungi uno strumento', onClick: () => setToolSheet('new'), hidden: !canAddTools },
             { label: 'Persone e inviti', onClick: () => setTab('persone') },
             { label: 'Duplica progetto', onClick: onDuplicate },
             { label: p.archived_at ? 'Ripristina progetto' : 'Archivia progetto', onClick: onArchive, hidden: !perms.canEditProject },
@@ -92,18 +108,51 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, archiv
         </div>
       </div>
 
-      <Pills label="Sezioni del progetto" value={tab} onChange={setTab} options={[
+      <Pills label="Sezioni del progetto" value={tab} onChange={v => (v === ('nuovo' as Tab) ? setToolSheet('new') : setTab(v))} options={[
         { id: 'panoramica', label: 'Panoramica' },
         { id: 'attivita', label: 'Attività', count: prog.total ? prog.total - prog.done : undefined },
+        ...tools.map(t => ({ id: `tool:${t.id}` as Tab, label: t.name })),
         { id: 'file', label: 'File e note' },
         { id: 'persone', label: 'Persone', count: members.length > 1 ? members.length : undefined },
+        ...(canAddTools ? [{ id: 'nuovo' as Tab, label: '+ Strumento' }] : []),
       ]} />
       {perms.role === 'osservatore' && <p className="text-sm -mt-2" style={{ color: 'var(--text-subtle)' }}>Sei in sola lettura: vedi tutto, ma non puoi modificare.</p>}
 
       {tab === 'panoramica' && (
         <OverviewTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} overdue={overdue} updates={updates} readOnly={!perms.canEdit}
           onStatus={perms.canEditProject ? s => { api.saveProject(p.id, { status: s }).catch(fail); } : undefined} onToggle={toggle} onOpenTask={openTask}
-          onAdd={() => setEditing('new')} onAskAI={onAskAI} onEditGoal={onEdit} onSeeTasks={() => setTab('attivita')} />
+          onAdd={() => setEditing('new')} onAskAI={onAskAI} onEditGoal={onEdit} onSeeTasks={() => setTab('attivita')}
+          extra={(tools.length > 0 || canAddTools) && (
+            <section>
+              <SectionTitle>Strumenti</SectionTitle>
+              <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                {tools.map(t => {
+                  const mine = toolItems.filter(i => i.tool_id === t.id);
+                  const first = t.config.summaries[0];
+                  const r = first && mine.length ? computeSummary(t, mine, first, members, me) : null;
+                  return (
+                    <button key={t.id} onClick={() => setTab(`tool:${t.id}`)} className="glass-card rounded-[20px] p-3.5 text-left transition-transform hover:-translate-y-0.5 active:scale-[0.98]">
+                      <span className="flex items-center gap-2 text-sm font-medium" style={{ color: 'var(--text)' }}><span style={{ color: 'var(--brand-ring)' }}><ToolIcon name={t.icon} /></span><span className="truncate">{t.name}</span></span>
+                      <span className="block text-lg font-semibold tabular mt-1.5 truncate" style={{ color: 'var(--text)' }}>{r ? r.value : mine.length ? `${mine.length} ${mine.length === 1 ? (t.config.itemName || 'voce') : 'voci'}` : '—'}</span>
+                      <span className="block text-xs truncate" style={{ color: 'var(--text-subtle)' }}>{r ? r.label : mine.length ? ' ' : 'Ancora vuoto'}</span>
+                    </button>
+                  );
+                })}
+                {canAddTools && (
+                  <button onClick={() => setToolSheet('new')} className="rounded-[20px] p-3.5 text-left border border-dashed hover:bg-white/5" style={{ borderColor: 'var(--glass-edge)' }}>
+                    <span className="flex items-center gap-1.5 text-sm font-medium" style={{ color: 'var(--brand-ring)' }}><Plus className="w-4 h-4" /> Strumento</span>
+                    <span className="block text-xs mt-1.5" style={{ color: 'var(--text-subtle)' }}>Spese, programma, ore, clienti… o quello che ti serve</span>
+                  </button>
+                )}
+              </div>
+            </section>
+          )} />
+      )}
+      {openTool && (
+        <ToolTab key={openTool.id} tool={openTool} items={toolItems.filter(i => i.tool_id === openTool.id)} members={members} me={me}
+          canEdit={perms.canEdit} canEditProject={perms.canEditProject} notify={notify}
+          onSave={(data, id) => toolsApi.putItem(openTool, data, id)} onRemove={toolsApi.removeItem}
+          onEditTool={() => setToolSheet(openTool)} onDeleteTool={() => removeTool(openTool)} />
       )}
       {tab === 'attivita' && (
         <TasksTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} api={api} readOnly={!perms.canEdit} onToggle={toggle} onOpenTask={openTask}
@@ -121,6 +170,14 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, archiv
           onToggleSubtask={async t => { await api.toggleTask(t); }}
           onDeleteSubtask={async t => { await api.removeTask(t.id); }} />
       )}
+      {toolSheet && (
+        <ToolSheet project={p} tools={tools} tool={toolSheet === 'new' ? null : toolSheet} onClose={() => setToolSheet(null)}
+          onSave={async spec => {
+            if (toolSheet === 'new') { const t = await toolsApi.addTool(spec); setTab(`tool:${t.id}`); notify(`“${t.name}” aggiunto al progetto`); }
+            else { await toolsApi.editTool(toolSheet.id, { name: spec.name, icon: spec.icon || 'list', description: spec.description || null, config: spec.config }); notify('Strumento aggiornato'); }
+            setToolSheet(null);
+          }} />
+      )}
       {phasesOpen && (
         <PhasesSheet project={p} onClose={() => setPhasesOpen(false)}
           onSave={async (on, phases) => {
@@ -135,9 +192,9 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, archiv
   );
 }
 
-function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, readOnly, onStatus, onToggle, onOpenTask, onAdd, onAskAI, onEditGoal, onSeeTasks }: {
+function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, readOnly, onStatus, onToggle, onOpenTask, onAdd, onAskAI, onEditGoal, onSeeTasks, extra }: {
   p: Project; tasks: PTask[]; top: PTask[]; members: Member[]; me: string; today: string; overdue: PTask[]; updates: ProjectUpdate[] | null; readOnly: boolean;
-  onStatus?: (s: ProjectStatus) => void; onToggle: (t: PTask) => void; onOpenTask: (t: PTask) => void; onAdd: () => void; onAskAI: () => void; onEditGoal: () => void; onSeeTasks: () => void;
+  onStatus?: (s: ProjectStatus) => void; extra?: React.ReactNode; onToggle: (t: PTask) => void; onOpenTask: (t: PTask) => void; onAdd: () => void; onAskAI: () => void; onEditGoal: () => void; onSeeTasks: () => void;
 }) {
   const prog = progressOf(tasks);
   const next = top.filter(t => t.status !== 'fatto')
@@ -173,6 +230,8 @@ function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, read
           ))}
         </div>
       </section>
+
+      {extra}
 
       {top.length === 0 ? (
         readOnly ? <p className="text-[15px]" style={{ color: 'var(--text-muted)' }}>Nel progetto non ci sono ancora attività.</p> : <ReadyToStart onAdd={onAdd} onAskAI={onAskAI} />
