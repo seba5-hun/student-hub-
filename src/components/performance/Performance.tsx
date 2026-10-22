@@ -4,6 +4,7 @@ import { PTask, Project, ProjectInput, TaskDraft, TaskInput, permsOf } from '../
 import { AIAction, OVERVIEW_AI_SYSTEM, PROJECT_AI_SYSTEM, overviewContext, projectContext } from '../../lib/projectsAI';
 import { listResources, listUpdates } from '../../lib/projects';
 import { toDateKey } from '../../lib/store';
+import type { ArchiveItem } from '../../lib/store';
 import { useDialog } from '../Dialog';
 import { useProjects } from './useProjects';
 import { Overview } from './Overview';
@@ -23,8 +24,8 @@ const PROJECT_QUICK = ['Cosa devo fare adesso?', 'Quali attività sono ancora ap
 const OVERVIEW_QUICK = ['Da cosa parto oggi?', 'Cosa è in ritardo?', 'Cosa scade questa settimana?'];
 
 // canCreate: the admin account. Anyone else opens Performance only for the projects shared with them.
-export default function Performance({ userId, canCreate, focusProjectId, onFocusUsed, onConnectAI }: {
-  userId: string; canCreate: boolean; focusProjectId?: string | null; onFocusUsed?: () => void; onConnectAI: () => void;
+export default function Performance({ userId, canCreate, archiveItems = [], focusProjectId, onFocusUsed, onConnectAI }: {
+  userId: string; canCreate: boolean; archiveItems?: ArchiveItem[]; focusProjectId?: string | null; onFocusUsed?: () => void; onConnectAI: () => void;
 }) {
   const api = useProjects(userId);
   const { load, projects, tasks, members } = api;
@@ -175,7 +176,7 @@ export default function Performance({ userId, canCreate, focusProjectId, onFocus
   return (
     <div className="pb-28 sm:pb-10">
       {open ? (
-        <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api}
+        <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api} archive={archiveItems}
           onBack={() => setOpenId(null)} onEdit={() => setSheet({ kind: 'edit', project: open })} onDuplicate={() => duplicate(open)}
           onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify}
           onLeft={() => { setOpenId(null); reload(true); }} />

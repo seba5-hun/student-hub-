@@ -11,13 +11,14 @@ import { TaskForm, TaskSheet } from './TaskSheet';
 import { ResourcesTab } from './ResourcesTab';
 import { PhasesSheet } from './PhasesSheet';
 import type { ProjectsApi } from './useProjects';
+import type { ArchiveItem } from '../../lib/store';
 
 type Tab = 'panoramica' | 'attivita' | 'file' | 'persone';
 type Sort = 'ordine' | 'scadenza' | 'stato' | 'responsabile';
 const STATUSES: ProjectStatus[] = ['da_iniziare', 'in_corso', 'completato'];
 
-export function ProjectPage({ project: p, tasks, members, me, today, api, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
-  project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi;
+export function ProjectPage({ project: p, tasks, members, me, today, api, archive, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
+  project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; archive: ArchiveItem[];
   onBack: () => void; onEdit: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void; onAskAI: () => void;
   onLeft: () => void; notify: (text: string, error?: boolean) => void;
 }) {
@@ -108,7 +109,7 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
         <TasksTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} api={api} readOnly={!perms.canEdit} onToggle={toggle} onOpenTask={openTask}
           onAdd={() => setEditing('new')} onAskAI={onAskAI} fail={fail} />
       )}
-      {tab === 'file' && <ResourcesTab projectId={p.id} me={me} members={members} canEdit={perms.canEdit} canManage={perms.canManage} notify={notify} />}
+      {tab === 'file' && <ResourcesTab project={p} me={me} members={members} canEdit={perms.canEdit} canManage={perms.canManage} archive={archive} notify={notify} />}
       {tab === 'persone' && <PeopleTab p={p} members={members} tasks={tasks} me={me} perms={perms} onChanged={() => api.reload(true)} onLeft={onLeft} notify={notify} />}
 
       {editing && (

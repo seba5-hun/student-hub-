@@ -610,10 +610,11 @@ function App() {
   }, [dialog]);
 
   useEffect(() => {
-    if (!openPerformance.current || !user || !data) return;
+    // Someone invited: wait until we know they take part in a project.
+    if (!openPerformance.current || !user || !data || !(isDeveloper(user.email) || inProjects)) return;
     openPerformance.current = false;
     window.history.replaceState({}, document.title, '/');
-    if (isDeveloper(user.email) || inProjects) setCurrentSection('performance');
+    setCurrentSection('performance');
   }, [user, data, inProjects]);
 
   useEffect(() => {
@@ -1011,7 +1012,7 @@ function App() {
         )}
         {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}
         {currentSection === 'performance' && (isDeveloper(user.email) || inProjects) && !isDemo && (
-          <Performance userId={user.id} canCreate={isDeveloper(user.email)} focusProjectId={projectFocus} onFocusUsed={clearProjectFocus}
+          <Performance userId={user.id} canCreate={isDeveloper(user.email)} archiveItems={data.archive} focusProjectId={projectFocus} onFocusUsed={clearProjectFocus}
             onConnectAI={() => handleSectionChange('guida-ai')} />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (

@@ -48,6 +48,9 @@ export interface PTask {
   updated_at: string;
   done_at: string | null;
 }
+// How a published Drive document is shared: with the people of the project (one permission per
+// email, kept in step with who takes part) or with anyone who has the link.
+export interface DriveSharing { mode?: 'progetto' | 'link'; perms?: { email: string; id: string }[]; anyone_id?: string }
 export interface Resource {
   id: string;
   project_id: string;
@@ -58,6 +61,12 @@ export interface Resource {
   added_by: string | null;
   created_at: string;
   updated_at: string;
+  // Phase 3 (supabase/progetti_file.sql): folders and Drive documents.
+  folder?: string | null;
+  drive_id?: string | null;
+  mime?: string | null;
+  size_bytes?: number | null;
+  sharing?: DriveSharing;
 }
 export interface ProjectUpdate { id: number; project_id: string; actor_id: string | null; text: string; at: string }
 
@@ -83,7 +92,8 @@ function fail(error: PgError): never {
 
 const PROJECT_COLS = 'id, owner_id, kind, name, description, status, due_date, phases, settings, created_at, updated_at, archived_at';
 const TASK_COLS = 'id, project_id, parent_id, title, description, status, due_date, assignee_id, phase, position, created_by, created_at, updated_at, done_at';
-const RES_COLS = 'id, project_id, kind, title, body, url, added_by, created_at, updated_at';
+const RES_BASE = 'id, project_id, kind, title, body, url, added_by, created_at, updated_at';
+const RES_COLS = `${RES_BASE}, folder, drive_id, mime, size_bytes, sharing`;
 
 const cleanProject = (p: Project): Project => ({
   ...p,
@@ -195,21 +205,32 @@ export async function createTaskTree(projectId: string, drafts: TaskDraft[], sta
 
 // ───────────── Notes and links ─────────────
 
+// Folders and Drive documents need supabase/progetti_file.sql: without it notes and links still work.
+let filesReady: boolean | null = null;
+const missingColumn = (e: PgError) => e?.code === '42703' || e?.code === 'PGRST204' || /column .* does not exist|could not find the .* column/i.test(e?.message || '');
+export const resourceFilesReady = () => filesReady !== false;
+
 export async function listResources(projectId: string): Promise<Resource[]> {
-  const { data, error } = await db().from('prj_resources').select(RES_COLS).eq('project_id', projectId).order('updated_at', { ascending: false });
+  const run = (cols: string) => db().from('prj_resources').select(cols).eq('project_id', projectId).order('updated_at', { ascending: false });
+  let { data, error } = await run(filesReady === false ? RES_BASE : RES_COLS);
+  if (error && filesReady !== false && missingColumn(error)) { filesReady = false; ({ data, error } = await run(RES_BASE)); }
+  else if (!error && filesReady === null) filesReady = true;
   if (error) fail(error);
-  return (data || []) as Resource[];
+  return ((data || []) as unknown as Resource[]);
 }
 
-export type ResourceInput = Pick<Resource, 'kind' | 'title' | 'body' | 'url'>;
+export type ResourceInput = Pick<Resource, 'kind' | 'title' | 'body' | 'url'> & Partial<Pick<Resource, 'folder' | 'drive_id' | 'mime' | 'size_bytes' | 'sharing'>>;
 
 export async function saveResource(projectId: string, input: ResourceInput, id?: string): Promise<Resource> {
   const q = id
     ? db().from('prj_resources').update(input).eq('id', id)
     : db().from('prj_resources').insert({ ...input, project_id: projectId });
-  const { data, error } = await q.select(RES_COLS).single();
-  if (error) fail(error);
-  return data as Resource;
+  const { data, error } = await q.select(filesReady === false ? RES_BASE : RES_COLS).single();
+  if (error) {
+    if (missingColumn(error)) { filesReady = false; throw new ProjectsSetupError('Per cartelle e documenti di Drive serve lo script "Documenti dei progetti" su Supabase.'); }
+    fail(error);
+  }
+  return data as unknown as Resource;
 }
 
 export async function deleteResource(id: string): Promise<void> {

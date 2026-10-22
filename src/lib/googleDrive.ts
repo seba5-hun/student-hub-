@@ -179,24 +179,68 @@ async function ensureFolder(name: string, parent: string | null): Promise<string
   return id;
 }
 
-export interface DriveFileRef { id: string; webViewLink?: string }
+export interface DriveFileRef { id: string; webViewLink?: string; mimeType?: string; size?: number }
 
-// Uploads into "Student Hub/<subject>/<topic>" (resumable upload: works for big files too).
-export async function uploadToDrive(file: File, subject: string, topic: string): Promise<DriveFileRef> {
-  const root = await ensureFolder(ROOT_FOLDER, null);
-  const subjectFolder = await ensureFolder(subject || 'Altro', root);
-  const topicFolder = await ensureFolder(topic || 'Generale', subjectFolder);
+// Uploads into the folders of `path` (created when missing; resumable upload: works for big files too).
+export async function uploadToDriveFolder(file: File, path: string[]): Promise<DriveFileRef> {
+  let parent: string | null = null;
+  for (const name of path) parent = await ensureFolder(name, parent);
   const type = file.type || 'application/octet-stream';
-  const start = await driveFetch(`${UPLOAD_API}/files?uploadType=resumable&fields=id,webViewLink`, {
+  const start = await driveFetch(`${UPLOAD_API}/files?uploadType=resumable&fields=id,webViewLink,mimeType,size`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type },
-    body: JSON.stringify({ name: file.name, parents: [topicFolder] }),
+    body: JSON.stringify({ name: file.name, ...(parent ? { parents: [parent] } : {}) }),
   });
   const location = start.headers.get('Location');
   if (!location) throw new Error('Google Drive non ha accettato il caricamento.');
   const done = await driveFetch(location, { method: 'PUT', headers: { 'Content-Type': type }, body: file });
   const body = await done.json();
-  return { id: body.id, webViewLink: body.webViewLink };
+  return { id: body.id, webViewLink: body.webViewLink, mimeType: body.mimeType, size: body.size ? Number(body.size) : file.size };
+}
+
+// Uploads into "Student Hub/<subject>/<topic>".
+export function uploadToDrive(file: File, subject: string, topic: string): Promise<DriveFileRef> {
+  return uploadToDriveFolder(file, [ROOT_FOLDER, subject || 'Altro', topic || 'Generale']);
+}
+
+// The folder of a project's documents: "Student Hub/Progetti/<project>".
+export const projectFolderPath = (projectName: string) => [ROOT_FOLDER, 'Progetti', projectName.replace(/[\\/]/g, '-').slice(0, 80) || 'Progetto'];
+
+// Lets one person see a file the app created (read only). Google asks to notify people whose
+// email is not a Google account, so for them the notification email is sent.
+export async function shareFileWithEmail(fileId: string, email: string): Promise<string> {
+  const send = async (notify: boolean) => driveFetch(`${API}/files/${encodeURIComponent(fileId)}/permissions?fields=id&sendNotificationEmail=${notify}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'user', role: 'reader', emailAddress: email }),
+  });
+  let res: Response;
+  try { res = await send(false); }
+  catch (err) {
+    if (err instanceof DriveNotConnectedError) throw err;
+    res = await send(true);
+  }
+  return (await res.json()).id as string;
+}
+
+// Anyone with the link can see the file (read only).
+export async function shareFileWithAnyone(fileId: string): Promise<string> {
+  const res = await driveFetch(`${API}/files/${encodeURIComponent(fileId)}/permissions?fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'anyone', role: 'reader' }),
+  });
+  return (await res.json()).id as string;
+}
+
+// Stops sharing (a permission already gone is fine).
+export async function removeFilePermission(fileId: string, permissionId: string): Promise<void> {
+  try {
+    await driveFetch(`${API}/files/${encodeURIComponent(fileId)}/permissions/${encodeURIComponent(permissionId)}`, { method: 'DELETE' });
+  } catch (err) {
+    if (err instanceof DriveNotConnectedError) throw err;
+    if (!/404|not found/i.test(err instanceof Error ? err.message : '')) throw err;
+  }
 }
 
 export async function downloadFromDrive(id: string): Promise<Blob> {
