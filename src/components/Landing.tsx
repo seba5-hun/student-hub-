@@ -206,7 +206,7 @@ export default function Landing({ onStart, onLogin, onDemo }: Props) {
             <h2 className="lp-h2">Cinque passi.<br /><span className="dim">Ogni giorno.</span></h2>
           </div>
           {/* Computer: the screen stays, the steps change while scrolling */}
-          <div className="lp-story" ref={story} style={{ height: `${STEPS.length * 90 + 10}vh` }}>
+          <div className="lp-story" ref={story} style={{ height: `${STEPS.length * 38 + 100}vh` }}>
             <div className="lp-story-sticky lp-wrap">
               <div className="lp-story-text">
                 {STEPS.map((s, i) => (
