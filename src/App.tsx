@@ -123,6 +123,19 @@ function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+  // The site seen from inside the app (account menu → "Vai al sito"); the browser's back returns.
+  const [viewSite, setViewSite] = useState(false);
+  useEffect(() => {
+    const onPop = () => setViewSite(!!(window.history.state as { site?: boolean } | null)?.site);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openSite = () => { window.history.pushState({ site: true }, ''); setViewSite(true); window.scrollTo({ top: 0 }); };
+  const closeSite = () => {
+    if ((window.history.state as { site?: boolean } | null)?.site) window.history.back();
+    setViewSite(false);
+    window.scrollTo({ top: 0 });
+  };
   const openAuth = (mode: 'register' | 'login') => {
     if (!window.location.pathname.startsWith('/accedi')) window.history.pushState({}, '', '/accedi');
     setAuthStart(mode);
@@ -170,8 +183,8 @@ function App() {
   }, [initialized, user]);
   useEffect(() => {
     if (!initialized) return;
-    setAnalyticsSection(user && data ? (isDemoUser(user) ? `demo-${currentSection}` : currentSection) : isResetPassword ? 'reset-password' : onAuthPage ? 'accesso' : 'sito');
-  }, [initialized, user, data, currentSection, isResetPassword, onAuthPage]);
+    setAnalyticsSection(user && data && viewSite ? 'sito' : user && data ? (isDemoUser(user) ? `demo-${currentSection}` : currentSection) : isResetPassword ? 'reset-password' : onAuthPage ? 'accesso' : 'sito');
+  }, [initialized, user, data, currentSection, isResetPassword, onAuthPage, viewSite]);
   // Logged in from /accedi: the address goes back to myndspace.world.
   useEffect(() => {
     if (user && data && window.location.pathname.startsWith('/accedi')) window.history.replaceState({}, '', '/' + window.location.search + window.location.hash);
@@ -856,6 +869,14 @@ function App() {
     return <Auth key={authStart || 'auth'} onLogin={handleLogin} onDemo={startDemo} startMode={authStart} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }
 
+  if (viewSite) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: '#050606' }} />}>
+        <Landing onStart={closeSite} onLogin={closeSite} onDemo={closeSite} onBack={closeSite} />
+      </Suspense>
+    );
+  }
+
   // MYND's own section, unless the student's version shows its own in place of it.
   const showBase = (id: string) => currentSection === id && !isReplaced(data.settings, id);
 
@@ -897,6 +918,7 @@ function App() {
         adminBadge={adminPending + adminIdeas + adminCustom}
         onSuggest={() => setSuggestOpen(true)}
         onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
+        onOpenSite={openSite}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });

@@ -28,6 +28,8 @@ interface LayoutProps {
   onSuggest?: () => void;
   // The account was deleted from "Privacy e dati" (absent in the demo).
   onAccountDeleted?: () => void;
+  // "Vai al sito": myndspace.world as seen before the login (kept discreet, under the email).
+  onOpenSite?: () => void;
 }
 
 export const SECTIONS = [
@@ -48,7 +50,7 @@ const MINDSET_SECTION = { id: 'mindset', label: 'Performance', icon: Compass };
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite }: LayoutProps) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const prof = useProfile();
   const dialog = useDialog();
@@ -128,6 +130,11 @@ export default function Layout({ children, currentSection, onSectionChange, user
                   <div className="absolute right-0 top-12 w-60 rounded-3xl glass-float z-50 animate-scale-in overflow-hidden p-1.5">
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
                       <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{user.email}</p>
+                      {onOpenSite && (
+                        <button onClick={() => { setShowMenu(false); onOpenSite(); }} className="mt-0.5 text-[11px] hover:underline" style={{ color: 'var(--text-muted)', opacity: 0.7 }}>
+                          Vai al sito
+                        </button>
+                      )}
                     </div>
                     <button onClick={handleExport} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
                       <Download className="w-4 h-4" /> Esporta dati

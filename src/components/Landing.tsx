@@ -6,12 +6,15 @@ import './landing.css';
 // The site before the login (myndspace.world): what MYND is and how it works, in the quiet style of
 // the app. MYND is presented as a personal study coach that helps to understand and to organise,
 // never as an AI that does the homework. "Prova MYND" opens the sign-up, "Accedi" the login,
-// "Guarda la demo" the app with example data.
+// "Guarda la demo" the app with example data. Opened from inside the app (account menu → "Vai al
+// sito"), those buttons become "Torna all'app".
 
 interface Props {
   onStart: () => void;
   onLogin: () => void;
   onDemo: () => void;
+  // Set when someone already logged in is looking at the site: back to their app.
+  onBack?: () => void;
 }
 
 const STATEMENT = 'Un\'AI che fa i compiti al posto tuo ti salva una sera. Un coach che ti aiuta a capire ti cambia l\'anno. MYND è il secondo.'.split(' ');
@@ -48,7 +51,7 @@ const FAQ: [string, string][] = [
   ['Funziona su telefono?', 'Sì: iPhone, Android, tablet e computer, sempre sincronizzati. Dal browser puoi aggiungerla alla schermata Home e si apre come un\'app.'],
 ];
 
-export default function Landing({ onStart, onLogin, onDemo }: Props) {
+export default function Landing({ onStart, onLogin, onDemo, onBack }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const hero = useRef<HTMLDivElement>(null);
   const story = useRef<HTMLDivElement>(null);
@@ -128,8 +131,12 @@ export default function Landing({ onStart, onLogin, onDemo }: Props) {
             <a href="#domande" onClick={scrollTo('domande')}>Domande</a>
           </nav>
           <div className="lp-nav-cta">
-            <button className="lp-link" onClick={onLogin}>Accedi</button>
-            <button className="lp-btn lp-btn-lime lp-btn-sm" onClick={onStart}>Prova MYND</button>
+            {onBack ? (
+              <button className="lp-btn lp-btn-lime lp-btn-sm" onClick={onBack}>Torna all'app</button>
+            ) : (<>
+              <button className="lp-link" onClick={onLogin}>Accedi</button>
+              <button className="lp-btn lp-btn-lime lp-btn-sm" onClick={onStart}>Prova MYND</button>
+            </>)}
           </div>
         </div>
       </header>
@@ -145,8 +152,12 @@ export default function Landing({ onStart, onLogin, onDemo }: Props) {
             </h1>
             <p className="lp-sub">MYND organizza il tuo studio e ti accompagna passo dopo passo: ti spiega, ti fa domande, ti mostra dove sbagli. Le risposte le trovi tu. E restano.</p>
             <div className="lp-hero-cta">
-              <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onStart}>Prova MYND <ArrowRight size={18} /></button>
-              <button className="lp-btn lp-btn-glass lp-btn-lg" onClick={onDemo}><Eye size={18} /> Guarda la demo</button>
+              {onBack ? (
+                <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onBack}>Torna all'app <ArrowRight size={18} /></button>
+              ) : (<>
+                <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onStart}>Prova MYND <ArrowRight size={18} /></button>
+                <button className="lp-btn lp-btn-glass lp-btn-lg" onClick={onDemo}><Eye size={18} /> Guarda la demo</button>
+              </>)}
             </div>
           </div>
 
@@ -463,8 +474,12 @@ export default function Landing({ onStart, onLogin, onDemo }: Props) {
             <h2 className="lp-h2" style={{ fontSize: 'clamp(46px, 8vw, 104px)' }}>La prossima decisione<br /><span style={{ color: '#C8F25A' }}>è qui.</span></h2>
             <p className="lp-lead" style={{ margin: '24px auto 0' }}>Inizia gratis. Il tuo coach ti aspetta.</p>
             <div className="lp-hero-cta" style={{ animation: 'none' }}>
-              <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onStart}>Prova MYND <ArrowRight size={18} /></button>
-              <button className="lp-btn lp-btn-glass lp-btn-lg" onClick={onLogin}>Accedi</button>
+              {onBack ? (
+                <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onBack}>Torna all'app <ArrowRight size={18} /></button>
+              ) : (<>
+                <button className="lp-btn lp-btn-lime lp-btn-lg" onClick={onStart}>Prova MYND <ArrowRight size={18} /></button>
+                <button className="lp-btn lp-btn-glass lp-btn-lg" onClick={onLogin}>Accedi</button>
+              </>)}
             </div>
           </div>
         </section>
