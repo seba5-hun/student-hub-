@@ -76,6 +76,7 @@ function quickActionsFor(prof: ProfileApi) {
 const QUICK_ACTIONS = [
   { label: '📝 Riassumi', prompt: 'Fammi un riassunto chiaro e ordinato del materiale selezionato: un titolo per ogni argomento, elenchi puntati, i concetti chiave in grassetto e alla fine 3 punti da ricordare assolutamente.' },
   { label: '❓ Interrogami', prompt: 'Interrogami sul materiale selezionato come farebbe un professore: fammi una domanda alla volta, aspetta la mia risposta, poi correggimi, spiegami cosa manca e dammi un voto.' },
+  { label: '🧭 Guidami passo passo', prompt: 'Fammi da coach, non darmi subito la soluzione: aiutami a capire e ad arrivarci da solo. Partendo dal materiale selezionato (o dall\'esercizio che ti scrivo), guidami un passo alla volta con domande e piccoli indizi, aspetta ogni mia risposta, dimmi se sono sulla strada giusta e perché. Mostrami la soluzione completa solo alla fine o se te la chiedo.' },
   { label: '🧠 Schema', prompt: 'Crea uno schema (mappa concettuale in forma di elenco) del materiale selezionato, con i concetti principali e i collegamenti tra loro.' },
   { label: '💡 Spiegamelo semplice', prompt: 'Spiegami il materiale selezionato in modo semplice, con parole facili ed esempi concreti.' },
   { label: '🗂️ Flashcard', prompt: 'Crea 10 flashcard sui punti più importanti del materiale selezionato, nel formato "**D:** domanda" e sotto "**R:** risposta breve", dalle più facili alle più difficili.' },
