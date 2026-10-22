@@ -421,7 +421,9 @@ async function askGroq(system: string, context: string, turns: ChatTurn[]): Prom
 // ---------------------------------------------------------------- Gemini
 
 // quick: the Assistente MYND (short JSON answers): flash models, and one that is slow is skipped.
-function askGemini(system: string, context: string, turns: ChatTurn[], quick = false): Promise<string> {
+export interface QuickOptions { json?: boolean; onPartial?: (text: string) => void; think?: boolean }
+
+function askGemini(system: string, context: string, turns: ChatTurn[], quick = false, opts: QuickOptions = {}): Promise<string> {
   const contents: GeminiContent[] = [];
   if (context) {
     contents.push({ role: 'user', parts: [{ text: context }] });
@@ -434,7 +436,7 @@ function askGemini(system: string, context: string, turns: ChatTurn[], quick = f
     if (parts.length) contents.push({ role: t.role === 'assistant' ? 'model' : 'user', parts });
   });
   return generateContent(getKey('gemini'), contents, quick
-    ? { systemInstruction: system, maxOutputTokens: 16384, fast: true, timeoutMs: 60_000, signal: stopSignal }
+    ? { systemInstruction: system, maxOutputTokens: 16384, fast: true, timeoutMs: 60_000, signal: stopSignal, noThinking: !opts.think, json: opts.json, onPartial: opts.onPartial }
     : { systemInstruction: system, maxOutputTokens: 32768, signal: stopSignal })
     .catch(err => { throw stopSignal?.aborted ? new StoppedError() : err; });
 }
@@ -611,7 +613,9 @@ export function autoReady(): boolean {
   return FREE_CHAIN.some(x => getKey(x)) || isReady();
 }
 
-export async function askAuto(system: string, turns: ChatTurn[]): Promise<string> {
+// opts.json: the answer is a JSON object; opts.onPartial: the answer as it is written (Gemini);
+// opts.think: let the model reason first (slower, for careful checks).
+export async function askAuto(system: string, turns: ChatTurn[], opts: QuickOptions = {}): Promise<string> {
   const chain: KeyProvider[] = FREE_CHAIN.filter(x => getKey(x));
   const chosen = getProvider();
   if (chosen !== 'free' && getKey(chosen) && !chain.includes(chosen)) chain.push(chosen);
@@ -619,7 +623,7 @@ export async function askAuto(system: string, turns: ChatTurn[]): Promise<string
   const errors: string[] = [];
   for (const x of chain) {
     try {
-      const answer = x === 'gemini' ? await askGemini(system, '', turns, true) : await askOne(x, system, '', turns);
+      const answer = x === 'gemini' ? await askGemini(system, '', turns, true, opts) : await askOne(x, system, '', turns);
       if (!answer) throw new Error('risposta vuota');
       lastAnsweredBy = PROVIDER_NAMES[x];
       return answer;

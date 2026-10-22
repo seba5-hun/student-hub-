@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, Sparkles, Plus, X, ArrowLeft } from 'lucide-react';
 import { askAuto, autoReady } from '../../lib/ai';
 import { Project } from '../../lib/projects';
@@ -7,6 +7,7 @@ import { FIELD_TYPES, FieldType, ICONS, TEMPLATES, Tool, ToolField, ToolSpec, To
 import { ErrorNote, Label, Sheet, TextField } from './ui';
 import { ToolIcon } from './ToolTab';
 import { AINote } from './AIPanel';
+import type { DockProps } from './AIDock';
 
 const SUMMARY_TEXT = (s: ToolSummary, fields: ToolField[]): string => {
   const l = (id: string) => fields.find(f => f.id === id)?.label.toLowerCase() || id;
@@ -21,8 +22,8 @@ const SUMMARY_TEXT = (s: ToolSummary, fields: ToolField[]): string => {
 };
 
 // A new tool (described to MYND AI or from an example), or changes to one: name, icon, fields, sums.
-export function ToolSheet({ project, tools, tool, onClose, onSave }: {
-  project: Project; tools: Tool[]; tool: Tool | null; onClose: () => void; onSave: (spec: ToolSpec) => Promise<void>;
+export function ToolSheet({ project, tools, tool, onClose, onSave, dock }: {
+  project: Project; tools: Tool[]; tool: Tool | null; onClose: () => void; onSave: (spec: ToolSpec) => Promise<void>; dock?: DockProps;
 }) {
   const [spec, setSpec] = useState<ToolSpec | null>(tool ? { name: tool.name, icon: tool.icon || 'list', description: tool.description || '', config: tool.config } : null);
   const [need, setNeed] = useState('');
@@ -30,13 +31,14 @@ export function ToolSheet({ project, tools, tool, onClose, onSave }: {
   const [busy, setBusy] = useState<'' | 'ai' | 'save'>('');
   const [error, setError] = useState('');
   const ready = autoReady();
+  useEffect(() => { dock?.onBusy(busy === 'ai'); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ask = async (request: string, base?: ToolSpec) => {
     if (!request.trim() || busy) return;
     setBusy('ai'); setError('');
     try {
       const text = base ? `Strumento attuale (JSON):\n${JSON.stringify(base)}\n\nModifica richiesta: ${request}\nRispondi con lo strumento completo aggiornato, mantenendo gli id dei campi che restano.` : request;
-      const reply = await askAuto(toolSystem(project, tools.filter(t => t.id !== tool?.id)), [{ role: 'user', text }]);
+      const reply = await askAuto(toolSystem(project, tools.filter(t => t.id !== tool?.id)), [{ role: 'user', text }], { json: true });
       const out = parseTool(reply);
       if (!out) throw new Error('MYND AI non ha preparato uno strumento leggibile. Riprova descrivendolo in un altro modo.');
       setSpec(out); setFix('');
@@ -56,7 +58,7 @@ export function ToolSheet({ project, tools, tool, onClose, onSave }: {
 
   if (!spec) {
     return (
-      <Sheet title="Nuovo strumento" onClose={onClose}>
+      <Sheet title="Nuovo strumento" onClose={onClose} minimized={dock?.minimized} onMinimize={dock?.onMinimize}>
         <div className="space-y-3">
           <Label htmlFor="ts-need">Cosa ti serve? Descrivilo con parole tue</Label>
           <textarea id="ts-need" value={need} onChange={e => setNeed(e.target.value)} rows={3} autoFocus
@@ -88,7 +90,7 @@ export function ToolSheet({ project, tools, tool, onClose, onSave }: {
 
   const cfg = spec.config;
   return (
-    <Sheet title={tool ? 'Modifica strumento' : 'Il tuo strumento'} onClose={onClose}
+    <Sheet title={tool ? 'Modifica strumento' : 'Il tuo strumento'} onClose={onClose} minimized={dock?.minimized} onMinimize={dock?.onMinimize}
       footer={<>
         {!tool && <button onClick={() => setSpec(null)} className="btn-secondary h-11 px-4 mr-auto inline-flex items-center gap-1.5"><ArrowLeft className="w-4 h-4" /> Indietro</button>}
         {tool && <button onClick={onClose} className="btn-secondary h-11 px-5">Annulla</button>}

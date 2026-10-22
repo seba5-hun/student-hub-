@@ -157,6 +157,11 @@ function App() {
   const [inProjects, setInProjects] = useState(false);
   const [projectFocus, setProjectFocus] = useState<string | null>(null);
   const clearProjectFocus = useCallback(() => setProjectFocus(null), []);
+  const [performanceOpened, setPerformanceOpened] = useState(false);
+  useEffect(() => { if (currentSection === 'performance') setPerformanceOpened(true); }, [currentSection]);
+  const performanceUser = useRef(user?.id);
+  useEffect(() => { if (performanceUser.current !== user?.id) { performanceUser.current = user?.id; setPerformanceOpened(currentSection === 'performance'); } }, [user?.id, currentSection]);
+  const showPerformance = useCallback(() => { setCurrentSection('performance'); window.scrollTo({ top: 0 }); }, []);
   const [suggestOpen, setSuggestOpen] = useState(false);
   // Assistente MYND: opened from Home → Personalizza and from the mini-apps (openAssistant).
   const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
@@ -929,6 +934,15 @@ function App() {
         showPerformance={!isDemo && (isDeveloper(user.email) || inProjects)}
         projectInvites={isDemo ? [] : projectInvites}
         onAnswerInvite={answerProjectInvite}
+        persistent={<Suspense fallback={null}>
+          {/* Once opened, Performance stays loaded (hidden) so MYND AI can finish what it is doing. */}
+          {(currentSection === 'performance' || performanceOpened) && (isDeveloper(user.email) || inProjects) && !isDemo && (
+            <div className={currentSection === 'performance' ? 'animate-section-in' : undefined} style={currentSection === 'performance' ? undefined : { display: 'none' }}>
+              <Performance userId={user.id} canCreate={isDeveloper(user.email)} archiveItems={data.archive} focusProjectId={projectFocus} onFocusUsed={clearProjectFocus}
+                onConnectAI={() => handleSectionChange('guida-ai')} active={currentSection === 'performance'} onShow={showPerformance} />
+            </div>
+          )}
+        </Suspense>}
         adminBadge={adminPending + adminIdeas + adminCustom}
         onSuggest={() => setSuggestOpen(true)}
         onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
@@ -1011,10 +1025,6 @@ function App() {
           />
         )}
         {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}
-        {currentSection === 'performance' && (isDeveloper(user.email) || inProjects) && !isDemo && (
-          <Performance userId={user.id} canCreate={isDeveloper(user.email)} archiveItems={data.archive} focusProjectId={projectFocus} onFocusUsed={clearProjectFocus}
-            onConnectAI={() => handleSectionChange('guida-ai')} />
-        )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
           <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} onCustomChange={setAdminCustom} />
         )}

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tool, ToolItem, ToolSpec, createTool, deleteItem, deleteTool, loadTools, saveItem, updateTool } from '../../lib/tools';
 
 // The tools of the open project and their items, kept up to date (the others' changes every 30 s).
-export function useTools(projectId: string | null) {
+export function useTools(projectId: string | null, active = true) {
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const [ready, setReady] = useState<boolean | null>(null);
   const [tools, setTools] = useState<Tool[]>([]);
   const [items, setItems] = useState<ToolItem[]>([]);
@@ -21,7 +23,7 @@ export function useTools(projectId: string | null) {
   useEffect(() => { setReady(null); setTools([]); setItems([]); reload(); }, [reload]);
   useEffect(() => {
     if (!projectId) return;
-    const id = window.setInterval(() => { if (document.visibilityState === 'visible') reload(); }, 30_000);
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible' && activeRef.current) reload(); }, 30_000);
     const onVisible = () => { if (document.visibilityState === 'visible') reload(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };

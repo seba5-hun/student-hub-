@@ -4,6 +4,7 @@ import { askAuto, autoReady, ChatTurn } from '../../lib/ai';
 import { AIAction, describeAction, parseActions } from '../../lib/projectsAI';
 import { Member, PTask, Project } from '../../lib/projects';
 import type { Tool, ToolItem } from '../../lib/tools';
+import type { DockProps } from './AIDock';
 import { Sheet, ErrorNote } from './ui';
 
 // Where the AI's data goes, said once, plainly.
@@ -46,7 +47,7 @@ function Rich({ text }: { text: string }) {
 interface Msg { role: 'user' | 'assistant'; text: string; actions?: AIAction[]; state?: 'open' | 'applied' | 'ignored' }
 
 // MYND AI in a panel: questions about one project (with changes it can propose) or about all of them.
-export function AIPanel({ title, system, context, quick, project, tasks, tools = [], toolItems = [], members = [], me = '', onApply, onClose, onConnect }: {
+export function AIPanel({ title, system, context, quick, project, tasks, tools = [], toolItems = [], members = [], me = '', dock, onApply, onClose, onConnect }: {
   title: string;
   system: string;
   context: () => string;
@@ -60,15 +61,19 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
   onApply?: (actions: AIAction[]) => Promise<void>;
   onClose: () => void;
   onConnect: () => void;
+  dock?: DockProps;
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The answer while it is being written (shown right away instead of waiting for the end).
+  const [partial, setPartial] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const ready = autoReady();
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [msgs, busy]);
+  useEffect(() => { dock?.onBusy(busy); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ask = async (q: string) => {
     const question = q.trim();
@@ -78,7 +83,8 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
     try {
       // The data is read again at every question, so the answer follows the latest changes.
       const turns: ChatTurn[] = history.slice(-8).map((m, i, a) => ({ role: m.role, text: i === a.length - 1 ? `DATI AGGIORNATI:\n${context()}\n\nDOMANDA: ${m.text}` : m.text }));
-      const reply = await askAuto(system, turns);
+      setPartial('');
+      const reply = await askAuto(system, turns, { onPartial: t => setPartial(t.replace(/```azioni[\s\S]*$/i, '').trim()) });
       const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project, tools) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
       setMsgs(m => [...m, { role: 'assistant', text: text || 'Ecco le modifiche che ti propongo.', actions, state: actions.length ? 'open' : undefined }]);
     } catch (err) {
@@ -86,6 +92,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
       setMsgs(m => m.slice(0, -1));
       setInput(question);
     }
+    setPartial('');
     setBusy(false);
   };
 
@@ -103,7 +110,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
   };
 
   return (
-    <Sheet title={title} onClose={onClose}
+    <Sheet title={title} onClose={onClose} minimized={dock?.minimized} onMinimize={dock?.onMinimize}
       footer={ready ? (
         <form className="w-full flex gap-2 items-end" onSubmit={e => { e.preventDefault(); ask(input); }}>
           <textarea value={input} onChange={e => setInput(e.target.value)} rows={1} placeholder="Chiedi a MYND AI…" aria-label="Domanda per MYND AI"
@@ -153,8 +160,9 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
                 )}
               </div>
             )))}
-            {busy && msgs[msgs.length - 1]?.role === 'user' && (
-              <p className="text-sm inline-flex items-center gap-2" style={{ color: 'var(--text-subtle)' }}><Loader2 className="w-4 h-4 animate-spin" /> MYND AI sta pensando…</p>
+            {busy && msgs[msgs.length - 1]?.role === 'user' && (partial
+              ? <div className="opacity-90"><Rich text={partial} /></div>
+              : <p className="text-sm inline-flex items-center gap-2" style={{ color: 'var(--text-subtle)' }}><Loader2 className="w-4 h-4 animate-spin" /> MYND AI sta pensando… <span className="hidden sm:inline">puoi ridurre la finestra con −</span></p>
             )}
           </div>
           <ErrorNote text={error} />

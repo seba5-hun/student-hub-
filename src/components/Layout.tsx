@@ -36,6 +36,8 @@ interface LayoutProps {
   // Invitations to shared projects, answered from the account menu.
   projectInvites?: MyInvite[];
   onAnswerInvite?: (invite: MyInvite, accept: boolean) => Promise<void>;
+  // Kept loaded across sections (outside the per-section container that restarts on every change).
+  persistent?: React.ReactNode;
 }
 
 export const SECTIONS = [
@@ -56,7 +58,7 @@ const PERFORMANCE_SECTION = { id: 'performance', label: 'Performance', icon: Com
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite, showPerformance = false, projectInvites = [], onAnswerInvite }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite, showPerformance = false, projectInvites = [], onAnswerInvite, persistent }: LayoutProps) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [answering, setAnswering] = useState<string | null>(null);
   const answer = async (inv: MyInvite, accept: boolean) => {
@@ -244,6 +246,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
 
       <main className="pb-8 px-4 max-w-7xl mx-auto" style={{ paddingTop: 'calc(3.5rem + env(safe-area-inset-top))' }}>
         <div key={currentSection} className="animate-section-in">{children}</div>
+        {persistent}
       </main>
     </div>
   );

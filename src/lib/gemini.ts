@@ -89,6 +89,12 @@ export async function generateContent(
     onWait?: (seconds: number) => void;
     // Transcriptions: an answer cut by the copyright filter is an error, not a (partial) result.
     strictRecitation?: boolean;
+    // Quick answers: no hidden "thinking" before answering (much faster on the newer models).
+    noThinking?: boolean;
+    // The answer must be a JSON object (Gemini then writes nothing else).
+    json?: boolean;
+    // The answer as it is being written (streamed), for a chat that shows it right away.
+    onPartial?: (text: string) => void;
   } = {},
 ): Promise<string> {
   const models = await availableModels(apiKey);
@@ -120,9 +126,14 @@ export async function generateContent(
     if (round > 0) await new Promise(resolve => setTimeout(resolve, round * 3000));
     if (options.signal?.aborted) throw new DOMException('Interrotta', 'AbortError');
     let overloaded = false;
-    for (const model of ordered) {
+    for (let mi = 0; mi < ordered.length; mi++) {
+      const model = ordered[mi];
       if (retired.has(model)) continue;
       tried.add(model);
+      // Speed settings this model accepts (a model that refuses them is asked again without).
+      const extras = plainModels.has(model) ? {} : speedSettings(model, options);
+      const usedExtras = Object.keys(extras).length > 0;
+      const stream = !!options.onPartial;
       let response: Response;
       const controller = new AbortController();
       const stop = () => controller.abort();
@@ -131,7 +142,7 @@ export async function generateContent(
       const timer = options.timeoutMs ? window.setTimeout(() => { timedOut = true; controller.abort(); }, options.timeoutMs) : 0;
       const done = () => { window.clearTimeout(timer); options.signal?.removeEventListener('abort', stop); };
       try {
-        response = await fetch(`${API}/models/${model}:generateContent`, {
+        response = await fetch(`${API}/models/${model}:${stream ? 'streamGenerateContent?alt=sse' : 'generateContent'}`, {
           signal: controller.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -139,7 +150,7 @@ export async function generateContent(
             contents,
             ...(options.systemInstruction ? { systemInstruction: { parts: [{ text: options.systemInstruction }] } } : {}),
             // Newer models also "think" inside this limit: a low value gave short or cut answers.
-            generationConfig: { ...(options.temperature !== undefined ? { temperature: options.temperature } : {}), maxOutputTokens: options.maxOutputTokens ?? 16384 },
+            generationConfig: { ...(options.temperature !== undefined ? { temperature: options.temperature } : {}), maxOutputTokens: options.maxOutputTokens ?? 16384, ...extras },
           }),
         });
       } catch (err) {
@@ -156,6 +167,11 @@ export async function generateContent(
         const errorData = await response.json().catch(() => ({}));
         done();
         const errorMsg: string = errorData.error?.message || `Errore ${response.status}`;
+        if (response.status === 400 && usedExtras && /think|mime|json|Unknown name|not supported|Invalid JSON payload/i.test(errorMsg)) {
+          plainModels.add(model);
+          mi--;
+          continue;
+        }
         if ((response.status === 400 && /api key/i.test(errorMsg)) || response.status === 401 || response.status === 403) {
           throw new Error('API key non valida o senza permessi. Usa "Cambia API key" nella Guida Studio AI per inserirne una nuova.');
         }
@@ -184,7 +200,7 @@ export async function generateContent(
 
       let data;
       try {
-        data = await response.json();
+        data = stream ? await readStream(response, options.onPartial!) : await response.json();
       } catch (err) {
         if (options.signal?.aborted) throw err;
         if (timedOut) {
@@ -229,6 +245,63 @@ export async function generateContent(
       ? `I server di Google sono sovraccarichi in questo momento (non è un problema della tua chiave). Riprova tra qualche minuto. Modelli provati: ${[...tried].join(', ')}.`
       : `Nessun modello Gemini disponibile in questo momento. Riprova tra poco.${lastError ? ` (${lastError})` : ''} Modelli provati: ${[...tried].join(', ')}.`,
   );
+}
+
+// Models that refused the speed settings (an older model, a change on Google's side).
+const plainModels = new Set<string>();
+
+// No hidden thinking for quick answers: off on Gemini 2.5 Flash, as low as possible on Gemini 3.
+function speedSettings(model: string, o: { noThinking?: boolean; json?: boolean }): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (o.json) out.responseMimeType = 'application/json';
+  if (o.noThinking) {
+    if (/gemini-2\.5-flash|flash(-lite)?-latest/.test(model)) out.thinkingConfig = { thinkingBudget: 0 };
+    else if (/gemini-3/.test(model)) out.thinkingConfig = { thinkingLevel: 'low' };
+  }
+  return out;
+}
+
+// Reads a streamed answer (server-sent events), passing on the text written so far; returns the
+// same shape as a normal answer.
+async function readStream(response: Response, onPartial: (text: string) => void) {
+  const reader = response.body?.getReader();
+  if (!reader) return response.json();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  let finishReason = '';
+  let promptFeedback: unknown;
+  let raw = '';
+  let events = 0;
+  const take = (line: string) => {
+    const l = line.trim();
+    if (!l.startsWith('data:')) return;
+    events++;
+    let chunk;
+    try { chunk = JSON.parse(l.slice(5)); } catch { return; }
+    const c = chunk.candidates?.[0];
+    const piece = (c?.content?.parts || []).filter((p: { thought?: boolean }) => !p.thought).map((p: { text?: string }) => p.text || '').join('');
+    if (piece) { text += piece; onPartial(text); }
+    if (c?.finishReason) finishReason = c.finishReason;
+    if (chunk.promptFeedback) promptFeedback = chunk.promptFeedback;
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const piece = decoder.decode(value, { stream: true });
+    raw += piece;
+    buffer += piece;
+    let nl;
+    while ((nl = buffer.indexOf('\n')) >= 0) { take(buffer.slice(0, nl)); buffer = buffer.slice(nl + 1); }
+  }
+  take(buffer);
+  // Not streamed after all (one JSON answer, or a JSON list of pieces): read it as such.
+  if (!events) {
+    const whole = JSON.parse(raw);
+    const list = Array.isArray(whole) ? whole : [whole];
+    for (const chunk of list) take(`data: ${JSON.stringify(chunk)}`);
+  }
+  return { candidates: [{ content: { parts: [{ text }] }, finishReason }], promptFeedback };
 }
 
 export async function blobToBase64(blob: Blob): Promise<string> {

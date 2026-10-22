@@ -116,7 +116,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
 
   const aiReview = (r: CustomRequest) => act(r.id, async () => {
     if (!autoReady()) throw new Error('Per l\'analisi AI collega una chiave AI (Guida Studio AI).');
-    const raw = await askAuto(SECURITY_REVIEW_SYSTEM, [{ role: 'user', text: `Descrizione: ${r.idea}\n\nPermessi chiesti: legge i dati ${r.placement?.uses_data ? 'sì' : 'no'}, aggiunge dati ${r.placement?.writes_data ? 'sì' : 'no'}.\n\nCODICE:\n${htmlOf(r)}` }]);
+    const raw = await askAuto(SECURITY_REVIEW_SYSTEM, [{ role: 'user', text: `Descrizione: ${r.idea}\n\nPermessi chiesti: legge i dati ${r.placement?.uses_data ? 'sì' : 'no'}, aggiunge dati ${r.placement?.writes_data ? 'sì' : 'no'}.\n\nCODICE:\n${htmlOf(r)}` }], { think: true });
     await updateRequest(r.id, { review: { ...parseReview(raw), at: new Date().toISOString() } });
   });
 
@@ -135,7 +135,7 @@ export default function AdminCustom({ darkMode, onPendingCount }: { darkMode: bo
       setGen(g => { const n = { ...g }; delete n[r.id]; return n; });
       // Second opinion on security, by itself (if it fails, the automatic check is still there).
       try {
-        const raw = await askAuto(SECURITY_REVIEW_SYSTEM, [{ role: 'user', text: `Descrizione: ${r.idea}\n\nPermessi chiesti: legge i dati ${r.placement?.uses_data ? 'sì' : 'no'}, aggiunge dati ${r.placement?.writes_data ? 'sì' : 'no'}.\n\nCODICE:\n${html}` }]);
+        const raw = await askAuto(SECURITY_REVIEW_SYSTEM, [{ role: 'user', text: `Descrizione: ${r.idea}\n\nPermessi chiesti: legge i dati ${r.placement?.uses_data ? 'sì' : 'no'}, aggiunge dati ${r.placement?.writes_data ? 'sì' : 'no'}.\n\nCODICE:\n${html}` }], { think: true });
         await updateRequest(r.id, { review: { ...parseReview(raw), at: new Date().toISOString() } });
       } catch { /* optional */ }
       await load();

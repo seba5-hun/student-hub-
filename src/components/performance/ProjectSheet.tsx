@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, Sparkles, Check, X, ArrowLeft } from 'lucide-react';
 import { KIND_HINT, KIND_LABEL, Project, ProjectInput, ProjectKind, TaskDraft } from '../../lib/projects';
 import { ProjectPlan, parsePlan, planSystem } from '../../lib/projectsAI';
@@ -7,17 +7,19 @@ import { ToolIcon } from './ToolTab';
 import { askAuto, autoReady } from '../../lib/ai';
 import { Sheet, Label, TextField, TextArea, ErrorNote, shortDate } from './ui';
 import { AINote, ConnectAI } from './AIPanel';
+import type { DockProps } from './AIDock';
 
 const KINDS: ProjectKind[] = ['personale', 'lavoro'];
 
 // New project (or changes to one): only the name is needed. "Crea con MYND AI" turns the
 // description into a first plan, shown here to be changed before anything is created.
-export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
+export function ProjectSheet({ project, today, onClose, onSave, onConnectAI, dock }: {
   project: Project | null;
   today: string;
   onClose: () => void;
   onSave: (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolSpec[]) => Promise<void>;
   onConnectAI: () => void;
+  dock?: DockProps;
 }) {
   const [kind, setKind] = useState<ProjectKind>(project?.kind || 'personale');
   const [name, setName] = useState(project?.name || '');
@@ -31,6 +33,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
   const [idea, setIdea] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [skipTools, setSkipTools] = useState<Set<number>>(new Set());
+  useEffect(() => { dock?.onBusy(busy === 'ai'); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (drafts?: TaskDraft[], fromPlan?: ProjectPlan, tools?: ToolSpec[]) => {
     if (busy) return;
@@ -56,7 +59,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
     const text = replies.length ? `${base}\n\nRISPOSTE ALLE TUE DOMANDE:\n${replies.join('\n')}` : base;
     setBusy('ai'); setError('');
     try {
-      const reply = await askAuto(planSystem(today), [{ role: 'user', text }]);
+      const reply = await askAuto(planSystem(today), [{ role: 'user', text }], { json: true });
       const p = parsePlan(reply, today);
       if (!p) throw new Error('L\'AI non ha preparato un piano leggibile. Riprova o descrivi meglio l\'idea.');
       setPlan(p);
@@ -75,7 +78,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
 
   if (plan) {
     return (
-      <Sheet title="La proposta di MYND AI" onClose={onClose}
+      <Sheet title="La proposta di MYND AI" onClose={onClose} minimized={dock?.minimized} onMinimize={dock?.onMinimize}
         footer={<>
           <button onClick={() => setPlan(null)} className="btn-secondary h-11 px-4 mr-auto inline-flex items-center gap-1.5"><ArrowLeft className="w-4 h-4" /> Indietro</button>
           <button onClick={makePlan} disabled={!!busy} className="btn-secondary h-11 px-4 disabled:opacity-40 inline-flex items-center gap-2">{busy === 'ai' && <Loader2 className="w-4 h-4 animate-spin" />} Rifai</button>
@@ -169,7 +172,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI }: {
   }
 
   return (
-    <Sheet title={project ? 'Modifica progetto' : 'Nuovo progetto'} onClose={onClose}
+    <Sheet title={project ? 'Modifica progetto' : 'Nuovo progetto'} onClose={onClose} minimized={dock?.minimized} onMinimize={!project ? dock?.onMinimize : undefined}
       footer={<>
         {!project && (
           <button onClick={() => (autoReady() && description.trim() ? makePlan() : setAiAsk(true))} disabled={!!busy}

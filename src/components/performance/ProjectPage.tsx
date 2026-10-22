@@ -7,7 +7,6 @@ import {
 import { useDialog } from '../Dialog';
 import { PeopleTab } from './PeopleTab';
 import { ToolIcon, ToolTab } from './ToolTab';
-import { ToolSheet } from './ToolSheet';
 import type { ToolsApi } from './useTools';
 import { Tool, computeSummary } from '../../lib/tools';
 import { Avatars, BackButton, CheckButton, MoreMenu, Pills, ProgressBar, SectionTitle, StatusBadge, shortDate } from './ui';
@@ -21,8 +20,9 @@ type Tab = 'panoramica' | 'attivita' | 'file' | 'persone' | `tool:${string}`;
 type Sort = 'ordine' | 'scadenza' | 'stato' | 'responsabile';
 const STATUSES: ProjectStatus[] = ['da_iniziare', 'in_corso', 'completato'];
 
-export function ProjectPage({ project: p, tasks, members, me, today, api, toolsApi, archive, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
+export function ProjectPage({ project: p, tasks, members, me, today, api, toolsApi, archive, onToolSheet, focusToolId, onFocusToolUsed, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
   project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; toolsApi: ToolsApi; archive: ArchiveItem[];
+  onToolSheet: (t: Tool | 'new') => void; focusToolId?: string | null; onFocusToolUsed?: () => void;
   onBack: () => void; onEdit: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void; onAskAI: () => void;
   onLeft: () => void; notify: (text: string, error?: boolean) => void;
 }) {
@@ -32,8 +32,12 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, toolsA
   const [tab, setTab] = useState<Tab>('panoramica');
   const [editing, setEditing] = useState<PTask | 'new' | null>(null);
   const [phasesOpen, setPhasesOpen] = useState(false);
-  const [toolSheet, setToolSheet] = useState<Tool | 'new' | null>(null);
+  const setToolSheet = (t: Tool | 'new') => onToolSheet(t);
   const { tools, items: toolItems } = toolsApi;
+  // A tool just created (maybe while the page was elsewhere): open its tab.
+  useEffect(() => {
+    if (focusToolId && tools.some(t => t.id === focusToolId)) { setTab(`tool:${focusToolId}`); onFocusToolUsed?.(); }
+  }, [focusToolId, tools, onFocusToolUsed]);
   const canAddTools = perms.canEditProject && toolsApi.ready === true;
   const openTool = tab.startsWith('tool:') ? tools.find(t => `tool:${t.id}` === tab) || null : null;
   useEffect(() => { if (tab.startsWith('tool:') && toolsApi.ready !== null && !openTool) setTab('panoramica'); }, [tab, openTool, toolsApi.ready]);
@@ -169,14 +173,6 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, toolsA
           onAddSubtask={editing === 'new' ? undefined : async title => { await api.addSubtasks(editing, [title]); }}
           onToggleSubtask={async t => { await api.toggleTask(t); }}
           onDeleteSubtask={async t => { await api.removeTask(t.id); }} />
-      )}
-      {toolSheet && (
-        <ToolSheet project={p} tools={tools} tool={toolSheet === 'new' ? null : toolSheet} onClose={() => setToolSheet(null)}
-          onSave={async spec => {
-            if (toolSheet === 'new') { const t = await toolsApi.addTool(spec); setTab(`tool:${t.id}`); notify(`“${t.name}” aggiunto al progetto`); }
-            else { await toolsApi.editTool(toolSheet.id, { name: spec.name, icon: spec.icon || 'list', description: spec.description || null, config: spec.config }); notify('Strumento aggiornato'); }
-            setToolSheet(null);
-          }} />
       )}
       {phasesOpen && (
         <PhasesSheet project={p} onClose={() => setPhasesOpen(false)}

@@ -1,27 +1,37 @@
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Minus } from 'lucide-react';
 
 // A sheet on the phone (from the bottom), a centered panel on larger screens.
-export function Sheet({ title, onClose, children, footer }: {
-  title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode;
+// With onMinimize it has a "−" button: the sheet hides (its work goes on) and comes back from the dock.
+export function Sheet({ title, onClose, children, footer, minimized, onMinimize }: {
+  title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode; minimized?: boolean; onMinimize?: () => void;
 }) {
   useEffect(() => {
+    if (minimized) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
-  }, [onClose]);
+  }, [onClose, minimized]);
+  if (minimized) return null;
   return (
     <div className="fixed inset-0 z-[90] sidebar-overlay flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}
         className="w-full sm:max-w-lg max-h-[92vh] flex flex-col glass-panel rounded-t-[28px] sm:rounded-[28px] animate-scale-in"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-          <h3 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>{title}</h3>
-          <button onClick={onClose} aria-label="Chiudi" className="w-10 h-10 -mr-2 flex items-center justify-center rounded-full hover:bg-white/5">
-            <X className="w-5 h-5" />
-          </button>
+          <h3 className="text-lg font-semibold min-w-0 truncate" style={{ color: 'var(--text)' }}>{title}</h3>
+          <div className="flex items-center -mr-2 flex-shrink-0">
+            {onMinimize && (
+              <button onClick={onMinimize} aria-label="Riduci" title="Riduci: MYND AI continua a lavorare" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5">
+                <Minus className="w-5 h-5" />
+              </button>
+            )}
+            <button onClick={onClose} aria-label="Chiudi" className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/5">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-4">{children}</div>
         {footer && <div className="px-5 py-4 flex gap-2 justify-end" style={{ borderTop: '1px solid var(--glass-edge)' }}>{footer}</div>}

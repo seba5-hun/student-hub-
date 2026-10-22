@@ -8,7 +8,9 @@ import type { ArchiveItem } from '../../lib/store';
 import { useDialog } from '../Dialog';
 import { useProjects } from './useProjects';
 import { useTools } from './useTools';
-import { ToolSpec, cleanItemData, createTool, peopleOf } from '../../lib/tools';
+import { ToolSheet } from './ToolSheet';
+import { AIDock, useAIDock } from './AIDock';
+import { Tool, ToolSpec, cleanItemData, createTool, peopleOf } from '../../lib/tools';
 import { Overview } from './Overview';
 import { CardActions, ProjectList } from './ProjectList';
 import { ProjectPage } from './ProjectPage';
@@ -26,8 +28,10 @@ const PROJECT_QUICK = ['Cosa devo fare adesso?', 'Cosa rischia di ritardare il p
 const OVERVIEW_QUICK = ['Da cosa parto oggi?', 'Cosa è in ritardo?', 'Cosa scade questa settimana?'];
 
 // canCreate: the admin account. Anyone else opens Performance only for the projects shared with them.
-export default function Performance({ userId, canCreate, archiveItems = [], focusProjectId, onFocusUsed, onConnectAI }: {
+// active: Performance is on screen (it stays loaded when hidden, so MYND AI can finish its work).
+export default function Performance({ userId, canCreate, archiveItems = [], focusProjectId, onFocusUsed, onConnectAI, active = true, onShow }: {
   userId: string; canCreate: boolean; archiveItems?: ArchiveItem[]; focusProjectId?: string | null; onFocusUsed?: () => void; onConnectAI: () => void;
+  active?: boolean; onShow?: () => void;
 }) {
   const api = useProjects(userId);
 
@@ -35,7 +39,14 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
   const dialog = useDialog();
   const [tab, setTab] = useState<Tab>(savedTab);
   const [openId, setOpenId] = useState<string | null>(null);
-  const toolsApi = useTools(openId);
+  const toolsApi = useTools(openId, active);
+  const showMe = useCallback(() => onShow?.(), [onShow]);
+  const { dock, props: dockProps, restore, forget } = useAIDock(showMe);
+  const [toolSheet, setToolSheet] = useState<{ project: Project; tool: Tool | null } | null>(null);
+  const [focusTool, setFocusTool] = useState<string | null>(null);
+  const clearFocusTool = useCallback(() => setFocusTool(null), []);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const [sheet, setSheet] = useState<{ kind: 'new' } | { kind: 'edit'; project: Project } | null>(null);
   const [quickTask, setQuickTask] = useState(false);
   const [ai, setAi] = useState<'overview' | 'project' | null>(null);
@@ -73,7 +84,7 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
 
   // The others' changes (and who accepted an invitation) arrive every 30 seconds while the page is open.
   useEffect(() => {
-    const id = window.setInterval(() => { if (document.visibilityState === 'visible') reload(true); }, 30_000);
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible' && activeRef.current) reload(true); }, 30_000);
     return () => window.clearInterval(id);
   }, [reload]);
 
@@ -192,7 +203,8 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
         <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api} toolsApi={toolsApi} archive={archiveItems}
           onBack={() => setOpenId(null)} onEdit={() => setSheet({ kind: 'edit', project: open })} onDuplicate={() => duplicate(open)}
           onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify}
-          onLeft={() => { setOpenId(null); reload(true); }} />
+          onLeft={() => { setOpenId(null); reload(true); }}
+          onToolSheet={t => { forget('strumento'); setToolSheet({ project: open, tool: t === 'new' ? null : t }); }} focusToolId={focusTool} onFocusToolUsed={clearFocusTool} />
       ) : (
         <div className="space-y-7 animate-fade-in">
           <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -231,8 +243,8 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       )}
 
       {sheet && (
-        <ProjectSheet project={sheet.kind === 'edit' ? sheet.project : null} today={today} onClose={() => setSheet(null)} onSave={saveSheet}
-          onConnectAI={() => { setSheet(null); onConnectAI(); }} />
+        <ProjectSheet project={sheet.kind === 'edit' ? sheet.project : null} today={today} onClose={() => { setSheet(null); forget('progetto'); }} onSave={async (...a) => { await saveSheet(...a); forget('progetto'); }}
+          onConnectAI={() => { setSheet(null); forget('progetto'); onConnectAI(); }} dock={dockProps('progetto', 'Nuovo progetto')} />
       )}
       {quickTask && (
         <QuickTaskSheet projects={projects.filter(p => !p.archived_at && p.status !== 'completato' && permsOf(p, members, userId).canEdit)} onClose={() => setQuickTask(false)}
@@ -240,14 +252,34 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       )}
       {ai === 'overview' && (
         <AIPanel title="MYND AI · i tuoi progetti" system={OVERVIEW_AI_SYSTEM} quick={OVERVIEW_QUICK}
-          context={() => overviewContext(projects, tasks, today)} onClose={() => setAi(null)} onConnect={() => { setAi(null); onConnectAI(); }} />
+          context={() => overviewContext(projects, tasks, today)} onClose={() => { setAi(null); forget('ai'); }} onConnect={() => { setAi(null); forget('ai'); onConnectAI(); }}
+          dock={dockProps('ai', 'I tuoi progetti')} />
       )}
       {ai === 'project' && open && (
         <AIPanel title={`MYND AI · ${open.name}`} system={PROJECT_AI_SYSTEM} quick={PROJECT_QUICK} project={open} tasks={openTasks}
           tools={toolsApi.tools} toolItems={toolsApi.items} members={openMembers} me={userId}
           context={() => projectContext(open, openTasks, openMembers, aiExtra.res, aiExtra.upd, today, userId, toolsApi.tools, toolsApi.items)}
-          onApply={permsOf(open, members, userId).canEdit ? applyActions : undefined} onClose={() => setAi(null)} onConnect={() => { setAi(null); onConnectAI(); }} />
+          onApply={permsOf(open, members, userId).canEdit ? applyActions : undefined} onClose={() => { setAi(null); forget('ai'); }} onConnect={() => { setAi(null); forget('ai'); onConnectAI(); }}
+          dock={dockProps('ai', open.name)} />
       )}
+      {toolSheet && (
+        <ToolSheet project={toolSheet.project} tools={toolSheet.project.id === openId ? toolsApi.tools : []} tool={toolSheet.tool}
+          onClose={() => { setToolSheet(null); forget('strumento'); }} dock={dockProps('strumento', toolSheet.tool ? toolSheet.tool.name : `Strumento per ${toolSheet.project.name}`)}
+          onSave={async spec => {
+            const ts = toolSheet;
+            if (!ts.tool) {
+              const t = await toolsApi.addTool(spec, ts.project.id);
+              if (ts.project.id === openId) setFocusTool(t.id);
+              notify(`“${t.name}” aggiunto a ${ts.project.name}`, false, ts.project.id === openId ? undefined : { label: 'Apri', run: () => { setOpenId(ts.project.id); setFocusTool(t.id); onShow?.(); } });
+            } else {
+              await toolsApi.editTool(ts.tool.id, { name: spec.name, icon: spec.icon || 'list', description: spec.description || null, config: spec.config });
+              notify('Strumento aggiornato');
+            }
+            setToolSheet(null); forget('strumento');
+          }} />
+      )}
+      <AIDock dock={dock} onOpen={restore}
+        onClose={key => { forget(key); if (key === 'ai') setAi(null); if (key === 'progetto') setSheet(null); if (key === 'strumento') setToolSheet(null); }} />
       <Toasts items={toasts} onClose={closeToast} />
     </div>
   );
