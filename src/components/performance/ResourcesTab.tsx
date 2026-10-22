@@ -6,8 +6,8 @@ import { Sheet, TextField, TextArea, ErrorNote, Empty, MoreMenu } from './ui';
 
 // Notes and links of a project. A file is shared as its link (Google Drive, Dropbox…): nothing is
 // uploaded here, so there is no upload button that could not work.
-export function ResourcesTab({ projectId, me, members, canManage, notify }: {
-  projectId: string; me: string; members: Member[]; canManage: boolean; notify: (text: string, error?: boolean) => void;
+export function ResourcesTab({ projectId, me, members, canEdit, canManage, notify }: {
+  projectId: string; me: string; members: Member[]; canEdit: boolean; canManage: boolean; notify: (text: string, error?: boolean) => void;
 }) {
   const dialog = useDialog();
   const [items, setItems] = useState<Resource[] | null>(null);
@@ -42,10 +42,10 @@ export function ResourcesTab({ projectId, me, members, canManage, notify }: {
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-2 flex-wrap">
+      {canEdit && <div className="flex gap-2 flex-wrap">
         <button onClick={() => setEditing('nota')} className="btn-primary h-11 px-4 inline-flex items-center gap-2"><StickyNote className="w-4 h-4" /> Nota</button>
         <button onClick={() => setEditing('link')} className="btn-secondary h-11 px-4 inline-flex items-center gap-2"><Link2 className="w-4 h-4" /> Link o documento</button>
-      </div>
+      </div>}
       {(items?.length || 0) > 3 && (
         <label className="relative block">
           <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-subtle)' }} />
@@ -62,7 +62,7 @@ export function ResourcesTab({ projectId, me, members, canManage, notify }: {
       ) : (
         <ul className="space-y-2">
           {shown.map(r => {
-            const mine = r.added_by === me || canManage;
+            const mine = canEdit && (r.added_by === me || canManage);
             const host = r.url ? (() => { try { return new URL(r.url).hostname.replace(/^www\./, ''); } catch { return r.url; } })() : '';
             const who = members.length > 1 ? memberName(members, r.added_by, me) : '';
             return (

@@ -1,15 +1,16 @@
 import React, { useMemo } from 'react';
-import { FolderPlus, ListPlus, Sparkles, ArrowRight } from 'lucide-react';
-import { Member, PTask, Project, TASK_STATUS_LABEL, daysBetween, memberName, nextDue, relativeDay } from '../../lib/projects';
+import { FolderPlus, ListPlus, Sparkles, ArrowRight, Users } from 'lucide-react';
+import { Member, PTask, Project, TASK_STATUS_LABEL, daysBetween, memberName, nextDue, permsOf, relativeDay } from '../../lib/projects';
 import { CheckButton, SectionTitle, shortDate } from './ui';
-import { CardActions, FirstProject, ProjectCard } from './ProjectList';
+import { CardActions, FirstProject, NoShared, ProjectCard } from './ProjectList';
 
 interface DueItem { key: string; date: string; title: string; project: Project; kind: 'superata' | 'imminente' | 'completata'; task?: PTask }
 
-export function Overview({ projects, tasks, members, me, today, actions, onToggle, onSeeAll, onNew, onQuickTask, onAskAI }: {
-  projects: Project[]; tasks: PTask[]; members: Member[]; me: string; today: string; actions: CardActions;
-  onToggle: (t: PTask) => void; onSeeAll: () => void; onNew: () => void; onQuickTask: () => void; onAskAI: () => void;
+export function Overview({ projects, tasks, members, me, today, actions, canCreate, onToggle, onSeeAll, onSeeShared, onNew, onQuickTask, onAskAI }: {
+  projects: Project[]; tasks: PTask[]; members: Member[]; me: string; today: string; actions: CardActions; canCreate: boolean;
+  onToggle: (t: PTask) => void; onSeeAll: () => void; onSeeShared?: () => void; onNew: () => void; onQuickTask: () => void; onAskAI: () => void;
 }) {
+  const editable = useMemo(() => new Set(projects.filter(p => permsOf(p, members, me).canEdit).map(p => p.id)), [projects, members, me]);
   const live = useMemo(() => projects.filter(p => !p.archived_at), [projects]);
   const liveIds = useMemo(() => new Set(live.map(p => p.id)), [live]);
   const byId = useMemo(() => new Map(live.map(p => [p.id, p])), [live]);
@@ -47,11 +48,11 @@ export function Overview({ projects, tasks, members, me, today, actions, onToggl
       <div className="glass-card rounded-[24px] p-6 space-y-3">
         <p className="text-[15px]" style={{ color: 'var(--text)' }}>Tutti i tuoi progetti sono archiviati.</p>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={onNew} className="btn-primary h-11 px-5">+ Nuovo progetto</button>
+          {canCreate && <button onClick={onNew} className="btn-primary h-11 px-5">+ Nuovo progetto</button>}
           <button onClick={onSeeAll} className="btn-secondary h-11 px-5">Vedi gli archiviati</button>
         </div>
       </div>
-    ) : <FirstProject onNew={onNew} />;
+    ) : canCreate ? <FirstProject onNew={onNew} /> : <NoShared />;
   }
 
   return (
@@ -69,7 +70,7 @@ export function Overview({ projects, tasks, members, me, today, actions, onToggl
               const meta = [p.name, t.due_date && (late ? `scaduta ${relativeDay(today, t.due_date)}` : relativeDay(today, t.due_date)), t.status === 'in_corso' && TASK_STATUS_LABEL[t.status], who].filter(Boolean);
               return (
                 <li key={t.id} className="rounded-2xl pr-3 flex items-center gap-1 transition-colors" style={{ background: 'var(--glass-well)' }}>
-                  <CheckButton done={false} label={`Completa ${t.title}`} onClick={() => onToggle(t)} />
+                  <CheckButton done={false} label={`Completa ${t.title}`} onClick={() => onToggle(t)} disabled={!editable.has(t.project_id)} />
                   <button onClick={() => actions.onOpen(p)} className="flex-1 min-w-0 py-2.5 text-left">
                     <p className="text-[15px] truncate" style={{ color: 'var(--text)' }}>{t.title}</p>
                     <p className="text-xs truncate" style={{ color: late ? 'var(--danger)' : 'var(--text-subtle)' }}>{meta.join(' · ')}</p>
@@ -123,9 +124,10 @@ export function Overview({ projects, tasks, members, me, today, actions, onToggl
 
       <section aria-labelledby="pf-quick">
         <SectionTitle><span id="pf-quick">Accesso rapido</span></SectionTitle>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <QuickTile icon={<FolderPlus className="w-5 h-5" />} label="Nuovo progetto" onClick={onNew} />
-          <QuickTile icon={<ListPlus className="w-5 h-5" />} label="Nuova attività" onClick={onQuickTask} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+          {canCreate && <QuickTile icon={<FolderPlus className="w-5 h-5" />} label="Nuovo progetto" onClick={onNew} />}
+          {editable.size > 0 && <QuickTile icon={<ListPlus className="w-5 h-5" />} label="Nuova attività" onClick={onQuickTask} />}
+          {onSeeShared && <QuickTile icon={<Users className="w-5 h-5" />} label="Condivisi con me" onClick={onSeeShared} />}
           <QuickTile icon={<Sparkles className="w-5 h-5" />} label="Chiedi all'AI" onClick={onAskAI} />
         </div>
       </section>

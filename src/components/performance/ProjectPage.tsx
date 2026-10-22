@@ -2,23 +2,28 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Sparkles, CalendarDays, AlertTriangle, ListChecks } from 'lucide-react';
 import {
   KIND_LABEL, Member, PTask, Project, ProjectStatus, ProjectUpdate, STATUS_LABEL, TASK_STATUS_LABEL, byPosition, lateness, listUpdates,
-  memberName, progressOf, relativeDay,
+  memberName, permsOf, progressOf, relativeDay, removeMember,
 } from '../../lib/projects';
+import { useDialog } from '../Dialog';
+import { PeopleTab } from './PeopleTab';
 import { Avatars, BackButton, CheckButton, MoreMenu, Pills, ProgressBar, SectionTitle, StatusBadge, shortDate } from './ui';
 import { TaskForm, TaskSheet } from './TaskSheet';
 import { ResourcesTab } from './ResourcesTab';
 import { PhasesSheet } from './PhasesSheet';
 import type { ProjectsApi } from './useProjects';
 
-type Tab = 'panoramica' | 'attivita' | 'file';
+type Tab = 'panoramica' | 'attivita' | 'file' | 'persone';
 type Sort = 'ordine' | 'scadenza' | 'stato' | 'responsabile';
 const STATUSES: ProjectStatus[] = ['da_iniziare', 'in_corso', 'completato'];
 
-export function ProjectPage({ project: p, tasks, members, me, today, api, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, notify }: {
+export function ProjectPage({ project: p, tasks, members, me, today, api, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
   project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi;
   onBack: () => void; onEdit: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void; onAskAI: () => void;
-  notify: (text: string, error?: boolean) => void;
+  onLeft: () => void; notify: (text: string, error?: boolean) => void;
 }) {
+  const dialog = useDialog();
+  const perms = permsOf(p, members, me);
+  const owner = members.find(m => m.role === 'proprietario');
   const [tab, setTab] = useState<Tab>('panoramica');
   const [editing, setEditing] = useState<PTask | 'new' | null>(null);
   const [phasesOpen, setPhasesOpen] = useState(false);
@@ -28,6 +33,13 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
   const top = useMemo(() => tasks.filter(t => !t.parent_id), [tasks]);
   const fail = useCallback((err: unknown) => notify(err instanceof Error ? err.message : String(err), true), [notify]);
   const toggle = useCallback((t: PTask) => { api.toggleTask(t).catch(fail); }, [api, fail]);
+  const openTask = useCallback((t: PTask) => { if (perms.canEdit) setEditing(t); }, [perms.canEdit]);
+  const leave = async () => {
+    const ok = await dialog.confirm({ title: `Uscire da “${p.name}”?`, message: 'Non lo vedrai più. Per rientrare servirà un nuovo invito.', confirmLabel: 'Esci', danger: true });
+    if (!ok) return;
+    try { await removeMember(p.id, me); notify('Sei uscito dal progetto'); onLeft(); }
+    catch (err) { fail(err); }
+  };
 
   // "Ultimi aggiornamenti", read again shortly after every change.
   const stamp = tasks.map(t => t.updated_at).sort().pop() + p.updated_at;
@@ -49,15 +61,17 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
         <BackButton label="Progetti" onClick={onBack} />
         <div className="flex items-start gap-3 mt-2">
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] mb-1" style={{ color: 'var(--text-subtle)' }}>Progetto {KIND_LABEL[p.kind].toLowerCase()}{p.archived_at ? ' · Archiviato' : ''}</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] mb-1" style={{ color: 'var(--text-subtle)' }}>Progetto {KIND_LABEL[p.kind].toLowerCase()}{!perms.isOwner && owner ? ` · di ${memberName(members, owner.user_id, me)}` : ''}{p.archived_at ? ' · Archiviato' : ''}</p>
             <h2 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold tracking-[-0.035em] break-words" style={{ color: 'var(--text)' }}>{p.name}</h2>
           </div>
           <MoreMenu label="Impostazioni del progetto" items={[
-            { label: 'Modifica progetto', onClick: onEdit },
-            { label: p.settings.phases ? 'Modifica le fasi' : 'Organizza in fasi', onClick: () => setPhasesOpen(true) },
+            { label: 'Modifica progetto', onClick: onEdit, hidden: !perms.canEditProject },
+            { label: p.settings.phases ? 'Modifica le fasi' : 'Organizza in fasi', onClick: () => setPhasesOpen(true), hidden: !perms.canEditProject },
+            { label: 'Persone e inviti', onClick: () => setTab('persone') },
             { label: 'Duplica progetto', onClick: onDuplicate },
-            { label: p.archived_at ? 'Ripristina progetto' : 'Archivia progetto', onClick: onArchive },
-            { label: 'Elimina progetto', onClick: onDelete, danger: true, hidden: p.owner_id !== me },
+            { label: p.archived_at ? 'Ripristina progetto' : 'Archivia progetto', onClick: onArchive, hidden: !perms.canEditProject },
+            { label: 'Elimina progetto', onClick: onDelete, danger: true, hidden: !perms.isOwner },
+            { label: 'Esci dal progetto', onClick: leave, danger: true, hidden: perms.isOwner },
           ]} />
         </div>
         {p.description && <p className="mt-2 max-w-2xl text-[15px] leading-relaxed whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{p.description}</p>}
@@ -72,7 +86,7 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
         </div>
         <div className="mt-4 max-w-xl"><ProgressBar progress={prog} /></div>
         <div className="flex gap-2 mt-5">
-          <button onClick={() => setEditing('new')} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5"><Plus className="w-4 h-4" /> Attività</button>
+          {perms.canEdit && <button onClick={() => setEditing('new')} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5"><Plus className="w-4 h-4" /> Attività</button>}
           <button onClick={onAskAI} className="btn-secondary h-11 px-4 inline-flex items-center gap-2"><Sparkles className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} /> MYND AI</button>
         </div>
       </div>
@@ -81,21 +95,24 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
         { id: 'panoramica', label: 'Panoramica' },
         { id: 'attivita', label: 'Attività', count: prog.total ? prog.total - prog.done : undefined },
         { id: 'file', label: 'File e note' },
+        { id: 'persone', label: 'Persone', count: members.length > 1 ? members.length : undefined },
       ]} />
+      {perms.role === 'osservatore' && <p className="text-sm -mt-2" style={{ color: 'var(--text-subtle)' }}>Sei in sola lettura: vedi tutto, ma non puoi modificare.</p>}
 
       {tab === 'panoramica' && (
-        <OverviewTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} overdue={overdue} updates={updates}
-          onStatus={s => api.saveProject(p.id, { status: s }).catch(fail)} onToggle={toggle} onOpenTask={setEditing}
+        <OverviewTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} overdue={overdue} updates={updates} readOnly={!perms.canEdit}
+          onStatus={perms.canEditProject ? s => { api.saveProject(p.id, { status: s }).catch(fail); } : undefined} onToggle={toggle} onOpenTask={openTask}
           onAdd={() => setEditing('new')} onAskAI={onAskAI} onEditGoal={onEdit} onSeeTasks={() => setTab('attivita')} />
       )}
       {tab === 'attivita' && (
-        <TasksTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} api={api} onToggle={toggle} onOpenTask={setEditing}
+        <TasksTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} api={api} readOnly={!perms.canEdit} onToggle={toggle} onOpenTask={openTask}
           onAdd={() => setEditing('new')} onAskAI={onAskAI} fail={fail} />
       )}
-      {tab === 'file' && <ResourcesTab projectId={p.id} me={me} members={members} canManage={p.owner_id === me} notify={notify} />}
+      {tab === 'file' && <ResourcesTab projectId={p.id} me={me} members={members} canEdit={perms.canEdit} canManage={perms.canManage} notify={notify} />}
+      {tab === 'persone' && <PeopleTab p={p} members={members} tasks={tasks} me={me} perms={perms} onChanged={() => api.reload(true)} onLeft={onLeft} notify={notify} />}
 
       {editing && (
-        <TaskSheet task={editing === 'new' ? null : editing} project={p} members={members} me={me}
+        <TaskSheet task={editing === 'new' ? null : editing} project={p} members={members.filter(m => m.role !== 'osservatore')} me={me}
           subtasks={editing === 'new' ? [] : tasks.filter(t => t.parent_id === editing.id)}
           onClose={() => setEditing(null)} onSave={saveTask}
           onDelete={editing === 'new' ? undefined : async () => { await api.removeTask(editing.id); setEditing(null); notify('Attività eliminata'); }}
@@ -117,9 +134,9 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, onBack
   );
 }
 
-function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, onStatus, onToggle, onOpenTask, onAdd, onAskAI, onEditGoal, onSeeTasks }: {
-  p: Project; tasks: PTask[]; top: PTask[]; members: Member[]; me: string; today: string; overdue: PTask[]; updates: ProjectUpdate[] | null;
-  onStatus: (s: ProjectStatus) => void; onToggle: (t: PTask) => void; onOpenTask: (t: PTask) => void; onAdd: () => void; onAskAI: () => void; onEditGoal: () => void; onSeeTasks: () => void;
+function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, readOnly, onStatus, onToggle, onOpenTask, onAdd, onAskAI, onEditGoal, onSeeTasks }: {
+  p: Project; tasks: PTask[]; top: PTask[]; members: Member[]; me: string; today: string; overdue: PTask[]; updates: ProjectUpdate[] | null; readOnly: boolean;
+  onStatus?: (s: ProjectStatus) => void; onToggle: (t: PTask) => void; onOpenTask: (t: PTask) => void; onAdd: () => void; onAskAI: () => void; onEditGoal: () => void; onSeeTasks: () => void;
 }) {
   const prog = progressOf(tasks);
   const next = top.filter(t => t.status !== 'fatto')
@@ -130,7 +147,7 @@ function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, onSt
 
   return (
     <div className="space-y-8">
-      {prog.pct === 100 && p.status !== 'completato' && (
+      {prog.pct === 100 && p.status !== 'completato' && onStatus && (
         <div className="rounded-2xl p-4 flex items-center gap-3 flex-wrap animate-scale-in" style={{ background: 'color-mix(in srgb, var(--brand-fill) 14%, transparent)' }}>
           <p className="flex-1 min-w-[200px] text-[15px]" style={{ color: 'var(--text)' }}>Tutte le attività sono completate. Vuoi segnare il progetto come completato?</p>
           <button onClick={() => onStatus('completato')} className="btn-primary h-10 px-4 text-sm">Segna come completato</button>
@@ -141,14 +158,15 @@ function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, onSt
         <SectionTitle>Obiettivo</SectionTitle>
         {p.description
           ? <p className="text-[15px] leading-relaxed whitespace-pre-line" style={{ color: 'var(--text)' }}>{p.description}</p>
-          : <button onClick={onEditGoal} className="text-[15px]" style={{ color: 'var(--text-subtle)' }}>Nessun obiettivo scritto. <span style={{ color: 'var(--brand-ring)' }}>Aggiungilo</span></button>}
+          : onStatus ? <button onClick={onEditGoal} className="text-[15px]" style={{ color: 'var(--text-subtle)' }}>Nessun obiettivo scritto. <span style={{ color: 'var(--brand-ring)' }}>Aggiungilo</span></button>
+          : <p className="text-[15px]" style={{ color: 'var(--text-subtle)' }}>Nessun obiettivo scritto.</p>}
       </section>
 
       <section>
         <SectionTitle>Stato</SectionTitle>
         <div className="flex gap-1 p-1 rounded-full max-w-md" style={{ background: 'var(--glass-well)' }} role="radiogroup" aria-label="Stato del progetto">
           {STATUSES.map(s => (
-            <button key={s} role="radio" aria-checked={p.status === s} onClick={() => p.status !== s && onStatus(s)}
+            <button key={s} role="radio" aria-checked={p.status === s} disabled={!onStatus} onClick={() => p.status !== s && onStatus?.(s)}
               className={`flex-1 h-10 rounded-full text-sm font-medium transition-colors ${p.status === s ? 'glass-lens' : ''}`}
               style={{ color: p.status === s ? 'var(--brand-ring)' : 'var(--text-muted)' }}>{STATUS_LABEL[s]}</button>
           ))}
@@ -156,7 +174,7 @@ function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, onSt
       </section>
 
       {top.length === 0 ? (
-        <ReadyToStart onAdd={onAdd} onAskAI={onAskAI} />
+        readOnly ? <p className="text-[15px]" style={{ color: 'var(--text-muted)' }}>Nel progetto non ci sono ancora attività.</p> : <ReadyToStart onAdd={onAdd} onAskAI={onAskAI} />
       ) : (
         <>
           {(overdue.length > 0 || projectLate) && (
@@ -178,7 +196,7 @@ function OverviewTab({ p, tasks, top, members, me, today, overdue, updates, onSt
             <SectionTitle action={<button onClick={onSeeTasks} className="text-sm font-medium" style={{ color: 'var(--brand-ring)' }}>Tutte le attività</button>}>Prossime attività</SectionTitle>
             {next.length === 0
               ? <p className="text-[15px]" style={{ color: 'var(--text-muted)' }}>Nessuna attività aperta.</p>
-              : <ul className="space-y-1.5">{next.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>}
+              : <ul className="space-y-1.5">{next.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} readOnly={readOnly} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>}
           </section>
 
           {upcoming.length > 0 && (
@@ -230,8 +248,8 @@ function ReadyToStart({ onAdd, onAskAI }: { onAdd: () => void; onAskAI: () => vo
   );
 }
 
-function TaskRow({ t, tasks, members, me, today, onToggle, onOpen }: {
-  t: PTask; tasks: PTask[]; members: Member[]; me: string; today: string; onToggle: (t: PTask) => void; onOpen: (t: PTask) => void;
+function TaskRow({ t, tasks, members, me, today, readOnly, onToggle, onOpen }: {
+  t: PTask; tasks: PTask[]; members: Member[]; me: string; today: string; readOnly?: boolean; onToggle: (t: PTask) => void; onOpen: (t: PTask) => void;
 }) {
   const done = t.status === 'fatto';
   const late = !done && !!t.due_date && t.due_date < today;
@@ -244,8 +262,8 @@ function TaskRow({ t, tasks, members, me, today, onToggle, onOpen }: {
   ].filter(Boolean);
   return (
     <li className="rounded-2xl pr-3 flex items-center gap-1" style={{ background: 'var(--glass-well)' }}>
-      <CheckButton done={done} label={done ? `Riapri ${t.title}` : `Completa ${t.title}`} onClick={() => onToggle(t)} />
-      <button onClick={() => onOpen(t)} className="flex-1 min-w-0 py-2.5 text-left">
+      <CheckButton done={done} label={done ? `Riapri ${t.title}` : `Completa ${t.title}`} onClick={() => onToggle(t)} disabled={readOnly} />
+      <button onClick={() => onOpen(t)} disabled={readOnly} className="flex-1 min-w-0 py-2.5 text-left disabled:cursor-default">
         <p className={`text-[15px] break-words transition-colors ${done ? 'line-through' : ''}`} style={{ color: done ? 'var(--text-subtle)' : 'var(--text)' }}>{t.title}</p>
         {meta.length > 0 && <p className="text-xs truncate" style={{ color: late ? 'var(--danger)' : t.status === 'in_corso' ? 'var(--brand-ring)' : 'var(--text-subtle)' }}>{meta.join(' · ')}</p>}
       </button>
@@ -253,8 +271,8 @@ function TaskRow({ t, tasks, members, me, today, onToggle, onOpen }: {
   );
 }
 
-function TasksTab({ p, tasks, top, members, me, today, api, onToggle, onOpenTask, onAdd, onAskAI, fail }: {
-  p: Project; tasks: PTask[]; top: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi;
+function TasksTab({ p, tasks, top, members, me, today, api, readOnly, onToggle, onOpenTask, onAdd, onAskAI, fail }: {
+  p: Project; tasks: PTask[]; top: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; readOnly: boolean;
   onToggle: (t: PTask) => void; onOpenTask: (t: PTask) => void; onAdd: () => void; onAskAI: () => void; fail: (err: unknown) => void;
 }) {
   const [sort, setSort] = useState<Sort>('ordine');
@@ -287,15 +305,17 @@ function TasksTab({ p, tasks, top, members, me, today, api, onToggle, onOpenTask
   if (!top.length) {
     return (
       <div className="space-y-4">
-        <QuickAdd value={quick} onChange={setQuick} onSubmit={addQuick} busy={adding} />
-        <ReadyToStart onAdd={onAdd} onAskAI={onAskAI} />
+        {readOnly ? <p className="text-[15px]" style={{ color: 'var(--text-muted)' }}>Nel progetto non ci sono ancora attività.</p> : <>
+          <QuickAdd value={quick} onChange={setQuick} onSubmit={addQuick} busy={adding} />
+          <ReadyToStart onAdd={onAdd} onAskAI={onAskAI} />
+        </>}
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <QuickAdd value={quick} onChange={setQuick} onSubmit={addQuick} busy={adding} />
+      {!readOnly && <QuickAdd value={quick} onChange={setQuick} onSubmit={addQuick} busy={adding} />}
       <div className="flex items-center gap-2">
         <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-subtle)' }}>Ordina per</span>
         <Pills label="Ordina le attività" value={sort} onChange={setSort} options={[
@@ -309,7 +329,7 @@ function TasksTab({ p, tasks, top, members, me, today, api, onToggle, onOpenTask
       {groups.map(g => (
         <section key={g.phase || '_'}>
           {usePhases && sort === 'ordine' && <SectionTitle>{g.phase || 'Senza fase'}</SectionTitle>}
-          <ul className="space-y-1.5">{g.items.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>
+          <ul className="space-y-1.5">{g.items.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} readOnly={readOnly} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>
         </section>
       ))}
       {done.length > 0 && (
@@ -317,7 +337,7 @@ function TasksTab({ p, tasks, top, members, me, today, api, onToggle, onOpenTask
           <button onClick={() => setShowDone(s => !s)} aria-expanded={showDone} className="text-sm font-medium py-2" style={{ color: 'var(--text-muted)' }}>
             {showDone ? 'Nascondi' : 'Mostra'} le completate · {done.length}
           </button>
-          {showDone && <ul className="space-y-1.5 mt-2">{done.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>}
+          {showDone && <ul className="space-y-1.5 mt-2">{done.map(t => <TaskRow key={t.id} t={t} tasks={tasks} members={members} me={me} today={today} readOnly={readOnly} onToggle={onToggle} onOpen={onOpenTask} />)}</ul>}
         </section>
       )}
     </div>

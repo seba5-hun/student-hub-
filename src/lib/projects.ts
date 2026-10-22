@@ -275,3 +275,76 @@ export function memberName(members: Member[], userId: string | null, me?: string
 }
 
 export const initials = (name: string) => name.split(/[\s._-]+/).filter(Boolean).slice(0, 2).map(w => w[0]!.toUpperCase()).join('') || '?';
+
+// ───────────── Sharing (supabase/progetti_condivisione.sql) ─────────────
+
+export type InviteRole = Exclude<MemberRole, 'proprietario'>;
+export const ROLE_LABEL: Record<MemberRole, string> = { proprietario: 'Proprietario', responsabile: 'Responsabile', membro: 'Membro', osservatore: 'Solo lettura' };
+export const roleLabel = (role: MemberRole, kind: ProjectKind) => (kind === 'personale' && role === 'membro' ? 'Partecipante' : ROLE_LABEL[role]);
+export const ROLE_HINT: Record<InviteRole, string> = {
+  responsabile: 'Modifica tutto il progetto e invita altre persone.',
+  membro: 'Aggiunge e completa attività, note e link.',
+  osservatore: 'Vede tutto, senza modificare.',
+};
+
+// What the person logged in can do in a project (the database checks the same rules).
+export interface Perms { role: MemberRole | null; isOwner: boolean; canEdit: boolean; canManage: boolean; canEditProject: boolean; canInvite: boolean }
+export function permsOf(p: Project, members: Member[], me: string): Perms {
+  const role = p.owner_id === me ? 'proprietario' : members.find(m => m.project_id === p.id && m.user_id === me)?.role || null;
+  const canEdit = role === 'proprietario' || role === 'responsabile' || role === 'membro';
+  const canManage = role === 'proprietario' || role === 'responsabile';
+  return { role, isOwner: role === 'proprietario', canEdit, canManage, canEditProject: canManage || (p.kind === 'personale' && canEdit), canInvite: canManage || (p.kind === 'personale' && canEdit) };
+}
+
+export interface ProjectInvite { id: string; project_id: string; invited_email: string; invited_user: string | null; invited_by: string | null; role: InviteRole; status: string; created_at: string }
+export interface MyInvite { id: string; project_id: string; project_name: string; project_kind: ProjectKind; role: InviteRole; invited_by_email: string | null; created_at: string }
+export type InviteResult = { status: 'invited' | 'waiting'; name: string } | { status: 'already_member' | 'already_invited' | 'self' };
+
+export async function inviteByEmail(projectId: string, email: string, role: InviteRole): Promise<InviteResult> {
+  const { data, error } = await db().rpc('prj_invite', { p_project: projectId, p_email: email, p_role: role });
+  if (error) fail(error);
+  return data as InviteResult;
+}
+
+export async function listProjectInvites(projectId: string): Promise<ProjectInvite[]> {
+  const { data, error } = await db().from('prj_invites').select('id, project_id, invited_email, invited_user, invited_by, role, status, created_at')
+    .eq('project_id', projectId).eq('status', 'in_attesa').order('created_at', { ascending: false });
+  if (error) fail(error);
+  return (data || []) as ProjectInvite[];
+}
+
+export async function cancelInvite(id: string): Promise<void> {
+  const { error } = await db().rpc('prj_cancel_invite', { p_invite: id });
+  if (error) fail(error);
+}
+
+// The invitations waiting for the person logged in ([] when sharing is not set up yet).
+export async function listMyInvites(): Promise<MyInvite[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.rpc('prj_my_invites');
+  if (error) return [];
+  return (data || []) as MyInvite[];
+}
+
+export async function answerInvite(id: string, accept: boolean): Promise<string> {
+  const { data, error } = await db().rpc('prj_answer_invite', { p_invite: id, p_accept: accept });
+  if (error) fail(error);
+  return data as string;
+}
+
+export async function setMemberRole(projectId: string, userId: string, role: InviteRole): Promise<void> {
+  const { error } = await db().rpc('prj_set_member_role', { p_project: projectId, p_user: userId, p_role: role });
+  if (error) fail(error);
+}
+
+export async function removeMember(projectId: string, userId: string): Promise<void> {
+  const { error } = await db().rpc('prj_remove_member', { p_project: projectId, p_user: userId });
+  if (error) fail(error);
+}
+
+// Whether the person takes part in at least one project (Performance opens for them too).
+export async function hasProjects(userId: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.from('prj_members').select('project_id').eq('user_id', userId).limit(1);
+  return !error && !!data?.length;
+}

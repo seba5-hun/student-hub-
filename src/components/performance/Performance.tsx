@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Sparkles, Loader2 } from 'lucide-react';
-import { PTask, Project, ProjectInput, TaskDraft, TaskInput } from '../../lib/projects';
+import { PTask, Project, ProjectInput, TaskDraft, TaskInput, permsOf } from '../../lib/projects';
 import { AIAction, OVERVIEW_AI_SYSTEM, PROJECT_AI_SYSTEM, overviewContext, projectContext } from '../../lib/projectsAI';
 import { listResources, listUpdates } from '../../lib/projects';
 import { toDateKey } from '../../lib/store';
@@ -15,14 +15,17 @@ import { Sheet, TextField, Label, ErrorNote, Pills, Toasts, ToastMsg } from './u
 
 // Performance (only on the admin account for now): one place to turn ideas into projects, personal
 // or for work, with their tasks, deadlines, notes and links, and MYND AI to plan them.
-type Tab = 'panoramica' | 'progetti';
+type Tab = 'panoramica' | 'progetti' | 'condivisi';
 const TAB_KEY = 'mynd_performance_tab';
-const savedTab = (): Tab => { try { return localStorage.getItem(TAB_KEY) === 'progetti' ? 'progetti' : 'panoramica'; } catch { return 'panoramica'; } };
+const savedTab = (): Tab => { try { const v = localStorage.getItem(TAB_KEY); return v === 'progetti' || v === 'condivisi' ? v : 'panoramica'; } catch { return 'panoramica'; } };
 
 const PROJECT_QUICK = ['Cosa devo fare adesso?', 'Quali attività sono ancora aperte?', 'Quali sono le prossime scadenze?', 'Cosa rischia di ritardare il progetto?', 'Riassumi gli ultimi aggiornamenti'];
 const OVERVIEW_QUICK = ['Da cosa parto oggi?', 'Cosa è in ritardo?', 'Cosa scade questa settimana?'];
 
-export default function Performance({ userId, onConnectAI }: { userId: string; onConnectAI: () => void }) {
+// canCreate: the admin account. Anyone else opens Performance only for the projects shared with them.
+export default function Performance({ userId, canCreate, focusProjectId, onFocusUsed, onConnectAI }: {
+  userId: string; canCreate: boolean; focusProjectId?: string | null; onFocusUsed?: () => void; onConnectAI: () => void;
+}) {
   const api = useProjects(userId);
   const { load, projects, tasks, members } = api;
   const dialog = useDialog();
@@ -50,6 +53,24 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
   const openMembers = useMemo(() => members.filter(m => m.project_id === openId), [members, openId]);
   // A project deleted (or no longer visible) while open: back to the list.
   useEffect(() => { if (openId && load.state === 'ready' && !open) setOpenId(null); }, [openId, open, load.state]);
+
+  const shared = useMemo(() => projects.filter(p => p.owner_id !== userId), [projects, userId]);
+  const mine = useMemo(() => projects.filter(p => p.owner_id === userId), [projects, userId]);
+  useEffect(() => { if (!canCreate && tab === 'progetti') setTab('condivisi'); }, [canCreate, tab]);
+
+  // A project opened from an invitation just accepted: read again (it is new here) and open it.
+  const { reload } = api;
+  useEffect(() => {
+    if (!focusProjectId || load.state !== 'ready') return;
+    if (projects.some(p => p.id === focusProjectId)) { setOpenId(focusProjectId); onFocusUsed?.(); return; }
+    reload(true).then(() => setOpenId(focusProjectId)).finally(() => onFocusUsed?.());
+  }, [focusProjectId, load.state, projects, reload, onFocusUsed]);
+
+  // The others' changes (and who accepted an invitation) arrive every 30 seconds while the page is open.
+  useEffect(() => {
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible') reload(true); }, 30_000);
+    return () => window.clearInterval(id);
+  }, [reload]);
 
   const openProject = useCallback((p: Project) => { setOpenId(p.id); window.scrollTo({ top: 0 }); }, []);
 
@@ -88,7 +109,7 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
     }
     const p = await api.create(input, drafts);
     setSheet(null);
-    setTab('progetti');
+    setTab(canCreate ? 'progetti' : 'condivisi');
     openProject(p);
     notify(drafts?.length ? `Progetto creato con ${drafts.length} attività` : 'Progetto creato');
   };
@@ -156,7 +177,8 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
       {open ? (
         <ProjectPage key={open.id} project={open} tasks={openTasks} members={openMembers} me={userId} today={today} api={api}
           onBack={() => setOpenId(null)} onEdit={() => setSheet({ kind: 'edit', project: open })} onDuplicate={() => duplicate(open)}
-          onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify} />
+          onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify}
+          onLeft={() => { setOpenId(null); reload(true); }} />
       ) : (
         <div className="space-y-7 animate-fade-in">
           <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -166,21 +188,27 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
             </div>
             <div className="flex gap-2">
               <button onClick={() => setAi('overview')} className="btn-secondary h-11 px-4 inline-flex items-center gap-2"><Sparkles className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} /> MYND AI</button>
-              <button onClick={() => setSheet({ kind: 'new' })} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5"><Plus className="w-4 h-4" /> Nuovo progetto</button>
+              {canCreate && <button onClick={() => setSheet({ kind: 'new' })} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5"><Plus className="w-4 h-4" /> Nuovo progetto</button>}
             </div>
           </header>
-          <Pills label="Performance" value={tab} onChange={setTab} options={[{ id: 'panoramica', label: 'Panoramica' }, { id: 'progetti', label: 'I miei progetti' }]} />
+          <Pills label="Performance" value={tab} onChange={setTab} options={[
+            { id: 'panoramica', label: 'Panoramica' },
+            ...(canCreate ? [{ id: 'progetti' as Tab, label: 'I miei progetti' }] : []),
+            { id: 'condivisi', label: 'Condivisi con me', count: shared.filter(p => !p.archived_at).length || undefined },
+          ]} />
           {tab === 'panoramica' ? (
-            <Overview projects={projects} tasks={tasks} members={members} me={userId} today={today} actions={cardActions} onToggle={toggle}
-              onSeeAll={() => setTab('progetti')} onNew={() => setSheet({ kind: 'new' })} onQuickTask={() => setQuickTask(true)} onAskAI={() => setAi('overview')} />
+            <Overview projects={projects} tasks={tasks} members={members} me={userId} today={today} actions={cardActions} onToggle={toggle} canCreate={canCreate}
+              onSeeAll={() => setTab(canCreate ? 'progetti' : 'condivisi')} onSeeShared={shared.length ? () => setTab('condivisi') : undefined}
+              onNew={() => setSheet({ kind: 'new' })} onQuickTask={() => setQuickTask(true)} onAskAI={() => setAi('overview')} />
           ) : (
-            <ProjectList projects={projects} tasks={tasks} members={members} me={userId} today={today} actions={cardActions} onNew={() => setSheet({ kind: 'new' })} />
+            <ProjectList key={tab} mode={tab === 'condivisi' ? 'shared' : 'mine'} projects={tab === 'condivisi' ? shared : mine} tasks={tasks} members={members} me={userId} today={today}
+              actions={cardActions} onNew={canCreate ? () => setSheet({ kind: 'new' }) : undefined} />
           )}
         </div>
       )}
 
       {/* Phone: the main action always at hand. */}
-      {!open && projects.length > 0 && (
+      {!open && canCreate && projects.length > 0 && (
         <button onClick={() => setSheet({ kind: 'new' })} aria-label="Nuovo progetto"
           className="sm:hidden fixed right-5 z-40 w-14 h-14 rounded-full btn-primary !p-0 flex items-center justify-center shadow-lg active:scale-95 transition-transform"
           style={{ bottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
@@ -193,7 +221,7 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
           onConnectAI={() => { setSheet(null); onConnectAI(); }} />
       )}
       {quickTask && (
-        <QuickTaskSheet projects={projects.filter(p => !p.archived_at && p.status !== 'completato')} onClose={() => setQuickTask(false)}
+        <QuickTaskSheet projects={projects.filter(p => !p.archived_at && p.status !== 'completato' && permsOf(p, members, userId).canEdit)} onClose={() => setQuickTask(false)}
           onSave={async (projectId, input) => { await api.addTask(projectId, input); setQuickTask(false); notify('Attività aggiunta'); }} />
       )}
       {ai === 'overview' && (
@@ -203,7 +231,7 @@ export default function Performance({ userId, onConnectAI }: { userId: string; o
       {ai === 'project' && open && (
         <AIPanel title={`MYND AI · ${open.name}`} system={PROJECT_AI_SYSTEM} quick={PROJECT_QUICK} project={open} tasks={openTasks}
           context={() => projectContext(open, openTasks, openMembers, aiExtra.res, aiExtra.upd, today, userId)}
-          onApply={applyActions} onClose={() => setAi(null)} onConnect={() => { setAi(null); onConnectAI(); }} />
+          onApply={permsOf(open, members, userId).canEdit ? applyActions : undefined} onClose={() => setAi(null)} onConnect={() => { setAi(null); onConnectAI(); }} />
       )}
       <Toasts items={toasts} onClose={closeToast} />
     </div>

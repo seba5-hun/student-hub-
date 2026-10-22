@@ -7,6 +7,7 @@ import { AuthUser, UserData, parseImportedData } from '../lib/store';
 import { useDialog } from './Dialog';
 import Logo from './Logo';
 import { useProfile } from '../lib/profile';
+import type { MyInvite } from '../lib/projects';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -30,6 +31,11 @@ interface LayoutProps {
   onAccountDeleted?: () => void;
   // "Vai al sito": myndspace.world as seen before the login (kept discreet, under the email).
   onOpenSite?: () => void;
+  // Performance for someone who is not the admin: only when they take part in a shared project.
+  showPerformance?: boolean;
+  // Invitations to shared projects, answered from the account menu.
+  projectInvites?: MyInvite[];
+  onAnswerInvite?: (invite: MyInvite, accept: boolean) => Promise<void>;
 }
 
 export const SECTIONS = [
@@ -50,8 +56,14 @@ const PERFORMANCE_SECTION = { id: 'performance', label: 'Performance', icon: Com
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite, showPerformance = false, projectInvites = [], onAnswerInvite }: LayoutProps) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [answering, setAnswering] = useState<string | null>(null);
+  const answer = async (inv: MyInvite, accept: boolean) => {
+    if (!onAnswerInvite || answering) return;
+    setAnswering(inv.id);
+    try { await onAnswerInvite(inv, accept); if (accept) setShowMenu(false); } finally { setAnswering(null); }
+  };
   const prof = useProfile();
   const dialog = useDialog();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -121,13 +133,18 @@ export default function Layout({ children, currentSection, onSectionChange, user
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
             <div className="relative">
-              <button onClick={() => setShowMenu(!showMenu)} aria-label="Account" className="w-9 h-9 rounded-full glass-card !rounded-full flex items-center justify-center text-sm font-semibold">
+              <button onClick={() => setShowMenu(!showMenu)} aria-label={projectInvites.length ? `Account, ${projectInvites.length} ${projectInvites.length === 1 ? 'invito' : 'inviti'}` : 'Account'}
+                className="relative w-9 h-9 rounded-full glass-card !rounded-full flex items-center justify-center text-sm font-semibold">
                 {user.email[0].toUpperCase()}
+                {projectInvites.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+                    style={{ background: 'var(--brand-fill)', color: 'var(--on-brand)' }}>{projectInvites.length}</span>
+                )}
               </button>
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-12 w-60 rounded-3xl glass-float z-50 animate-scale-in overflow-hidden p-1.5">
+                  <div className={`absolute right-0 top-12 ${projectInvites.length ? 'w-80 max-w-[calc(100vw-28px)]' : 'w-60'} max-h-[80vh] overflow-y-auto rounded-3xl glass-float z-50 animate-scale-in p-1.5`}>
                     <div className={`px-4 py-3 border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
                       <p className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{user.email}</p>
                       {onOpenSite && (
@@ -136,6 +153,23 @@ export default function Layout({ children, currentSection, onSectionChange, user
                         </button>
                       )}
                     </div>
+                    {projectInvites.length > 0 && (
+                      <div className={`px-3 py-3 border-b space-y-2 ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
+                        <p className="px-1 text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: 'var(--text-muted)' }}>Inviti ai progetti</p>
+                        {projectInvites.map(inv => (
+                          <div key={inv.id} className="rounded-2xl p-3" style={{ background: 'var(--glass-well)' }}>
+                            <p className="text-sm" style={{ color: 'var(--text)' }}>
+                              <span className="font-semibold">{inv.invited_by_email?.split('@')[0] || 'Qualcuno'}</span> ti invita a <span className="font-semibold">“{inv.project_name}”</span>
+                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--text-subtle)' }}>{inv.role === 'osservatore' ? 'In sola lettura' : inv.role === 'responsabile' ? 'Come responsabile' : 'Per lavorarci insieme'}</p>
+                            <div className="flex gap-2 mt-2.5">
+                              <button onClick={() => answer(inv, true)} disabled={!!answering} className="btn-primary h-9 px-3.5 text-sm disabled:opacity-50">Accetta</button>
+                              <button onClick={() => answer(inv, false)} disabled={!!answering} className="btn-secondary h-9 px-3.5 text-sm disabled:opacity-50">Rifiuta</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <button onClick={handleExport} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
                       <Download className="w-4 h-4" /> Esporta dati
                     </button>
@@ -171,7 +205,7 @@ export default function Layout({ children, currentSection, onSectionChange, user
               </button>
             </div>
             <nav className="p-3 space-y-1">
-              {[...(showDeveloper ? [SECTIONS[0], PERFORMANCE_SECTION, BUSINESS_SECTION] : [SECTIONS[0]]), ...orderMenu([...SECTIONS.slice(1), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) }))].filter(section => !hiddenSections.includes(section.id)), customOf(data.settings).menu), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
+              {[SECTIONS[0], ...(showDeveloper || showPerformance ? [PERFORMANCE_SECTION] : []), ...(showDeveloper ? [BUSINESS_SECTION] : []), ...orderMenu([...SECTIONS.slice(1), ...customOf(data.settings).sections.map(cs => ({ id: `cs:${cs.id}`, label: cs.name, icon: sectionIcon(cs.icon) }))].filter(section => !hiddenSections.includes(section.id)), customOf(data.settings).menu), ...(showDeveloper ? [DEVELOPER_SECTION] : [])].map(section => (
                 <button
                   key={section.id}
                   onClick={() => { onSectionChange(section.id); setSidebarOpen(false); }}

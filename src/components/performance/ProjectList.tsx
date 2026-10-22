@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, CalendarDays } from 'lucide-react';
-import { KIND_LABEL, Member, PTask, Project, lateness, nextDue, progressOf, relativeDay } from '../../lib/projects';
+import { KIND_LABEL, Member, PTask, Project, lateness, memberName, nextDue, permsOf, progressOf, relativeDay } from '../../lib/projects';
 import { Avatars, MoreMenu, Pills, ProgressBar, StatusBadge, Empty, shortDate } from './ui';
 
 type Filter = 'tutti' | 'in_corso' | 'da_iniziare' | 'completato' | 'archiviati';
@@ -18,20 +18,22 @@ export function ProjectCard({ p, tasks, members, me, today, actions }: { p: Proj
   const { late } = lateness(p, tasks, today);
   const due = nextDue(p, tasks, today);
   const open = tasks.filter(t => !t.parent_id && t.status !== 'fatto').length;
+  const perms = permsOf(p, members, me);
+  const owner = members.find(m => m.role === 'proprietario');
   return (
     <article className="glass-card rounded-[24px] p-5 flex flex-col gap-4 cursor-pointer transition-transform duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
       onClick={() => actions.onOpen(p)} onKeyDown={e => { if (e.key === 'Enter') actions.onOpen(p); }} tabIndex={0} aria-label={`Apri ${p.name}`}>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] mb-1" style={{ color: 'var(--text-subtle)' }}>{KIND_LABEL[p.kind]}{p.archived_at ? ' · Archiviato' : ''}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] mb-1" style={{ color: 'var(--text-subtle)' }}>{KIND_LABEL[p.kind]}{!perms.isOwner && owner ? ` · di ${memberName(members, owner.user_id, me)}` : ''}{p.archived_at ? ' · Archiviato' : ''}</p>
           <h3 className="text-[17px] font-semibold leading-snug tracking-[-0.01em] break-words" style={{ color: 'var(--text)' }}>{p.name}</h3>
           {p.description && <p className="text-sm mt-1 line-clamp-2" style={{ color: 'var(--text-muted)' }}>{p.description}</p>}
         </div>
         <MoreMenu label={`Azioni per ${p.name}`} items={[
-          { label: 'Modifica progetto', onClick: () => actions.onEdit(p) },
+          { label: 'Modifica progetto', onClick: () => actions.onEdit(p), hidden: !perms.canEditProject },
           { label: 'Duplica progetto', onClick: () => actions.onDuplicate(p) },
-          { label: p.archived_at ? 'Ripristina progetto' : 'Archivia progetto', onClick: () => actions.onArchive(p) },
-          { label: 'Elimina progetto', onClick: () => actions.onDelete(p), danger: true, hidden: p.owner_id !== me },
+          { label: p.archived_at ? 'Ripristina progetto' : 'Archivia progetto', onClick: () => actions.onArchive(p), hidden: !perms.canEditProject },
+          { label: 'Elimina progetto', onClick: () => actions.onDelete(p), danger: true, hidden: !perms.isOwner },
         ]} />
       </div>
       <ProgressBar progress={prog} compact />
@@ -47,8 +49,8 @@ export function ProjectCard({ p, tasks, members, me, today, actions }: { p: Proj
   );
 }
 
-export function ProjectList({ projects, tasks, members, me, today, actions, onNew }: {
-  projects: Project[]; tasks: PTask[]; members: Member[]; me: string; today: string; actions: CardActions; onNew: () => void;
+export function ProjectList({ mode, projects, tasks, members, me, today, actions, onNew }: {
+  mode: 'mine' | 'shared'; projects: Project[]; tasks: PTask[]; members: Member[]; me: string; today: string; actions: CardActions; onNew?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>('tutti');
   const [query, setQuery] = useState('');
@@ -86,7 +88,7 @@ export function ProjectList({ projects, tasks, members, me, today, actions, onNe
         { id: 'archiviati', label: 'Archiviati', count: counts.archiviati },
       ]} />
       {shown.length === 0 ? (
-        projects.length === 0 ? <FirstProject onNew={onNew} /> : (
+        projects.length === 0 ? (mode === 'shared' || !onNew ? <NoShared /> : <FirstProject onNew={onNew} />) : (
           <Empty>{query.trim() ? `Nessun progetto trovato per “${query.trim()}”.` : filter === 'archiviati' ? 'Nessun progetto archiviato.' : 'Nessun progetto in questo elenco.'}</Empty>
         )
       ) : (
@@ -107,6 +109,15 @@ export function FirstProject({ onNew }: { onNew: () => void }) {
       <h3 className="text-2xl font-bold tracking-[-0.03em]" style={{ color: 'var(--text)' }}>Ogni grande progetto inizia da un'idea.</h3>
       <p className="mt-2 max-w-sm text-[15px]" style={{ color: 'var(--text-muted)' }}>Crea il tuo primo progetto e organizza tutto in un unico posto.</p>
       <button onClick={onNew} className="btn-primary h-12 px-6 mt-6 inline-flex items-center gap-2"><Plus className="w-4 h-4" /> Crea il tuo primo progetto</button>
+    </div>
+  );
+}
+
+export function NoShared() {
+  return (
+    <div className="glass-card rounded-[24px] px-6 py-10 text-center">
+      <p className="text-lg font-semibold" style={{ color: 'var(--text)' }}>Nessun progetto condiviso con te.</p>
+      <p className="mt-2 text-[15px] max-w-md mx-auto" style={{ color: 'var(--text-muted)' }}>Quando qualcuno ti invita a un progetto, l'invito compare nel menu del tuo account: il cerchio con la tua iniziale in alto a destra.</p>
     </div>
   );
 }

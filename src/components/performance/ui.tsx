@@ -40,7 +40,7 @@ export function Avatars({ members, me, max = 4 }: { members: Member[]; me: strin
       {members.slice(0, max).map(m => (
         <span key={m.user_id} title={memberName(members, m.user_id, me)} className="w-6 h-6 rounded-full text-[10px] font-semibold flex items-center justify-center"
           style={{ background: 'var(--glass-well)', color: 'var(--text-muted)', boxShadow: '0 0 0 2px var(--bg, #0b0c0d)' }}>
-          {initials(memberName(members, m.user_id, me))}
+          {initials(memberName(members, m.user_id, ''))}
         </span>
       ))}
       {members.length > max && <span className="text-[11px] pl-2.5" style={{ color: 'var(--text-subtle)' }}>+{members.length - max}</span>}

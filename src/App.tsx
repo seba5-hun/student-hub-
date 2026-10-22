@@ -68,6 +68,7 @@ import { useDialog } from './components/Dialog';
 import { applyOnboarding, applyOnboardingKey, type OnboardingDraft } from './lib/onboarding';
 import { DEMO_USER, createDemoData, isDemoUser } from './lib/demoData';
 import { AccountStatus, fetchMyStatus, loadAdminUsers } from './lib/admin';
+import { MyInvite, answerInvite, hasProjects, listMyInvites } from './lib/projects';
 import { setAnalyticsUser, setAnalyticsSection, isDeveloper } from './lib/analytics';
 import {
   AuthUser,
@@ -150,6 +151,12 @@ function App() {
   // Admin: suggestions not read yet ("Suggerisci una modifica").
   const [adminIdeas, setAdminIdeas] = useState(0);
   const [adminCustom, setAdminCustom] = useState(0);   // personalisations waiting for approval
+  // Performance shared projects: invitations waiting (account menu), whether the person takes part in
+  // a project (then Performance opens for them too), the project to open after accepting.
+  const [projectInvites, setProjectInvites] = useState<MyInvite[]>([]);
+  const [inProjects, setInProjects] = useState(false);
+  const [projectFocus, setProjectFocus] = useState<string | null>(null);
+  const clearProjectFocus = useCallback(() => setProjectFocus(null), []);
   const [suggestOpen, setSuggestOpen] = useState(false);
   // Assistente MYND: opened from Home → Personalizza and from the mini-apps (openAssistant).
   const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
@@ -576,12 +583,38 @@ function App() {
     return () => window.clearInterval(id);
   }, [user, hasData]);
 
+  // Invitations to projects: at login, every 3 minutes and when coming back to the app.
+  useEffect(() => {
+    if (!user || !hasData || isDemoUser(user)) return;
+    let alive = true;
+    const check = () => {
+      listMyInvites().then(list => { if (alive) setProjectInvites(list); });
+      if (!isDeveloper(user.email)) hasProjects(user.id).then(v => { if (alive) setInProjects(v); });
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    check();
+    const id = window.setInterval(check, 3 * 60000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, [user, hasData]);
+
+  const answerProjectInvite = useCallback(async (invite: MyInvite, accept: boolean) => {
+    try {
+      const projectId = await answerInvite(invite.id, accept);
+      setProjectInvites(list => list.filter(x => x.id !== invite.id));
+      if (accept) { setInProjects(true); setProjectFocus(projectId); setCurrentSection('performance'); window.scrollTo({ top: 0 }); }
+    } catch (err) {
+      await dialog.alert({ title: 'Invito non riuscito', message: err instanceof Error ? err.message : String(err) });
+      listMyInvites().then(setProjectInvites);
+    }
+  }, [dialog]);
+
   useEffect(() => {
     if (!openPerformance.current || !user || !data) return;
     openPerformance.current = false;
     window.history.replaceState({}, document.title, '/');
-    if (isDeveloper(user.email)) setCurrentSection('performance');
-  }, [user, data]);
+    if (isDeveloper(user.email) || inProjects) setCurrentSection('performance');
+  }, [user, data, inProjects]);
 
   useEffect(() => {
     if (!openAdmin.current || !user || !data) return;
@@ -892,6 +925,9 @@ function App() {
         colorTheme={data?.settings.colorTheme}
         hiddenSections={data.settings.hiddenSections}
         showDeveloper={isDeveloper(user.email)}
+        showPerformance={!isDemo && (isDeveloper(user.email) || inProjects)}
+        projectInvites={isDemo ? [] : projectInvites}
+        onAnswerInvite={answerProjectInvite}
         adminBadge={adminPending + adminIdeas + adminCustom}
         onSuggest={() => setSuggestOpen(true)}
         onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
@@ -974,8 +1010,9 @@ function App() {
           />
         )}
         {currentSection === 'business' && isDeveloper(user.email) && <Business userId={user.id} userEmail={user.email} />}
-        {currentSection === 'performance' && isDeveloper(user.email) && !isDemo && (
-          <Performance userId={user.id} onConnectAI={() => handleSectionChange('guida-ai')} />
+        {currentSection === 'performance' && (isDeveloper(user.email) || inProjects) && !isDemo && (
+          <Performance userId={user.id} canCreate={isDeveloper(user.email)} focusProjectId={projectFocus} onFocusUsed={clearProjectFocus}
+            onConnectAI={() => handleSectionChange('guida-ai')} />
         )}
         {currentSection === 'sviluppatori' && isDeveloper(user.email) && (
           <AdminPanel darkMode={darkMode} onPendingChange={setAdminPending} onIdeasChange={setAdminIdeas} onCustomChange={setAdminCustom} />

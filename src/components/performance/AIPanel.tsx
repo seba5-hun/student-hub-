@@ -74,7 +74,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, onApply
       // The data is read again at every question, so the answer follows the latest changes.
       const turns: ChatTurn[] = history.slice(-8).map((m, i, a) => ({ role: m.role, text: i === a.length - 1 ? `DATI AGGIORNATI:\n${context()}\n\nDOMANDA: ${m.text}` : m.text }));
       const reply = await askAuto(system, turns);
-      const { text, actions } = project && tasks ? parseActions(reply, tasks, project) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
+      const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
       setMsgs(m => [...m, { role: 'assistant', text: text || 'Ecco le modifiche che ti propongo.', actions, state: actions.length ? 'open' : undefined }]);
     } catch (err) {
       setError(err instanceof Error ? err.message.split('\n')[0] : String(err));
