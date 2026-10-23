@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
+import { askAuto, autoReady } from '../../lib/ai';
+import { fillSystem, parseItems } from '../../lib/projectsAI';
 import {
   List, Wallet, CalendarDays, Map, Clock, Users, Star, BookOpen, Dumbbell, Utensils, Plane, Home, Briefcase, Target, Heart, ShoppingCart, Car, Music,
-  Camera, Gift, GraduationCap, Lightbulb, BarChart3, CheckSquare, Phone, Bike, Leaf, PawPrint, Plus, Loader2, X, ArrowRight, ExternalLink,
+  Camera, Gift, GraduationCap, Lightbulb, BarChart3, CheckSquare, Phone, Bike, Leaf, PawPrint, Plus, Loader2, X, ArrowRight, ExternalLink, Sparkles, Undo2,
 } from 'lucide-react';
-import { Member } from '../../lib/projects';
+import { Member, PTask, Project } from '../../lib/projects';
 import {
-  Tool, ToolField, ToolItem, Transfer, cleanItemData, computeSummary, formatValue, itemTitle, money, num, personLabel, peopleOf,
+  RIMBORSO, Tool, ToolField, ToolItem, Transfer, checkItem, cleanItemData, computeSummary, formatValue, isRepayment, itemTitle, money, num, personLabel, peopleOf,
+  resolvePerson, sameItem,
 } from '../../lib/tools';
 import { useDialog } from '../Dialog';
 import { CheckButton, Empty, ErrorNote, Label, MoreMenu, Sheet } from './ui';
@@ -17,9 +20,10 @@ export function ToolIcon({ name, className = 'w-4 h-4' }: { name: string | null 
 }
 
 // One tool of a project: its sums on top, then its items as a list, a checklist or day by day.
-export function ToolTab({ tool, items, members, me, canEdit, canEditProject, onSave, onRemove, onEditTool, onDeleteTool, notify }: {
+export function ToolTab({ tool, items, members, me, canEdit, canEditProject, project, tasks, today, onSave, onSaveMany, onRemove, onEditTool, onDeleteTool, notify }: {
   tool: Tool; items: ToolItem[]; members: Member[]; me: string; canEdit: boolean; canEditProject: boolean;
-  onSave: (data: Record<string, unknown>, id?: string) => Promise<unknown>; onRemove: (id: string) => Promise<void>;
+  project: Project; tasks: PTask[]; today: string;
+  onSave: (data: Record<string, unknown>, id?: string) => Promise<unknown>; onSaveMany: (datas: Record<string, unknown>[]) => Promise<unknown>; onRemove: (id: string) => Promise<void>;
   onEditTool: () => void; onDeleteTool: () => void; notify: (text: string, error?: boolean) => void;
 }) {
   const cfg = tool.config;
@@ -60,6 +64,30 @@ export function ToolTab({ tool, items, members, me, canEdit, canEditProject, onS
     return map.map(([label, list]) => ({ label, items: list }));
   }, [sorted, cfg, dateField, members, me]);
 
+  // "Compila con MYND AI": items guessed from the project (or from a hint), shown before adding.
+  const [fill, setFill] = useState<{ busy: boolean; hint: string; items: Record<string, unknown>[] | null; error: string } | null>(null);
+  const firstId = cfg.fields[0].id;
+  // Only tools MYND AI can fill without inventing anything (never expenses, hours, people or dates).
+  const guessable = cfg.fields.every(f => !f.required || !['soldi', 'numero', 'persona', 'persone', 'data', 'ora', 'si_no', 'valutazione'].includes(f.type));
+  const runFill = async (hint: string) => {
+    setFill({ busy: true, hint, items: null, error: '' });
+    try {
+      const reply = await askAuto(fillSystem(project, tasks, tool, items, members, me, today), [{ role: 'user', text: hint.trim() || 'Compilalo tu: ipotizza cosa serve.' }], { json: true });
+      const have = new Set(items.map(it => String(it.data[firstId] ?? '').trim().toLowerCase()));
+      const list = parseItems(reply).map(x => cleanItemData(cfg, x, people, { members, me, guess: true }))
+        .filter(x => x[firstId] && !have.has(String(x[firstId]).trim().toLowerCase()))
+        .filter((x, i, a) => a.findIndex(y => String(y[firstId]).toLowerCase() === String(x[firstId]).toLowerCase()) === i);
+      if (!list.length) throw new Error('MYND AI non ha trovato voci nuove da aggiungere. Prova a dare un\'indicazione.');
+      setFill({ busy: false, hint, items: list, error: '' });
+    } catch (err) { setFill({ busy: false, hint, items: null, error: err instanceof Error ? err.message.split('\n')[0] : String(err) }); }
+  };
+  const addFilled = () => {
+    if (!fill?.items?.length) return;
+    const list = fill.items;
+    setFill(null);
+    onSaveMany(list).then(() => notify(`${list.length} voci aggiunte`)).catch(err => notify(err instanceof Error ? err.message : String(err), true));
+  };
+
   const toggle = (it: ToolItem) => {
     if (!doneField) return;
     onSave({ ...it.data, [doneField.id]: it.data[doneField.id] !== true }, it.id).catch(err => notify(err instanceof Error ? err.message : String(err), true));
@@ -67,7 +95,8 @@ export function ToolTab({ tool, items, members, me, canEdit, canEditProject, onS
   const settle = (t: Transfer) => {
     const s = cfg.summaries.find(x => x.kind === 'saldi');
     if (!s || s.kind !== 'saldi') return;
-    setPrefill({ [cfg.fields[0].id]: 'Rimborso', [s.amount]: t.amount, [s.payer]: t.from, [s.between]: [t.to], ...(dateField ? { [dateField.id]: new Date().toISOString().slice(0, 10) } : {}) });
+    // A repayment: it settles the debt and never counts as a new expense.
+    setPrefill({ [cfg.fields[0].id]: 'Rimborso', [s.amount]: t.amount, [s.payer]: t.from, [s.between]: [t.to], [RIMBORSO]: true, ...(dateField ? { [dateField.id]: new Date().toISOString().slice(0, 10) } : {}) });
     setEditing('new');
   };
 
@@ -115,9 +144,48 @@ export function ToolTab({ tool, items, members, me, canEdit, canEditProject, onS
       )}
 
       {canEdit && (
-        <button onClick={() => { setPrefill(null); setEditing('new'); }} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5">
-          <Plus className="w-4 h-4" /> Aggiungi {itemName}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => { setPrefill(null); setEditing('new'); }} className="btn-primary h-11 px-4 inline-flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Aggiungi {itemName}
+          </button>
+          {autoReady() && !fill && guessable && (
+            <button onClick={() => runFill('')} className="btn-secondary h-11 px-4 inline-flex items-center gap-2">
+              <Sparkles className="w-4 h-4" style={{ color: 'var(--brand-ring)' }} /> Compila con MYND AI
+            </button>
+          )}
+        </div>
+      )}
+
+      {fill && (
+        <div className="rounded-[20px] p-4 space-y-3 animate-scale-in" style={{ background: 'color-mix(in srgb, var(--brand-fill) 10%, transparent)' }}>
+          {fill.busy ? (
+            <p className="text-sm inline-flex items-center gap-2" style={{ color: 'var(--text-muted)' }}><Loader2 className="w-4 h-4 animate-spin" /> MYND AI sta preparando le voci…</p>
+          ) : fill.items ? (
+            <>
+              <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>MYND AI propone {fill.items.length} voci. Togli quelle che non ti servono:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {fill.items.map((x, i) => (
+                  <span key={i} className="h-8 pl-3 pr-1 rounded-full inline-flex items-center gap-1 text-sm glass-card !rounded-full" style={{ color: 'var(--text)' }}>
+                    {String(x[firstId])}
+                    <button onClick={() => setFill(f => f && { ...f, items: (f.items || []).filter((_, j) => j !== i) })} aria-label={`Togli ${String(x[firstId])}`} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ color: 'var(--text-subtle)' }}><X className="w-3.5 h-3.5" /></button>
+                  </span>
+                ))}
+              </div>
+              {cfg.fields.some(f => f.type === 'soldi') && <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Importi, persone e date non vengono mai inventati: li aggiungi tu quando li sai.</p>}
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={addFilled} disabled={!fill.items.length} className="btn-primary h-10 px-4 text-sm disabled:opacity-40">Aggiungi {fill.items.length} voci</button>
+                <button onClick={() => setFill(null)} className="btn-secondary h-10 px-4 text-sm">Lascia stare</button>
+              </div>
+            </>
+          ) : <p className="text-sm" style={{ color: 'var(--danger)' }}>{fill.error}</p>}
+          {!fill.busy && (
+            <form className="flex gap-2" onSubmit={e => { e.preventDefault(); runFill(fill.hint); }}>
+              <input value={fill.hint} onChange={e => setFill(f => f && { ...f, hint: e.target.value })} placeholder="Vuoi qualcosa di diverso? Scrivilo (facoltativo)" aria-label="Indicazioni per MYND AI"
+                className="input-glass flex-1 min-w-0 h-10 text-sm" />
+              <button type="submit" className="btn-secondary h-10 px-3 text-sm flex-shrink-0">Rifai</button>
+            </form>
+          )}
+        </div>
       )}
 
       {items.length === 0 ? (
@@ -135,17 +203,24 @@ export function ToolTab({ tool, items, members, me, canEdit, canEditProject, onS
                     .filter(f => f.type !== 'si_no' && f.type !== 'testo_lungo' && f.type !== 'link' && f.id !== amount?.id && f.id !== (cfg.view === 'giorni' ? dateField?.id : cfg.groupBy))
                     .map(f => { const v = formatValue(f, it.data[f.id], cfg, members, me); return v && (f.type === 'persona' || f.type === 'persone') ? `${f.label.toLowerCase()} ${v}` : v; }).filter(Boolean);
                   const link = cfg.fields.find(f => f.type === 'link' && it.data[f.id]);
+                  const repay = isRepayment(tool, it);
+                  const temp = it.id.startsWith('tmp-');
+                  if (repay) meta.unshift('rimborso, non conta nelle spese');
                   return (
                     <li key={it.id} className="rounded-2xl pr-3 flex items-center gap-1" style={{ background: 'var(--glass-well)' }}>
                       {cfg.view === 'checklist' && doneField
                         ? <CheckButton done={done} label={done ? `Riapri ${itemTitle(tool, it)}` : `Spunta ${itemTitle(tool, it)}`} onClick={() => toggle(it)} disabled={!canEdit} />
                         : <span className="w-4" />}
-                      <button onClick={() => canEdit && setEditing(it)} disabled={!canEdit} className="flex-1 min-w-0 py-2.5 text-left disabled:cursor-default">
+                      <button onClick={() => canEdit && !temp && setEditing(it)} disabled={!canEdit || temp} className={`flex-1 min-w-0 py-2.5 text-left disabled:cursor-default ${temp ? 'opacity-70' : ''}`}>
                         <p className={`text-[15px] break-words ${done ? 'line-through' : ''}`} style={{ color: done ? 'var(--text-subtle)' : 'var(--text)' }}>{itemTitle(tool, it)}</p>
                         {meta.length > 0 && <p className="text-xs truncate" style={{ color: 'var(--text-subtle)' }}>{meta.join(' · ')}</p>}
                       </button>
                       {link && <a href={String(it.data[link.id])} target="_blank" rel="noopener noreferrer" aria-label="Apri il link" className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5" style={{ color: 'var(--text-subtle)' }}><ExternalLink className="w-4 h-4" /></a>}
-                      {amount && it.data[amount.id] !== undefined && <span className="text-[15px] font-semibold tabular flex-shrink-0" style={{ color: 'var(--text)' }}>{money(num(it.data[amount.id]), cfg.currency)}</span>}
+                      {amount && it.data[amount.id] !== undefined && (
+                        <span className={`text-[15px] tabular flex-shrink-0 inline-flex items-center gap-1 ${repay ? '' : 'font-semibold'}`} style={{ color: repay ? 'var(--text-subtle)' : 'var(--text)' }}>
+                          {repay && <Undo2 className="w-3.5 h-3.5" />}{money(num(it.data[amount.id]), cfg.currency)}
+                        </span>
+                      )}
                     </li>
                   );
                 })}
@@ -187,11 +262,20 @@ function ItemSheet({ tool, items, item, prefill, people, members, me, onClose, o
   const [extraPeople, setExtraPeople] = useState<string[]>([]);
   const allPeople = [...people, ...extraPeople.filter(p => !people.includes(p))];
 
+  const hasSplits = cfg.summaries.some(x => x.kind === 'saldi');
   const save = async () => {
     if (busy) return;
-    const data = cleanItemData(cfg, values, allPeople);
-    const missing = cfg.fields.filter((f, i) => (f.required || i === 0) && (data[f.id] === undefined || (Array.isArray(data[f.id]) && !(data[f.id] as unknown[]).length)));
-    if (missing.length) { setError(`Manca: ${missing.map(f => f.label.toLowerCase()).join(', ')}.`); return; }
+    const data = cleanItemData(cfg, values, allPeople, { members, me });
+    const { error: wrong, warnings } = checkItem(cfg, data);
+    if (wrong) { setError(wrong); return; }
+    const saldi = cfg.summaries.find(x => x.kind === 'saldi');
+    if (saldi && saldi.kind === 'saldi' && data[RIMBORSO] === true) {
+      const to = data[saldi.between];
+      if (!Array.isArray(to) || to.length !== 1) { setError('Un rimborso va da una persona a UN\'altra: scegli chi riceve i soldi.'); return; }
+      if (to[0] === data[saldi.payer]) { setError('Chi dà e chi riceve il rimborso devono essere persone diverse.'); return; }
+    }
+    if (warnings.length && !(await dialog.confirm({ title: 'Controlla un attimo', message: warnings.join('\n'), confirmLabel: 'È giusto, salva' }))) return;
+    if (!item && items.some(it => sameItem(it.data, data)) && !(await dialog.confirm({ title: 'C\'è già una voce uguale', message: 'Vuoi aggiungerla di nuovo?', confirmLabel: 'Aggiungi lo stesso' }))) return;
     setBusy(true); setError('');
     try { await onSave(data); } catch (err) { setError(err instanceof Error ? err.message : String(err)); setBusy(false); }
   };
@@ -214,6 +298,13 @@ function ItemSheet({ tool, items, item, prefill, people, members, me, onClose, o
           people={allPeople} members={members} me={me} onNewPerson={p => setExtraPeople(x => [...x, p])}
           suggestions={f.type === 'scelta' ? [...new Set(items.map(it => it.data[f.id]).filter((v): v is string => typeof v === 'string' && !!v))] : []} />
       ))}
+      {hasSplits && (
+        <label className="flex items-start gap-3 py-1 cursor-pointer">
+          <input type="checkbox" checked={values[RIMBORSO] === true} onChange={e => set(RIMBORSO, e.target.checked)} className="w-5 h-5 mt-0.5 accent-[var(--brand-fill)]" />
+          <span><span className="block text-[15px]" style={{ color: 'var(--text)' }}>È un rimborso</span>
+            <span className="block text-xs" style={{ color: 'var(--text-subtle)' }}>Soldi ridati a qualcuno: sistemano i conti ma non contano come spesa.</span></span>
+        </label>
+      )}
       <ErrorNote text={error} />
     </Sheet>
   );
@@ -287,7 +378,7 @@ function FieldInput({ field: f, value, onChange, autoFocus, currency, people, me
                 {personLabel(p, members, me)}
               </button>
             ))}
-            <AddName onAdd={name => { const k = `n:${name}`; onNewPerson(k); toggle(k); }} />
+            <AddName onAdd={name => { const k = resolvePerson(name, people, members, me); if (!k) return; if (!people.includes(k)) onNewPerson(k); if (!chosen.includes(k)) toggle(k); }} />
           </div>
         </div>
       );

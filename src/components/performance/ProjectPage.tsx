@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Sparkles, CalendarDays, AlertTriangle, ListChecks } from 'lucide-react';
+import { Plus, Sparkles, CalendarDays, AlertTriangle, ListChecks, Loader2 } from 'lucide-react';
 import {
   KIND_LABEL, Member, PTask, Project, ProjectStatus, ProjectUpdate, STATUS_LABEL, TASK_STATUS_LABEL, byPosition, lateness, listUpdates,
   memberName, permsOf, progressOf, relativeDay, removeMember,
@@ -20,9 +20,9 @@ type Tab = 'panoramica' | 'attivita' | 'file' | 'persone' | `tool:${string}`;
 type Sort = 'ordine' | 'scadenza' | 'stato' | 'responsabile';
 const STATUSES: ProjectStatus[] = ['da_iniziare', 'in_corso', 'completato'];
 
-export function ProjectPage({ project: p, tasks, members, me, today, api, toolsApi, archive, onToolSheet, focusToolId, onFocusToolUsed, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
+export function ProjectPage({ project: p, tasks, members, me, today, api, toolsApi, archive, onToolSheet, focusToolId, onFocusToolUsed, preparing, onBack, onEdit, onDuplicate, onArchive, onDelete, onAskAI, onLeft, notify }: {
   project: Project; tasks: PTask[]; members: Member[]; me: string; today: string; api: ProjectsApi; toolsApi: ToolsApi; archive: ArchiveItem[];
-  onToolSheet: (t: Tool | 'new') => void; focusToolId?: string | null; onFocusToolUsed?: () => void;
+  onToolSheet: (t: Tool | 'new') => void; focusToolId?: string | null; onFocusToolUsed?: () => void; preparing?: boolean;
   onBack: () => void; onEdit: () => void; onDuplicate: () => void; onArchive: () => void; onDelete: () => void; onAskAI: () => void;
   onLeft: () => void; notify: (text: string, error?: boolean) => void;
 }) {
@@ -120,11 +120,21 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, toolsA
         { id: 'persone', label: 'Persone', count: members.length > 1 ? members.length : undefined },
         ...(canAddTools ? [{ id: 'nuovo' as Tab, label: '+ Strumento' }] : []),
       ]} />
+      {preparing && (
+        <p className="text-sm -mt-2 inline-flex items-center gap-2" style={{ color: 'var(--text-muted)' }} role="status">
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand-ring)' }} /> Sto aggiungendo le attività e gli strumenti preparati da MYND AI…
+        </p>
+      )}
       {perms.role === 'osservatore' && <p className="text-sm -mt-2" style={{ color: 'var(--text-subtle)' }}>Sei in sola lettura: vedi tutto, ma non puoi modificare.</p>}
 
       {tab === 'panoramica' && (
         <OverviewTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} overdue={overdue} updates={updates} readOnly={!perms.canEdit}
-          onStatus={perms.canEditProject ? s => { api.saveProject(p.id, { status: s }).catch(fail); } : undefined} onToggle={toggle} onOpenTask={openTask}
+          onStatus={perms.canEditProject ? async s => {
+            // "Completato" with tasks still open is asked, never assumed.
+            const open = top.filter(t => t.status !== 'fatto').length;
+            if (s === 'completato' && open && !(await dialog.confirm({ title: `Ci sono ancora ${open} attività aperte`, message: 'Vuoi segnare comunque il progetto come completato?', confirmLabel: 'Sì, è completato' }))) return;
+            api.saveProject(p.id, { status: s }).catch(fail);
+          } : undefined} onToggle={toggle} onOpenTask={openTask}
           onAdd={() => setEditing('new')} onAskAI={onAskAI} onEditGoal={onEdit} onSeeTasks={() => setTab('attivita')}
           extra={(tools.length > 0 || canAddTools) && (
             <section>
@@ -154,8 +164,8 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, toolsA
       )}
       {openTool && (
         <ToolTab key={openTool.id} tool={openTool} items={toolItems.filter(i => i.tool_id === openTool.id)} members={members} me={me}
-          canEdit={perms.canEdit} canEditProject={perms.canEditProject} notify={notify}
-          onSave={(data, id) => toolsApi.putItem(openTool, data, id)} onRemove={toolsApi.removeItem}
+          canEdit={perms.canEdit} canEditProject={perms.canEditProject} notify={notify} project={p} tasks={tasks} today={today}
+          onSave={(data, id) => toolsApi.putItem(openTool, data, id)} onSaveMany={datas => toolsApi.putItems(openTool, datas)} onRemove={toolsApi.removeItem}
           onEditTool={() => setToolSheet(openTool)} onDeleteTool={() => removeTool(openTool)} />
       )}
       {tab === 'attivita' && (

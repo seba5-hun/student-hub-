@@ -7,10 +7,11 @@ import { toDateKey } from '../../lib/store';
 import type { ArchiveItem } from '../../lib/store';
 import { useDialog } from '../Dialog';
 import { useProjects } from './useProjects';
-import { useTools } from './useTools';
+import { useTools, TOOLS_CHANGED } from './useTools';
 import { ToolSheet } from './ToolSheet';
 import { AIDock, useAIDock } from './AIDock';
-import { Tool, ToolSpec, cleanItemData, createTool, peopleOf } from '../../lib/tools';
+import { Tool, ToolConfig, ToolItem, checkItem, cleanItemData, createTool, peopleOf, sameItem, saveItems } from '../../lib/tools';
+import type { ToolWithItems } from '../../lib/projectsAI';
 import { Overview } from './Overview';
 import { CardActions, ProjectList } from './ProjectList';
 import { ProjectPage } from './ProjectPage';
@@ -116,48 +117,69 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
 
   const cardActions: CardActions = { onOpen: openProject, onEdit: p => setSheet({ kind: 'edit', project: p }), onDuplicate: duplicate, onArchive: archive, onDelete: remove };
 
-  const saveSheet = async (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolSpec[]) => {
+  // A new project opens at once; its tasks and tools (with their ready-made items) are added
+  // right after, in parallel, while the page is already on screen.
+  const [preparing, setPreparing] = useState<string | null>(null);
+  const saveSheet = async (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolWithItems[]) => {
     if (sheet?.kind === 'edit') {
       await api.saveProject(sheet.project.id, input);
       setSheet(null);
       notify('Modifiche salvate');
       return;
     }
-    const p = await api.create(input, drafts);
-    // The tools MYND AI chose for this project (a missing script must not block the project).
-    let toolsMade = 0;
-    for (const [i, spec] of (tools || []).entries()) { try { await createTool(p.id, spec, i); toolsMade++; } catch { /* listed below */ } }
+    const p = await api.create(input);
     setSheet(null);
     setTab(canCreate ? 'progetti' : 'condivisi');
     openProject(p);
-    notify([drafts?.length ? `${drafts.length} attività` : '', toolsMade ? `${toolsMade} ${toolsMade === 1 ? 'strumento' : 'strumenti'}` : ''].filter(Boolean).join(' e ').replace(/^(.+)$/, 'Progetto creato con $1') || 'Progetto creato',
-      !!tools?.length && toolsMade < tools.length);
+    if (!drafts?.length && !tools?.length) { notify('Progetto creato'); return; }
+    setPreparing(p.id);
+    const toolJobs = (tools || []).map(async ({ items, ...spec }, i) => {
+      const t = await createTool(p.id, spec, i);
+      if (items?.length) await saveItems(t, sensibleItems(t.config, items.map(x => cleanItemData(t.config, x, [], { guess: true })), []).ok);
+    });
+    const results = await Promise.allSettled([drafts?.length ? api.addTasks(p.id, drafts) : Promise.resolve([]), ...toolJobs]);
+    window.dispatchEvent(new CustomEvent(TOOLS_CHANGED, { detail: p.id }));
+    setPreparing(null);
+    const failed = results.filter(r => r.status === 'rejected').length;
+    notify(failed ? `Progetto creato, ma ${failed === 1 ? 'una parte non è stata salvata' : `${failed} parti non sono state salvate`}: riprova ad aggiungerle.` : 'Progetto pronto', failed > 0);
   };
 
   const toggle = useCallback((t: PTask) => { api.toggleTask(t).then(() => { if (t.status !== 'fatto') notify(`“${t.title}” completata`, false, { label: 'Annulla', run: () => { api.editTask(t.id, { status: t.status }).catch(err => fail(err)); } }); }).catch(err => fail(err, () => toggle(t))); }, [api, notify, fail]);
 
-  // MYND AI's changes, applied only after "Applica".
+  // MYND AI's changes, applied only after "Applica": everything at once (in parallel, lists in one
+  // request) and visible immediately; the tool that changed is opened behind the chat.
   const applyActions = async (actions: AIAction[]) => {
     if (!open) return;
     const newTasks: TaskDraft[] = [];
+    const jobs: Promise<unknown>[] = [];
+    const itemsFor = (toolId: string) => toolsApi.items.filter(i => i.tool_id === toolId);
     for (const a of actions) {
       if (a.type === 'add_task') newTasks.push({ title: a.title, description: a.description || null, due_date: a.due_date || null, phase: a.phase || null, subtasks: a.subtasks });
-      else if (a.type === 'add_subtasks') { const parent = tasks.find(t => t.id === a.task_id); if (parent) await api.addSubtasks(parent, a.titles); }
-      else if (a.type === 'set_due') await api.editTask(a.task_id, { due_date: a.due_date });
-      else if (a.type === 'set_status') await api.editTask(a.task_id, { status: a.status });
-      else if (a.type === 'set_phases') await api.saveProject(open.id, { phases: a.phases, settings: { ...open.settings, phases: true } });
-      else if (a.type === 'update_project') {
-        const { type: _type, ...patch } = a;
-        await api.saveProject(open.id, patch);
-      }
-      else if (a.type === 'add_tool') await toolsApi.addTool(a.tool);
-      else if (a.type === 'add_item') {
+      else if (a.type === 'add_subtasks') { const parent = tasks.find(t => t.id === a.task_id); if (parent) jobs.push(api.addSubtasks(parent, a.titles)); }
+      else if (a.type === 'set_due') jobs.push(api.editTask(a.task_id, { due_date: a.due_date }));
+      else if (a.type === 'set_status') jobs.push(api.editTask(a.task_id, { status: a.status }));
+      else if (a.type === 'set_phases') jobs.push(api.saveProject(open.id, { phases: a.phases, settings: { ...open.settings, phases: true } }));
+      else if (a.type === 'update_project') { const { type: _type, ...patch } = a; jobs.push(api.saveProject(open.id, patch)); }
+      else if (a.type === 'add_tool') {
+        jobs.push(toolsApi.addTool(a.tool).then(async t => {
+          setFocusTool(t.id);
+          if (a.items?.length) await toolsApi.putItems(t, sensibleItems(t.config, a.items.map(x => cleanItemData(t.config, x, peopleOf(t, [], openMembers), { members: openMembers, me: userId, guess: true })), []).ok);
+        }));
+      } else if (a.type === 'add_item' || a.type === 'add_items') {
         const tool = toolsApi.tools.find(t => t.id === a.tool_id);
-        if (tool) await toolsApi.putItem(tool, cleanItemData(tool.config, a.values, peopleOf(tool, toolsApi.items.filter(i => i.tool_id === tool.id), openMembers)));
+        if (!tool) continue;
+        const people = peopleOf(tool, itemsFor(tool.id), openMembers);
+        const list = a.type === 'add_item' ? [a.values] : a.items;
+        const { ok, skipped } = sensibleItems(tool.config, list.map(x => cleanItemData(tool.config, x, people, { members: openMembers, me: userId })), itemsFor(tool.id));
+        if (skipped) notify(`${skipped} ${skipped === 1 ? 'voce saltata perché incompleta o già presente' : 'voci saltate perché incomplete o già presenti'}`);
+        if (ok.length) jobs.push(toolsApi.putItems(tool, ok));
+        setFocusTool(tool.id);
       }
     }
-    if (newTasks.length) await api.addTasks(open.id, newTasks);
-    notify('Modifiche applicate');
+    if (newTasks.length) jobs.push(api.addTasks(open.id, newTasks));
+    const results = await Promise.allSettled(jobs);
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) throw failed.reason;
   };
 
   // The project's notes, links and latest updates, read when the AI panel opens.
@@ -204,7 +226,7 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
           onBack={() => setOpenId(null)} onEdit={() => setSheet({ kind: 'edit', project: open })} onDuplicate={() => duplicate(open)}
           onArchive={() => archive(open)} onDelete={() => remove(open)} onAskAI={() => setAi('project')} notify={notify}
           onLeft={() => { setOpenId(null); reload(true); }}
-          onToolSheet={t => { forget('strumento'); setToolSheet({ project: open, tool: t === 'new' ? null : t }); }} focusToolId={focusTool} onFocusToolUsed={clearFocusTool} />
+          preparing={preparing === open.id} onToolSheet={t => { forget('strumento'); setToolSheet({ project: open, tool: t === 'new' ? null : t }); }} focusToolId={focusTool} onFocusToolUsed={clearFocusTool} />
       ) : (
         <div className="space-y-7 animate-fade-in">
           <header className="flex items-end justify-between gap-4 flex-wrap">
@@ -283,6 +305,17 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       <Toasts items={toasts} onClose={closeToast} />
     </div>
   );
+}
+
+// Only items that make sense: complete, with plausible numbers, and not already there.
+function sensibleItems(cfg: ToolConfig, list: Record<string, unknown>[], existing: ToolItem[]): { ok: Record<string, unknown>[]; skipped: number } {
+  const ok: Record<string, unknown>[] = [];
+  for (const d of list) {
+    if (checkItem(cfg, d).error) continue;
+    if (existing.some(it => sameItem(it.data, d)) || ok.some(x => sameItem(x, d))) continue;
+    ok.push(d);
+  }
+  return { ok, skipped: list.length - ok.length };
 }
 
 // "Nuova attività" from the overview: which project, what, by when.

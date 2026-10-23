@@ -85,7 +85,7 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
       const turns: ChatTurn[] = history.slice(-8).map((m, i, a) => ({ role: m.role, text: i === a.length - 1 ? `DATI AGGIORNATI:\n${context()}\n\nDOMANDA: ${m.text}` : m.text }));
       setPartial('');
       const reply = await askAuto(system, turns, { onPartial: t => setPartial(t.replace(/```azioni[\s\S]*$/i, '').trim()) });
-      const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project, tools) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
+      const { text, actions } = project && tasks && onApply ? parseActions(reply, tasks, project, tools, history.filter(m => m.role === 'user').map(m => m.text).join('\n')) : { text: reply.replace(/```azioni[\s\S]*?(```|$)/i, '').trim(), actions: [] };
       setMsgs(m => [...m, { role: 'assistant', text: text || 'Ecco le modifiche che ti propongo.', actions, state: actions.length ? 'open' : undefined }]);
     } catch (err) {
       setError(err instanceof Error ? err.message.split('\n')[0] : String(err));
@@ -99,14 +99,14 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
   const apply = async (i: number) => {
     const m = msgs[i];
     if (!m.actions || !onApply) return;
-    setBusy(true); setError('');
+    setError('');
+    setMsgs(ms => ms.map((x, j) => (j === i ? { ...x, state: 'applied' } : x)));
     try {
       await onApply(m.actions);
-      setMsgs(ms => ms.map((x, j) => (j === i ? { ...x, state: 'applied' } : x)));
     } catch (err) {
+      setMsgs(ms => ms.map((x, j) => (j === i ? { ...x, state: 'open' } : x)));
       setError(`Non sono riuscito ad applicare tutto: ${err instanceof Error ? err.message : String(err)}`);
     }
-    setBusy(false);
   };
 
   return (

@@ -68,6 +68,8 @@ export function cleanConfig(raw: unknown): ToolConfig {
       default: return null;
     }
   }).filter((s): s is ToolSummary => !!s);
+  // Expenses split between people make sense only with an amount and who paid.
+  for (const sm of summaries) if (sm.kind === 'saldi') for (const id of [sm.amount, sm.payer]) { const f = fields.find(x => x.id === id); if (f) f.required = true; }
   const view: ToolView = o.view === 'checklist' && fields.some(f => f.type === 'si_no') ? 'checklist' : o.view === 'giorni' && fields.some(f => f.type === 'data') ? 'giorni' : 'lista';
   const out: ToolConfig = { fields, view, summaries };
   if (has(o.groupBy, ['scelta', 'persona', 'data', 'si_no'])) out.groupBy = o.groupBy as string;
@@ -126,9 +128,36 @@ export function peopleOf(tool: Tool, items: ToolItem[], members: Member[]): stri
   const fieldIds = tool.config.fields.filter(f => f.type === 'persona' || f.type === 'persone').map(f => f.id);
   for (const it of items) for (const id of fieldIds) {
     const v = it.data[id];
-    for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string' && x && !keys.includes(x)) keys.push(x);
+    for (const x of Array.isArray(v) ? v : [v]) if (typeof x === 'string' && x && !keys.some(k => k.toLowerCase() === x.toLowerCase())) keys.push(x);
   }
   return keys;
+}
+
+const ME_WORDS = ['tu', 'io', 'me', 'me stesso', 'me stessa', 'myself'];
+// One person is always the same key: "Marco" typed by hand is Marco of the project if he is in it,
+// "io"/"tu" is the person writing, and "marco" is the same as "Marco".
+export function resolvePerson(raw: string, people: string[], members: Member[], me: string): string | null {
+  const v = raw.trim();
+  if (!v) return null;
+  if (v.startsWith('u:')) return v.slice(0, 80);
+  const name = (v.startsWith('n:') ? v.slice(2) : v).trim().slice(0, 40);
+  if (!name) return null;
+  const low = name.toLowerCase();
+  if (me && ME_WORDS.includes(low)) return personKey(me);
+  const member = members.find(m => [m.name, m.email?.split('@')[0], m.email].some(x => x && x.toLowerCase() === low));
+  if (member) return personKey(member.user_id);
+  return people.find(p => p.toLowerCase() === `n:${low}`) || `n:${name}`;
+}
+
+// A repayment ("Saldato", "Marco mi ha ridato 20 €"): it settles debts, it is not a new expense.
+export const RIMBORSO = '_rimborso';
+export function isRepayment(tool: Tool, it: ToolItem | { data: Record<string, unknown> }): boolean {
+  if (it.data[RIMBORSO] === true) return true;
+  // Made before repayments were marked: a "Rimborso" from one person to one other person.
+  const s = tool.config.summaries.find(x => x.kind === 'saldi');
+  if (!s || s.kind !== 'saldi') return false;
+  const between = it.data[s.between];
+  return String(it.data[tool.config.fields[0].id] ?? '').trim().toLowerCase() === 'rimborso' && Array.isArray(between) && between.length === 1;
 }
 
 // ───────────── Values ─────────────
@@ -192,8 +221,10 @@ export function balances(items: ToolItem[], s: Extract<ToolSummary, { kind: 'sal
 
 export interface SummaryResult { label: string; value: string; detail?: string[]; progress?: number; transfers?: Transfer[] }
 
-export function computeSummary(tool: Tool, items: ToolItem[], s: ToolSummary, members: Member[], me: string): SummaryResult {
+export function computeSummary(tool: Tool, allItems: ToolItem[], s: ToolSummary, members: Member[], me: string): SummaryResult {
   const cfg = tool.config;
+  // Repayments settle debts: they count for "chi deve a chi" only, never as spending or as items.
+  const items = s.kind === 'saldi' ? allItems : allItems.filter(it => !isRepayment(tool, it));
   const field = (id: string) => cfg.fields.find(f => f.id === id)!;
   const fmt = (id: string, v: number) => (field(id).type === 'soldi' ? money(v, cfg.currency) : `${Math.round(v * 100) / 100}${field(id).unit ? ` ${field(id).unit}` : ''}`);
   const total = (id: string) => items.reduce((a, it) => a + num(it.data[id]), 0);
@@ -280,23 +311,31 @@ export async function saveItem(tool: Tool, data: Record<string, unknown>, id?: s
   return res.data as ToolItem;
 }
 
+// Many items in one go (a list prepared by MYND AI): one request instead of one per item.
+export async function saveItems(tool: Tool, datas: Record<string, unknown>[], startPosition = Date.now() / 1000): Promise<ToolItem[]> {
+  if (!datas.length) return [];
+  const rows = datas.slice(0, 200).map((data, i) => ({ tool_id: tool.id, project_id: tool.project_id, data, position: startPosition + i / 1000 }));
+  const { data, error } = await db().from('prj_tool_items').insert(rows).select(ITEM_COLS);
+  if (error) fail(error);
+  return (data || []) as ToolItem[];
+}
+
 export async function deleteItem(id: string): Promise<void> {
   const { error } = await db().from('prj_tool_items').delete().eq('id', id);
   if (error) fail(error);
 }
 
 // Only the values that fit the tool's fields (what the AI or a form sends is checked here).
-export function cleanItemData(cfg: ToolConfig, raw: Record<string, unknown>, people: string[]): Record<string, unknown> {
+// opts.guess: items MYND AI imagined (a list it prepared): amounts, people and dates are never
+// invented, so they are left empty for the person to fill in.
+export function cleanItemData(cfg: ToolConfig, raw: Record<string, unknown>, people: string[], opts: { members?: Member[]; me?: string; guess?: boolean } = {}): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const person = (v: unknown) => {
-    if (typeof v !== 'string' || !v.trim()) return null;
-    if (v.startsWith('u:') || v.startsWith('n:')) return v.slice(0, 80);
-    const byName = people.find(p => p.toLowerCase() === `n:${v.trim().toLowerCase()}`);
-    return byName || `n:${v.trim().slice(0, 40)}`;
-  };
+  const person = (v: unknown) => (typeof v === 'string' ? resolvePerson(v, people, opts.members || [], opts.me || '') : null);
   for (const f of cfg.fields) {
     const v = raw[f.id];
     if (v === undefined || v === null || v === '') continue;
+    // Nothing done yet and nothing rated yet either: a guessed list starts unticked and unrated.
+    if (opts.guess && ['soldi', 'persona', 'persone', 'data', 'ora', 'si_no', 'valutazione'].includes(f.type)) continue;
     switch (f.type) {
       case 'numero': case 'soldi': { const n = num(v); if (n || v === 0 || v === '0') out[f.id] = Math.round(n * 100) / 100; break; }
       case 'valutazione': { const n = Math.round(num(v)); if (n >= 1 && n <= 5) out[f.id] = n; break; }
@@ -310,5 +349,38 @@ export function cleanItemData(cfg: ToolConfig, raw: Record<string, unknown>, peo
       default: out[f.id] = String(v).slice(0, f.type === 'testo_lungo' ? 4000 : 300);
     }
   }
+  if (raw[RIMBORSO] === true && !opts.guess) out[RIMBORSO] = true;
   return out;
+}
+
+// What makes no sense in an item, said plainly (null when it is fine). `warnings` are only doubts.
+export function checkItem(cfg: ToolConfig, data: Record<string, unknown>): { error: string | null; warnings: string[] } {
+  const warnings: string[] = [];
+  for (const [i, f] of cfg.fields.entries()) {
+    const v = data[f.id];
+    const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
+    if (empty) { if (f.required || i === 0) return { error: `Manca: ${f.label.toLowerCase()}.`, warnings }; continue; }
+    if (f.type === 'soldi') {
+      const n = num(v);
+      if (n <= 0) return { error: `${f.label}: dev'essere più di zero.`, warnings };
+      if (n > 1_000_000) return { error: `${f.label}: l'importo sembra sbagliato (più di un milione).`, warnings };
+    }
+    if (f.type === 'numero') {
+      const n = num(v);
+      if (Math.abs(n) > 10_000_000) return { error: `${f.label}: il numero sembra sbagliato.`, warnings };
+      if (n < 0 && f.unit) return { error: `${f.label}: non può essere negativo.`, warnings };
+      if (f.unit && /^(h|ore)$/i.test(f.unit) && n > 24) warnings.push(`${f.label}: più di 24 ore in una volta, è giusto?`);
+    }
+    if (f.type === 'data' && typeof v === 'string') {
+      const y = Number(v.slice(0, 4));
+      if (y < 2000 || y > 2100) return { error: `${f.label}: controlla l'anno (${y}).`, warnings };
+    }
+  }
+  return { error: null, warnings };
+}
+
+// The same item already there (an AI proposal repeated, a double tap): same values, repayment flag aside.
+export function sameItem(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const norm = (d: Record<string, unknown>) => JSON.stringify(Object.keys(d).filter(k => k !== RIMBORSO).sort().map(k => [k, Array.isArray(d[k]) ? [...(d[k] as unknown[])].map(String).sort() : typeof d[k] === 'string' ? (d[k] as string).trim().toLowerCase() : d[k]]));
+  return norm(a) === norm(b);
 }

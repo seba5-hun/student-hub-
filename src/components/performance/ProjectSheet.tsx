@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Sparkles, Check, X, ArrowLeft } from 'lucide-react';
 import { KIND_HINT, KIND_LABEL, Project, ProjectInput, ProjectKind, TaskDraft } from '../../lib/projects';
 import { ProjectPlan, parsePlan, planSystem } from '../../lib/projectsAI';
-import type { ToolSpec } from '../../lib/tools';
+import type { ToolWithItems } from '../../lib/projectsAI';
 import { ToolIcon } from './ToolTab';
 import { askAuto, autoReady } from '../../lib/ai';
 import { Sheet, Label, TextField, TextArea, ErrorNote, shortDate } from './ui';
@@ -17,7 +17,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI, doc
   project: Project | null;
   today: string;
   onClose: () => void;
-  onSave: (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolSpec[]) => Promise<void>;
+  onSave: (input: ProjectInput, drafts?: TaskDraft[], tools?: ToolWithItems[]) => Promise<void>;
   onConnectAI: () => void;
   dock?: DockProps;
 }) {
@@ -35,10 +35,11 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI, doc
   const [skipTools, setSkipTools] = useState<Set<number>>(new Set());
   useEffect(() => { dock?.onBusy(busy === 'ai'); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const save = async (drafts?: TaskDraft[], fromPlan?: ProjectPlan, tools?: ToolSpec[]) => {
+  const save = async (drafts?: TaskDraft[], fromPlan?: ProjectPlan, tools?: ToolWithItems[]) => {
     if (busy) return;
     const finalName = (fromPlan ? name || fromPlan.name : name).trim();
     if (!finalName) { setError('Scrivi il nome del progetto.'); return; }
+    if (due && (due < '2000-01-01' || due > '2100-12-31')) { setError('Controlla l\'anno della scadenza.'); return; }
     setBusy('save'); setError('');
     try {
       await onSave({
@@ -114,7 +115,7 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI, doc
                       <span className="mt-0.5" style={{ color: 'var(--brand-ring)' }}><ToolIcon name={t.icon} /></span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-[15px] font-medium" style={{ color: 'var(--text)' }}>{t.name}</span>
-                        <span className="block text-xs mt-0.5" style={{ color: 'var(--text-subtle)' }}>{t.description ? `${t.description} · ` : ''}{t.config.fields.map(f => f.label).join(', ')}</span>
+                        <span className="block text-xs mt-0.5" style={{ color: 'var(--text-subtle)' }}>{t.items?.length ? `Già pronto con ${t.items.length} voci: ${t.items.slice(0, 6).map(x => String(x[t.config.fields[0].id] ?? '')).filter(Boolean).join(', ')}${t.items.length > 6 ? '…' : ''}` : `${t.description ? `${t.description} · ` : ''}${t.config.fields.map(f => f.label).join(', ')}`}</span>
                       </span>
                       <span className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center mt-0.5" style={on ? { background: 'var(--brand-fill)', color: 'var(--on-brand)' } : { border: '1.5px solid var(--text-subtle)' }}>
                         {on && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
@@ -194,7 +195,12 @@ export function ProjectSheet({ project, today, onClose, onSave, onConnectAI, doc
       <TextField id="pj-name" label="Nome del progetto" value={name} onChange={setName} placeholder="Es. Vacanza in Grecia" autoFocus={!project} />
       <TextArea id="pj-desc" label={aiAsk ? 'Descrivi cosa vuoi realizzare' : 'Descrizione (facoltativa)'} value={description} onChange={setDescription} rows={aiAsk ? 4 : 3}
         placeholder={aiAsk ? 'Es. Una settimana in Grecia a giugno con cinque amici: dobbiamo trovare voli, alloggi e decidere il budget.' : 'Il risultato che vuoi raggiungere'} />
-      <TextField id="pj-due" label="Scadenza (facoltativa)" type="date" value={due} onChange={setDue} />
+      <div>
+        <TextField id="pj-due" label="Scadenza (facoltativa)" type="date" value={due} onChange={setDue} />
+        {due && (due < '2000-01-01' || due > '2100-12-31')
+          ? <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>Controlla l'anno.</p>
+          : due && !project && due < today ? <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>Questa data è già passata.</p> : null}
+      </div>
       {aiAsk && (autoReady() ? (
         <div className="space-y-2">
           <button onClick={makePlan} disabled={!!busy || (!description.trim() && !name.trim())} className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2 disabled:opacity-40">

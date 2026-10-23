@@ -38,10 +38,10 @@ export function TaskSheet({ task, project, members, me, subtasks, onClose, onSav
     try { await fn(); if (keepOpen) setBusy(false); }
     catch (err) { setError(err instanceof Error ? err.message : String(err)); setBusy(false); }
   };
-  const save = () => run(() => onSave({
+  const save = () => (due && (due < '2000-01-01' || due > '2100-12-31') ? setError('Controlla l\'anno della scadenza.') : run(() => onSave({
     title: title.trim(), description: description.trim() || null, status, due_date: due || null,
     assignee_id: assignee || null, phase: showPhases ? phase || null : task?.phase || null,
-  }));
+  })));
   const addStep = () => {
     const v = step.trim();
     if (!v || !onAddSubtask) return;
@@ -69,7 +69,15 @@ export function TaskSheet({ task, project, members, me, subtasks, onClose, onSav
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <TextField id="pt-due" label="Scadenza" type="date" value={due} onChange={setDue} />
+        <div>
+          <TextField id="pt-due" label="Scadenza" type="date" value={due} onChange={setDue} />
+          {due && (due < '2000-01-01' || due > '2100-12-31')
+            ? <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>Controlla l'anno.</p>
+            : due && project.due_date && due > project.due_date
+              ? <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>È dopo la scadenza del progetto ({new Date(project.due_date + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}).</p>
+              : due && !task && due < new Date().toISOString().slice(0, 10)
+                ? <p className="text-xs mt-1" style={{ color: 'var(--warning)' }}>Questa data è già passata.</p> : null}
+        </div>
         <div>
           <Label htmlFor="pt-who">Responsabile</Label>
           <select id="pt-who" value={assignee} onChange={e => setAssignee(e.target.value)} className="input-glass w-full h-12 text-[15px]">

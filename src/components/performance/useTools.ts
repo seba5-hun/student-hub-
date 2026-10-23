@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Tool, ToolItem, ToolSpec, createTool, deleteItem, deleteTool, loadTools, saveItem, updateTool } from '../../lib/tools';
+import { Tool, ToolItem, ToolSpec, createTool, deleteItem, deleteTool, loadTools, saveItem, saveItems, updateTool } from '../../lib/tools';
+
+// Sent when tools of a project were changed elsewhere (e.g. prepared in the background).
+export const TOOLS_CHANGED = 'mynd-tools-changed';
 
 // The tools of the open project and their items, kept up to date (the others' changes every 30 s).
 export function useTools(projectId: string | null, active = true) {
@@ -25,8 +28,10 @@ export function useTools(projectId: string | null, active = true) {
     if (!projectId) return;
     const id = window.setInterval(() => { if (document.visibilityState === 'visible' && activeRef.current) reload(); }, 30_000);
     const onVisible = () => { if (document.visibilityState === 'visible') reload(); };
+    const onChanged = (e: Event) => { if ((e as CustomEvent<string>).detail === projectId) reload(); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+    window.addEventListener(TOOLS_CHANGED, onChanged);
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener(TOOLS_CHANGED, onChanged); };
   }, [projectId, reload]);
 
   const addTool = useCallback(async (spec: ToolSpec, forProject?: string) => {
@@ -58,13 +63,29 @@ export function useTools(projectId: string | null, active = true) {
     } catch (err) { if (id) reload(); throw err; }
   }, [reload]);
 
+  // Many items at once: they appear immediately and are saved with one request.
+  const putItems = useCallback(async (tool: Tool, datas: Record<string, unknown>[]) => {
+    if (!datas.length) return [];
+    const stamp = Date.now();
+    const temp: ToolItem[] = datas.map((data, i) => ({ id: `tmp-${stamp}-${i}`, tool_id: tool.id, project_id: tool.project_id, data, position: stamp / 1000 + i / 1000, created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }));
+    if (tool.project_id === projectId) setItems(is => [...is, ...temp]);
+    try {
+      const saved = await saveItems(tool, datas, stamp / 1000);
+      if (tool.project_id === projectId) setItems(is => [...is.filter(x => !temp.some(t => t.id === x.id)), ...saved]);
+      return saved;
+    } catch (err) {
+      setItems(is => is.filter(x => !temp.some(t => t.id === x.id)));
+      throw err;
+    }
+  }, [projectId]);
+
   const removeItem = useCallback(async (id: string) => {
     const before = items;
     setItems(is => is.filter(x => x.id !== id));
     try { await deleteItem(id); } catch (err) { setItems(before); throw err; }
   }, [items]);
 
-  return { ready, tools, items, error, reload, addTool, editTool, removeTool, putItem, removeItem };
+  return { ready, tools, items, error, reload, addTool, editTool, removeTool, putItem, putItems, removeItem };
 }
 
 export type ToolsApi = ReturnType<typeof useTools>;
