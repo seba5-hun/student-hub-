@@ -3,23 +3,13 @@ import { Loader2, Sparkles, Plus, X, ArrowLeft } from 'lucide-react';
 import { askAuto, autoReady } from '../../lib/ai';
 import { Project } from '../../lib/projects';
 import { parseTool, toolSystem } from '../../lib/projectsAI';
-import { FIELD_TYPES, FieldType, ICONS, TEMPLATES, Tool, ToolField, ToolSpec, ToolSummary, cleanConfig } from '../../lib/tools';
+import { FIELD_TYPES, FieldType, ICONS, TEMPLATES, Tool, ToolField, ToolSpec, ToolSummary, cleanConfig, summaryRefs, summaryText } from '../../lib/tools';
 import { ErrorNote, Label, Sheet, TextField } from './ui';
 import { ToolIcon } from './ToolTab';
 import { AINote } from './AIPanel';
 import type { DockProps } from './AIDock';
 
-const SUMMARY_TEXT = (s: ToolSummary, fields: ToolField[]): string => {
-  const l = (id: string) => fields.find(f => f.id === id)?.label.toLowerCase() || id;
-  switch (s.kind) {
-    case 'somma': return s.label || `Totale di ${l(s.field)}`;
-    case 'conteggio': return s.label || (s.field ? `Quante con "${l(s.field)}"` : 'Quante voci');
-    case 'per_persona': return s.label || `${l(s.field)} per persona`;
-    case 'saldi': return 'Chi deve quanto a chi';
-    case 'budget': return `Budget di ${s.limit}`;
-    case 'prodotto': return s.label;
-  }
-};
+const SUMMARY_TEXT = (s: ToolSummary, fields: ToolField[]) => summaryText({ fields, view: 'lista', summaries: [] }, s);
 
 // A new tool (described to MYND AI or from an example), or changes to one: name, icon, fields, sums.
 export function ToolSheet({ project, tools, tool, onClose, onSave, dock }: {
@@ -74,8 +64,11 @@ export function ToolSheet({ project, tools, tool, onClose, onSave, dock }: {
         <ErrorNote text={error} />
         <div>
           <Label>Oppure parti da un esempio</Label>
+          {([['lavoro', 'Per il lavoro'], ['vita', 'Per tutto il resto']] as const).map(([g, title]) => (
+          <div key={g} className="mb-4">
+          <p className="text-xs mb-2" style={{ color: 'var(--text-subtle)' }}>{title}</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {TEMPLATES.map(t => (
+            {TEMPLATES.filter(t => (t.group || 'vita') === g).map(t => (
               <button key={t.name} onClick={() => setSpec({ name: t.name, icon: t.icon, description: t.description, config: t.config })}
                 className="glass-card rounded-2xl p-3.5 text-left flex gap-3 hover:opacity-90">
                 <span className="mt-0.5" style={{ color: 'var(--brand-ring)' }}><ToolIcon name={t.icon} /></span>
@@ -83,6 +76,8 @@ export function ToolSheet({ project, tools, tool, onClose, onSave, dock }: {
               </button>
             ))}
           </div>
+          </div>
+          ))}
         </div>
       </Sheet>
     );
@@ -169,6 +164,5 @@ export function ToolSheet({ project, tools, tool, onClose, onSave, dock }: {
 
 function usesOnly(s: ToolSummary, fields: ToolField[]): boolean {
   const ids = new Set(fields.map(f => f.id));
-  const refs = s.kind === 'saldi' ? [s.amount, s.payer, s.between] : s.kind === 'per_persona' ? [s.field, s.person] : s.kind === 'conteggio' ? (s.field ? [s.field] : []) : [s.field];
-  return refs.every(r => ids.has(r));
+  return summaryRefs(s).every(r => ids.has(r));
 }

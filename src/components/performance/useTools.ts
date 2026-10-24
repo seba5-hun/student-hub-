@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Tool, ToolItem, ToolSpec, createTool, deleteItem, deleteTool, loadTools, saveItem, saveItems, updateTool } from '../../lib/tools';
+import { Tool, ToolItem, ToolSpec, cleanConfig, createTool, deleteItem, deleteTool, loadTools, saveItem, saveItems, updateTool } from '../../lib/tools';
 
 // Sent when tools of a project were changed elsewhere (e.g. prepared in the background).
 export const TOOLS_CHANGED = 'mynd-tools-changed';
@@ -42,11 +42,23 @@ export function useTools(projectId: string | null, active = true) {
     return t;
   }, [projectId]);
 
-  const editTool = useCallback(async (id: string, patch: Partial<Pick<Tool, 'name' | 'icon' | 'description' | 'config'>>) => {
-    const t = await updateTool(id, patch);
-    setTools(ts => ts.map(x => (x.id === id ? t : x)));
-    return t;
+  // Shows a change at once (the editor), before it is saved.
+  const previewTool = useCallback((id: string, patch: Partial<Pick<Tool, 'name' | 'icon' | 'description' | 'config'>>) => {
+    setTools(ts => ts.map(x => (x.id === id ? { ...x, ...patch, ...(patch.config ? { config: cleanConfig(patch.config) } : {}) } : x)));
   }, []);
+
+  const editTool = useCallback(async (id: string, patch: Partial<Pick<Tool, 'name' | 'icon' | 'description' | 'config'>>) => {
+    const before = toolsRef.current.find(x => x.id === id);
+    previewTool(id, patch);
+    try {
+      const t = await updateTool(id, patch);
+      setTools(ts => ts.map(x => (x.id === id ? t : x)));
+      return t;
+    } catch (err) {
+      if (before) setTools(ts => ts.map(x => (x.id === id ? before : x)));
+      throw err;
+    }
+  }, [previewTool]);
 
   const removeTool = useCallback(async (id: string) => {
     await deleteTool(id);
@@ -85,7 +97,7 @@ export function useTools(projectId: string | null, active = true) {
     try { await deleteItem(id); } catch (err) { setItems(before); throw err; }
   }, [items]);
 
-  return { ready, tools, items, error, reload, addTool, editTool, removeTool, putItem, putItems, removeItem };
+  return { ready, tools, items, error, reload, addTool, previewTool, editTool, removeTool, putItem, putItems, removeItem };
 }
 
 export type ToolsApi = ReturnType<typeof useTools>;

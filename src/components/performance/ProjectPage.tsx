@@ -166,7 +166,8 @@ export function ProjectPage({ project: p, tasks, members, me, today, api, toolsA
         <ToolTab key={openTool.id} tool={openTool} items={toolItems.filter(i => i.tool_id === openTool.id)} members={members} me={me}
           canEdit={perms.canEdit} canEditProject={perms.canEditProject} notify={notify} project={p} tasks={tasks} today={today}
           onSave={(data, id) => toolsApi.putItem(openTool, data, id)} onSaveMany={datas => toolsApi.putItems(openTool, datas)} onRemove={toolsApi.removeItem}
-          onEditTool={() => setToolSheet(openTool)} onDeleteTool={() => removeTool(openTool)} />
+          onPreviewTool={patch => toolsApi.previewTool(openTool.id, patch)} onSaveTool={patch => toolsApi.editTool(openTool.id, patch)}
+          onDeleteTool={() => removeTool(openTool)} />
       )}
       {tab === 'attivita' && (
         <TasksTab p={p} tasks={tasks} top={top} members={members} me={me} today={today} api={api} readOnly={!perms.canEdit} onToggle={toggle} onOpenTask={openTask}

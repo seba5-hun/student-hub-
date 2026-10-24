@@ -3,7 +3,7 @@ import { askAuto, autoReady } from '../../lib/ai';
 import { fillSystem, parseItems } from '../../lib/projectsAI';
 import {
   List, Wallet, CalendarDays, Map, Clock, Users, Star, BookOpen, Dumbbell, Utensils, Plane, Home, Briefcase, Target, Heart, ShoppingCart, Car, Music,
-  Camera, Gift, GraduationCap, Lightbulb, BarChart3, CheckSquare, Phone, Bike, Leaf, PawPrint, Plus, Loader2, X, ArrowRight, ExternalLink, Sparkles, Undo2,
+  Camera, Gift, GraduationCap, Lightbulb, BarChart3, CheckSquare, Phone, Bike, Leaf, PawPrint, Plus, Loader2, X, ArrowRight, ExternalLink, Sparkles, Undo2, Pencil,
 } from 'lucide-react';
 import { Member, PTask, Project } from '../../lib/projects';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../../lib/tools';
 import { useDialog } from '../Dialog';
 import { CheckButton, Empty, ErrorNote, Label, MoreMenu, Sheet } from './ui';
+import { ToolEditor } from './ToolEditor';
 
 const ICON_MAP = { list: List, wallet: Wallet, calendar: CalendarDays, map: Map, clock: Clock, users: Users, star: Star, book: BookOpen, dumbbell: Dumbbell, utensils: Utensils, plane: Plane, home: Home, briefcase: Briefcase, target: Target, heart: Heart, cart: ShoppingCart, car: Car, music: Music, camera: Camera, gift: Gift, school: GraduationCap, idea: Lightbulb, chart: BarChart3, check: CheckSquare, phone: Phone, bike: Bike, leaf: Leaf, paw: PawPrint };
 export function ToolIcon({ name, className = 'w-4 h-4' }: { name: string | null | undefined; className?: string }) {
@@ -20,14 +21,17 @@ export function ToolIcon({ name, className = 'w-4 h-4' }: { name: string | null 
 }
 
 // One tool of a project: its sums on top, then its items as a list, a checklist or day by day.
-export function ToolTab({ tool, items, members, me, canEdit, canEditProject, project, tasks, today, onSave, onSaveMany, onRemove, onEditTool, onDeleteTool, notify }: {
+export function ToolTab({ tool, items, members, me, canEdit, canEditProject, project, tasks, today, onSave, onSaveMany, onRemove, onPreviewTool, onSaveTool, onDeleteTool, notify }: {
   tool: Tool; items: ToolItem[]; members: Member[]; me: string; canEdit: boolean; canEditProject: boolean;
   project: Project; tasks: PTask[]; today: string;
   onSave: (data: Record<string, unknown>, id?: string) => Promise<unknown>; onSaveMany: (datas: Record<string, unknown>[]) => Promise<unknown>; onRemove: (id: string) => Promise<void>;
-  onEditTool: () => void; onDeleteTool: () => void; notify: (text: string, error?: boolean) => void;
+  onPreviewTool: (patch: { name: string; icon: string; description: string; config: Tool['config'] }) => void;
+  onSaveTool: (patch: { name: string; icon: string; description: string; config: Tool['config'] }) => Promise<unknown>;
+  onDeleteTool: () => void; notify: (text: string, error?: boolean) => void;
 }) {
   const cfg = tool.config;
   const [editing, setEditing] = useState<ToolItem | 'new' | null>(null);
+  const [editingTool, setEditingTool] = useState(false);
   const [prefill, setPrefill] = useState<Record<string, unknown> | null>(null);
   const people = useMemo(() => peopleOf(tool, items, members), [tool, items, members]);
   const doneField = cfg.fields.find(f => f.type === 'si_no');
@@ -102,13 +106,20 @@ export function ToolTab({ tool, items, members, me, canEdit, canEditProject, pro
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-2">
         <p className="flex-1 text-[15px]" style={{ color: 'var(--text-muted)' }}>{tool.description || ' '}</p>
+        {canEditProject && !editingTool && (
+          <button onClick={() => setEditingTool(true)} className="h-9 px-3.5 rounded-full text-sm inline-flex items-center gap-1.5 glass-card !rounded-full" style={{ color: 'var(--text)' }}>
+            <Pencil className="w-3.5 h-3.5" style={{ color: 'var(--brand-ring)' }} /> Modifica
+          </button>
+        )}
         {canEditProject && <MoreMenu label={`Impostazioni di ${tool.name}`} items={[
-          { label: 'Modifica strumento', onClick: onEditTool },
+          { label: 'Modifica strumento', onClick: () => setEditingTool(true) },
           { label: 'Elimina strumento', onClick: onDeleteTool, danger: true },
         ]} />}
       </div>
+
+      {editingTool && <ToolEditor tool={tool} onPreview={onPreviewTool} onSave={onSaveTool} onDone={() => setEditingTool(false)} />}
 
       {cfg.summaries.length > 0 && items.length > 0 && (
         <div className="grid gap-2 sm:grid-cols-2">
