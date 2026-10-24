@@ -14,6 +14,8 @@ import { ManifestoScreen, PrimaryButton } from './components/Auth';
 import Logo from './components/Logo';
 import ResetPassword from './components/ResetPassword';
 import Layout from './components/Layout';
+import { AbbonamentoSheet, Paywall } from './components/Abbonamento';
+import { Access, accessKind, accessLabel, daysLeft, isPaid, loadAccess } from './lib/billing';
 import Home from './components/Home';
 // Sections are downloaded separately (the first page opens faster) and preloaded in the
 // background right after login, so switching section stays instant.
@@ -163,6 +165,13 @@ function App() {
   useEffect(() => { if (performanceUser.current !== user?.id) { performanceUser.current = user?.id; setPerformanceOpened(currentSection === 'performance'); } }, [user?.id, currentSection]);
   const showPerformance = useCallback(() => { setCurrentSection('performance'); window.scrollTo({ top: 0 }); }, []);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  // Subscription / free code / trial (null = subscriptions not set up: the app is open to everyone).
+  const [access, setAccess] = useState<Access | null>(null);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [billingNotice, setBillingNotice] = useState('');
+  const [trialHint, setTrialHint] = useState(() => { try { return sessionStorage.getItem('mynd_trial_hint') !== 'no'; } catch { return true; } });
+  // Back from Stripe's pages: …/?abbonamento=ok | annullato | gestito
+  const billingReturn = useRef(new URLSearchParams(window.location.search).get('abbonamento'));
   // Assistente MYND: opened from Home → Personalizza and from the mini-apps (openAssistant).
   const [studio, setStudio] = useState<{ text: string; appId?: string; n: number } | null>(null);
   useEffect(() => {
@@ -603,6 +612,59 @@ function App() {
     return () => { alive = false; window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
   }, [user, hasData]);
 
+  // Subscription state: at login, when coming back to the app (at most every 5 minutes) and every hour.
+  useEffect(() => {
+    if (!user || !hasData || isDemoUser(user)) { setAccess(null); return; }
+    let alive = true;
+    let last = 0;
+    const check = () => { last = Date.now(); loadAccess().then(a => { if (alive) setAccess(a); }).catch(() => {}); };
+    const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - last > 5 * 60000) check(); };
+    check();
+    const id = window.setInterval(check, 60 * 60000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; window.clearInterval(id); document.removeEventListener('visibilitychange', onVisible); };
+  }, [user, hasData]);
+
+  // After paying, Stripe's message reaches Supabase in a few seconds: wait for it.
+  useEffect(() => {
+    const back = billingReturn.current;
+    if (!back || !user || !hasData || isDemoUser(user)) return;
+    billingReturn.current = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('abbonamento');
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    if (back !== 'ok') { if (back === 'annullato') setBillingNotice('Pagamento annullato: non ti è stato addebitato niente.'); return; }
+    setBillingNotice('Pagamento ricevuto! Sto attivando il tuo abbonamento…');
+    let alive = true;
+    let tries = 0;
+    const poll = async () => {
+      tries++;
+      const a = await loadAccess().catch(() => null);
+      if (!alive) return;
+      if (a) setAccess(a);
+      if (a && isPaid(a)) { setBillingNotice('Abbonamento attivo. Grazie per sostenere MYND!'); confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 } }); return; }
+      if (tries < 15) window.setTimeout(poll, 2000);
+      else setBillingNotice('Il pagamento è andato a buon fine: l\'abbonamento si attiva entro qualche minuto. Se non lo vedi, ricarica la pagina.');
+    };
+    poll();
+    return () => { alive = false; };
+  }, [user, hasData]);
+  useEffect(() => {
+    if (!billingNotice || /Sto attivando/.test(billingNotice)) return;
+    const id = window.setTimeout(() => setBillingNotice(''), 7000);
+    return () => window.clearTimeout(id);
+  }, [billingNotice]);
+
+  const exportMyData = () => {
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href; a.download = 'mynd-backup.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  };
+
   const answerProjectInvite = useCallback(async (invite: MyInvite, accept: boolean) => {
     try {
       const projectId = await answerInvite(invite.id, accept);
@@ -665,6 +727,8 @@ function App() {
     setData(null);
     setLoadError('');
     setAccountStatus(null);
+    setAccess(null);
+    setBillingOpen(false);
     setOnAuthPage(isStandaloneApp());   // back to the site (the home-screen app: to the login)
     setAdminPending(0);
     setAdminIdeas(0);
@@ -885,6 +949,11 @@ function App() {
     return <Auth key={authStart || 'auth'} onLogin={handleLogin} onDemo={startDemo} startMode={authStart} initialError={linkErrorMessage ? authErrorMessage(new Error(linkErrorMessage)) : ''} />;
   }
 
+  // Trial over, no subscription and no code: the app waits on the subscription page.
+  if (access && !access.has_access && !isDemo) {
+    return <Paywall access={access} email={user.email} onChange={setAccess} onLogout={handleLogout} onExport={exportMyData} />;
+  }
+
   if (viewSite) {
     return (
       <Suspense fallback={<div style={{ minHeight: '100vh', background: '#050606' }} />}>
@@ -947,6 +1016,8 @@ function App() {
         onSuggest={() => setSuggestOpen(true)}
         onAccountDeleted={isDemo ? undefined : handleAccountDeleted}
         onOpenSite={openSite}
+        billingLabel={access && (access.enabled || access.admin) ? accessLabel(access) : undefined}
+        onOpenBilling={access && (access.enabled || access.admin) ? () => setBillingOpen(true) : undefined}
         onThemeChange={(theme) => {
           if (data) {
             updateData({ ...data, settings: { ...data.settings, colorTheme: theme } });
@@ -1050,6 +1121,24 @@ function App() {
         </Suspense>
       </Layout>
       <SaveIndicator />
+      {billingOpen && access && <AbbonamentoSheet access={access} onClose={() => setBillingOpen(false)} onChange={setAccess} />}
+      {billingNotice && (
+        <div role="status" className="fixed left-1/2 -translate-x-1/2 z-[95] w-[calc(100%-32px)] max-w-md animate-scale-in" style={{ top: 'calc(68px + env(safe-area-inset-top))' }}>
+          <div className="glass-float rounded-2xl px-4 py-3 text-sm flex items-center gap-3" style={{ color: 'var(--text)' }}>
+            <span className="flex-1">{billingNotice}</span>
+            <button onClick={() => setBillingNotice('')} aria-label="Chiudi" className="text-xs" style={{ color: 'var(--text-muted)' }}>✕</button>
+          </div>
+        </div>
+      )}
+      {access && trialHint && accessKind(access) === 'prova' && daysLeft(access.trial_end) <= 3 && !billingOpen && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[55] w-[calc(100%-32px)] max-w-md" style={{ bottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+          <div className="glass-float rounded-full pl-4 pr-1.5 py-1.5 flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
+            <span className="flex-1 min-w-0 truncate">{daysLeft(access.trial_end) <= 1 ? 'La prova finisce oggi' : `La prova finisce tra ${daysLeft(access.trial_end)} giorni`}</span>
+            <button onClick={() => setBillingOpen(true)} className="btn-primary h-9 px-4 text-sm flex-shrink-0">Abbonati</button>
+            <button onClick={() => { setTrialHint(false); try { sessionStorage.setItem('mynd_trial_hint', 'no'); } catch { /* ignore */ } }} aria-label="Nascondi" className="w-8 h-8 flex items-center justify-center flex-shrink-0" style={{ color: 'var(--text-muted)' }}>✕</button>
+          </div>
+        </div>
+      )}
       {customNotice.length > 0 && (
         <div className="fixed left-1/2 -translate-x-1/2 z-[60] w-[calc(100%-32px)] max-w-md animate-scale-in" style={{ bottom: 'max(16px, env(safe-area-inset-bottom))' }}>
           <div className="glass-float rounded-2xl p-4 flex items-center gap-3">

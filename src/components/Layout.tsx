@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase, Lightbulb } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogOut, Home, Calendar, Clock, BookMarked, Archive, Target, BarChart3, Download, Upload, Palette, Sparkles, ShieldCheck, Compass, Briefcase, Lightbulb, CreditCard } from 'lucide-react';
 import PrivacyCenter from './PrivacyCenter';
 import { customOf, orderMenu } from '../lib/custom';
 import { sectionIcon } from './sectionIcons';
@@ -38,6 +38,9 @@ interface LayoutProps {
   onAnswerInvite?: (invite: MyInvite, accept: boolean) => Promise<void>;
   // Kept loaded across sections (outside the per-section container that restarts on every change).
   persistent?: React.ReactNode;
+  // Account → Abbonamento (only when the subscriptions are on), with the current state.
+  billingLabel?: string;
+  onOpenBilling?: () => void;
 }
 
 export const SECTIONS = [
@@ -58,7 +61,7 @@ const PERFORMANCE_SECTION = { id: 'performance', label: 'Performance', icon: Com
 // MYND Business: for now only on the developer account.
 const BUSINESS_SECTION = { id: 'business', label: 'Business', icon: Briefcase };
 
-export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite, showPerformance = false, projectInvites = [], onAnswerInvite, persistent }: LayoutProps) {
+export default function Layout({ children, currentSection, onSectionChange, user, darkMode, onToggleDarkMode, onLogout, data, onDataImport, colorTheme = 'default', onThemeChange, hiddenSections = [], showDeveloper = false, adminBadge = 0, onSuggest, onAccountDeleted, onOpenSite, showPerformance = false, projectInvites = [], onAnswerInvite, persistent, billingLabel, onOpenBilling }: LayoutProps) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [answering, setAnswering] = useState<string | null>(null);
   const answer = async (inv: MyInvite, accept: boolean) => {
@@ -171,6 +174,12 @@ export default function Layout({ children, currentSection, onSectionChange, user
                           </div>
                         ))}
                       </div>
+                    )}
+                    {onOpenBilling && (
+                      <button onClick={() => { setShowMenu(false); onOpenBilling(); }} className={`w-full px-4 py-2.5 text-left text-sm flex items-start gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
+                        <CreditCard className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span className="min-w-0">Abbonamento{billingLabel && <span className="block text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{billingLabel}</span>}</span>
+                      </button>
                     )}
                     <button onClick={handleExport} className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 ${darkMode ? 'text-white/80 hover:bg-white/5' : 'text-gray-700 hover:bg-black/5'}`}>
                       <Download className="w-4 h-4" /> Esporta dati
