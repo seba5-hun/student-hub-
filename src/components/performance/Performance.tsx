@@ -275,14 +275,14 @@ export default function Performance({ userId, canCreate, archiveItems = [], focu
       {ai === 'overview' && (
         <AIPanel title="MYND AI · i tuoi progetti" system={OVERVIEW_AI_SYSTEM} quick={OVERVIEW_QUICK}
           context={() => overviewContext(projects, tasks, today)} onClose={() => { setAi(null); forget('ai'); }} onConnect={() => { setAi(null); forget('ai'); onConnectAI(); }}
-          dock={dockProps('ai', 'I tuoi progetti')} />
+          dock={dockProps('ai', 'I tuoi progetti')} chat={{ userId, topic: 'panoramica' }} />
       )}
       {ai === 'project' && open && (
         <AIPanel title={`MYND AI · ${open.name}`} system={PROJECT_AI_SYSTEM} quick={PROJECT_QUICK} project={open} tasks={openTasks}
           tools={toolsApi.tools} toolItems={toolsApi.items} members={openMembers} me={userId}
           context={() => projectContext(open, openTasks, openMembers, aiExtra.res, aiExtra.upd, today, userId, toolsApi.tools, toolsApi.items)}
           onApply={permsOf(open, members, userId).canEdit ? applyActions : undefined} onClose={() => { setAi(null); forget('ai'); }} onConnect={() => { setAi(null); forget('ai'); onConnectAI(); }}
-          dock={dockProps('ai', open.name)} />
+          dock={dockProps('ai', open.name)} chat={{ userId, topic: open.id }} />
       )}
       {toolSheet && (
         <ToolSheet project={toolSheet.project} tools={toolSheet.project.id === openId ? toolsApi.tools : []} tool={toolSheet.tool}

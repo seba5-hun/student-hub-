@@ -1,10 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Loader2, Sparkles, Check, ShieldCheck, KeyRound } from 'lucide-react';
+import { ArrowUp, Loader2, Sparkles, Check, ShieldCheck, KeyRound, History, MessageSquarePlus, Trash2 } from 'lucide-react';
 import { askAuto, autoReady, ChatTurn } from '../../lib/ai';
 import { AIAction, describeAction, parseActions } from '../../lib/projectsAI';
 import { Member, PTask, Project } from '../../lib/projects';
 import type { Tool, ToolItem } from '../../lib/tools';
 import type { DockProps } from './AIDock';
+import { APP_CHATS, ChatSummary, chatErrorMessage, deleteChat, listChatsIn, loadChat, saveChat, titleFrom } from '../../lib/chats';
+import { useDialog } from '../Dialog';
+
+// The chats of MYND AI in Performance are saved like those of the Guida Studio AI (table "chats"),
+// one list per project (and one for the overview), on every device.
+const PERFORMANCE_CHATS = `${APP_CHATS}performance`;
+const newChatId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`);
 import { Sheet, ErrorNote } from './ui';
 
 // Where the AI's data goes, said once, plainly.
@@ -47,7 +54,7 @@ function Rich({ text }: { text: string }) {
 interface Msg { role: 'user' | 'assistant'; text: string; actions?: AIAction[]; state?: 'open' | 'applied' | 'ignored' }
 
 // MYND AI in a panel: questions about one project (with changes it can propose) or about all of them.
-export function AIPanel({ title, system, context, quick, project, tasks, tools = [], toolItems = [], members = [], me = '', dock, onApply, onClose, onConnect }: {
+export function AIPanel({ title, system, context, quick, project, tasks, tools = [], toolItems = [], members = [], me = '', dock, chat, onApply, onClose, onConnect }: {
   title: string;
   system: string;
   context: () => string;
@@ -62,8 +69,15 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
   onClose: () => void;
   onConnect: () => void;
   dock?: DockProps;
+  // Where the chats are saved: whose they are and to which project (or "panoramica") they belong.
+  chat?: { userId: string; topic: string };
 }) {
+  const dialog = useDialog();
   const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [chatId, setChatId] = useState(newChatId);
+  const [saved, setSaved] = useState<ChatSummary[]>([]);
+  const [showList, setShowList] = useState(false);
+  const [saveNote, setSaveNote] = useState('');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -74,6 +88,40 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [msgs, busy]);
   useEffect(() => { dock?.onBusy(busy); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Saved chats: the list on opening, every conversation saved by itself after each answer.
+  const refreshList = () => { if (chat) listChatsIn(chat.userId, PERFORMANCE_CHATS, chat.topic).then(r => setSaved(r.chats)).catch(() => {}); };
+  useEffect(refreshList, [chat?.userId, chat?.topic]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!chat || busy || !msgs.some(m => m.role === 'assistant')) return;
+    const id = window.setTimeout(() => {
+      const first = msgs.find(m => m.role === 'user')?.text || 'Chat';
+      saveChat(chat.userId, {
+        id: chatId, subject: PERFORMANCE_CHATS, topic: chat.topic, title: titleFrom(first), updatedAt: new Date().toISOString(),
+        messages: msgs.map((m, i) => ({ id: String(i), role: m.role, content: m.text, ...(m.actions?.length ? { actions: m.actions, state: m.state } : {}) })),
+      }).then(() => setSaveNote('')).catch(err => setSaveNote(chatErrorMessage(err))).finally(refreshList);
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [msgs, busy, chatId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openSaved = async (id: string) => {
+    if (!chat || busy) return;
+    try {
+      const c = await loadChat(chat.userId, id);
+      if (!c) return;
+      type Stored = { role: 'user' | 'assistant'; content: string; actions?: AIAction[]; state?: Msg['state'] };
+      setMsgs((c.messages as unknown as Stored[]).map(m => ({ role: m.role, text: m.content, ...(m.actions ? { actions: m.actions, state: m.state } : {}) })));
+      setChatId(id); setShowList(false); setError('');
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+  };
+  const startNew = () => { if (busy) return; setMsgs([]); setChatId(newChatId()); setShowList(false); setError(''); };
+  const removeSaved = async (c: ChatSummary) => {
+    if (!chat || !(await dialog.confirm({ title: `Eliminare la chat “${c.title}”?`, confirmLabel: 'Elimina', danger: true }))) return;
+    try { await deleteChat(chat.userId, c.id); } catch { /* removed here anyway */ }
+    if (c.id === chatId) startNew();
+    setSaved(list => list.filter(x => x.id !== c.id));
+  };
+  const when = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
   const ask = async (q: string) => {
     const question = q.trim();
@@ -123,6 +171,33 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
       ) : undefined}>
       {!ready ? <ConnectAI onConnect={onConnect} /> : (
         <>
+          {chat && (saved.length > 0 || msgs.length > 0) && (
+            <div className="flex items-center gap-2 -mt-1">
+              {saved.length > 0 && (
+                <button onClick={() => setShowList(v => !v)} aria-expanded={showList} className="h-9 px-3 rounded-full text-sm inline-flex items-center gap-1.5 glass-card !rounded-full" style={{ color: 'var(--text-muted)' }}>
+                  <History className="w-4 h-4" /> {showList ? 'Torna alla chat' : `Chat precedenti · ${saved.length}`}
+                </button>
+              )}
+              {msgs.length > 0 && !showList && (
+                <button onClick={startNew} disabled={busy} className="h-9 px-3 rounded-full text-sm inline-flex items-center gap-1.5 ml-auto disabled:opacity-40" style={{ color: 'var(--brand-ring)' }}>
+                  <MessageSquarePlus className="w-4 h-4" /> Nuova chat
+                </button>
+              )}
+            </div>
+          )}
+          {showList ? (
+            <ul className="space-y-1.5">
+              {saved.map(c => (
+                <li key={c.id} className="rounded-2xl pl-4 pr-1.5 flex items-center gap-2" style={{ background: c.id === chatId ? 'color-mix(in srgb, var(--brand-fill) 12%, transparent)' : 'var(--glass-well)' }}>
+                  <button onClick={() => openSaved(c.id)} className="flex-1 min-w-0 py-2.5 text-left">
+                    <span className="block text-[15px] truncate" style={{ color: 'var(--text)' }}>{c.title}</span>
+                    <span className="block text-xs" style={{ color: 'var(--text-subtle)' }}>{when(c.updatedAt)}{c.id === chatId ? ' · aperta ora' : ''}</span>
+                  </button>
+                  <button onClick={() => removeSaved(c)} aria-label={`Elimina la chat ${c.title}`} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5" style={{ color: 'var(--text-subtle)' }}><Trash2 className="w-4 h-4" /></button>
+                </li>
+              ))}
+            </ul>
+          ) : <>
           {msgs.length === 0 && (
             <div className="space-y-3">
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -165,7 +240,9 @@ export function AIPanel({ title, system, context, quick, project, tasks, tools =
               : <p className="text-sm inline-flex items-center gap-2" style={{ color: 'var(--text-subtle)' }}><Loader2 className="w-4 h-4 animate-spin" /> MYND AI sta pensando… <span className="hidden sm:inline">puoi ridurre la finestra con −</span></p>
             )}
           </div>
+          </>}
           <ErrorNote text={error} />
+          {saveNote && <p className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>{saveNote}</p>}
           <AINote />
           <div ref={endRef} />
         </>

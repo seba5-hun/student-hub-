@@ -102,6 +102,7 @@ export async function listChats(userId: string): Promise<{ chats: ChatSummary[];
     const { data, error: e } = await client()
       .from(TABLE)
       .select('id, subject, topic, title, updated_at')
+      .not('subject', 'like', `${APP_CHATS}%`)
       .order('updated_at', { ascending: false })
       .limit(500);
     if (e) throw e;
@@ -111,6 +112,32 @@ export async function listChats(userId: string): Promise<{ chats: ChatSummary[];
   }
   const byId = new Map(remote.map(c => [c.id, c]));
   for (const c of Object.values(local)) {
+    if (c.subject.startsWith(APP_CHATS)) continue;
+    const r = byId.get(c.id);
+    if (!r || c.updatedAt > r.updatedAt) byId.set(c.id, summary(c));
+  }
+  return { chats: [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), error };
+}
+
+// Chats of other parts of the app (MYND AI in Performance…) live in the same table, marked by a
+// subject starting with "mynd:" so the Guida Studio AI never lists them. `topic` says where they
+// belong (a project's id, "panoramica").
+export const APP_CHATS = 'mynd:';
+
+export async function listChatsIn(userId: string, subject: string, topic: string): Promise<{ chats: ChatSummary[]; error: unknown }> {
+  const local = Object.values(readLocal(userId)).filter(c => c.subject === subject && c.topic === topic);
+  let remote: ChatSummary[] = [];
+  let error: unknown = null;
+  try {
+    const { data, error: e } = await client().from(TABLE).select('id, subject, topic, title, updated_at')
+      .eq('subject', subject).eq('topic', topic).order('updated_at', { ascending: false }).limit(100);
+    if (e) throw e;
+    remote = (data || []).map(r => ({ id: r.id, subject: r.subject, topic: r.topic, title: r.title, updatedAt: r.updated_at }));
+  } catch (err) {
+    error = err;
+  }
+  const byId = new Map(remote.map(c => [c.id, c]));
+  for (const c of local) {
     const r = byId.get(c.id);
     if (!r || c.updatedAt > r.updatedAt) byId.set(c.id, summary(c));
   }
