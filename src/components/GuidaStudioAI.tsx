@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense, lazy } from 'react';
-import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin, Mic, Volume2, VolumeX } from 'lucide-react';
+import { Send, Square, Check as CheckIcon, Bot, User, Trash2, Key, Sparkles, Loader2, Image as ImageIcon, X, Instagram, BookOpen, FolderOpen, Maximize2, Minimize2, PanelLeft, MessageSquare, Plus, Folder, Pencil, ChevronDown, ChevronRight, MapPin, Mic, Volume2, VolumeX, ArrowDown } from 'lucide-react';
 import { dictationSupported, readingSupported, startDictation, speak, stopSpeaking } from '../lib/voice';
 import { savePref } from '../lib/cloudPrefs';
 import { Grade, Task, UserData, createId, gradeOn10 } from '../lib/store';
@@ -182,7 +182,12 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
   const [opened, setOpened] = useState<Set<string>>(new Set());
   // The chat shown on screen: a reply that arrives after switching chat must not end up in the new one.
   const activeChatId = useRef<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // The scrolling list of messages, and whether it shows the last one.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const followRef = useRef(true);
+  // Set when a chat is opened: the list must start on the last message, with no animation.
+  const jumpRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const textColor = darkMode ? 'text-white' : 'text-gray-800';
@@ -203,9 +208,40 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     };
   }, [fullscreen]);
 
+  const toBottom = (smooth: boolean) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  };
+  const onScroll = () => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    followRef.current = bottom;
+    setAtBottom(bottom);
+  };
+
+  // An opened chat starts on its last message; new messages are followed only if the student
+  // is already at the end (or has just written), so reading higher up is not interrupted.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    if (jumpRef.current) {
+      jumpRef.current = false;
+      followRef.current = true;
+      toBottom(false);
+      // Again after formulas and images have taken their size.
+      const frame = requestAnimationFrame(() => toBottom(false));
+      const later = window.setTimeout(() => { if (followRef.current) toBottom(false); }, 300);
+      return () => { cancelAnimationFrame(frame); window.clearTimeout(later); };
+    }
+    if (followRef.current || messages[messages.length - 1]?.role === 'user') toBottom(true);
+  }, [messages, isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switching to or from full screen shows a new list: it starts at the end too.
+  useEffect(() => {
+    followRef.current = true; setAtBottom(true); toBottom(false);
+    const frame = requestAnimationFrame(() => toBottom(false));
+    return () => cancelAnimationFrame(frame);
+  }, [fullscreen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Seconds since the question was sent: long answers don't look like a frozen page.
   useEffect(() => {
@@ -307,6 +343,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
       const chat = await loadChat(userId, id);
       if (!chat) return;
       activeChatId.current = chat.id;
+      jumpRef.current = true;
       setCurrentChat({ id: chat.id, subject: chat.subject, topic: chat.topic, title: chat.title });
       setMessages(chat.messages.map(m => ({ id: m.id, role: m.role, content: m.content, imageCount: m.images, timestamp: new Date() })));
       setScopeSubject(chat.subject);
@@ -321,6 +358,7 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
   const newChat = () => {
     activeChatId.current = null;
+    jumpRef.current = true;
     setCurrentChat(null);
     setMessages([]);
     setError('');
@@ -782,6 +820,13 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
     </div>
   );
 
+  const toEndButton = !atBottom && messages.length > 0 && (
+    <button onClick={() => { followRef.current = true; toBottom(true); }} title="Vai all'ultimo messaggio" aria-label="Vai all'ultimo messaggio"
+      className={`absolute bottom-3 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-lg border backdrop-blur ${darkMode ? 'bg-gray-900/85 border-white/15 text-white' : 'bg-white/95 border-black/10 text-gray-800'}`}>
+      <ArrowDown className="w-5 h-5" />
+    </button>
+  );
+
   // Full screen, in the style of ChatGPT: no panels, one centered column, plain answers.
   const renderFullscreen = () => {
     const scopeLabel = scopeSubject ? `${scopeSubject}${scopeTopic ? ` › ${scopeTopic}` : ''}` : 'Tutto l\'archivio';
@@ -809,7 +854,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="relative flex-1 min-h-0 flex flex-col">
+        <div ref={scrollerRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto px-4 py-6 space-y-8">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center text-center pt-[18vh]">
@@ -837,8 +883,9 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
             {notice && !isLoading && <p className="text-xs text-amber-400">{notice}</p>}
             {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
             {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
-            <div ref={messagesEndRef} />
           </div>
+        </div>
+        {toEndButton}
         </div>
 
         <div className="max-w-3xl w-full mx-auto px-4 pb-4">
@@ -925,7 +972,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
         {notice && <p className="text-xs text-amber-400">{notice}</p>}
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${cardClass} p-4 space-y-4 mb-3`}>
+      <div className="relative flex-1 min-h-0 mb-3 flex flex-col">
+      <div ref={scrollerRef} onScroll={onScroll} className={`flex-1 min-h-0 overflow-y-auto ${cardClass} p-4 space-y-4`}>
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Bot className={`w-12 h-12 mb-3 ${darkMode ? 'text-blue-400' : 'text-blue-500'}`} />
@@ -975,7 +1023,8 @@ export default function GuidaStudioAI({ userId, data, darkMode, analyzing, onAna
 
         {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400">⚠️ {error}</div>}
         {chatError && <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-400">💾 {chatError}</div>}
-        <div ref={messagesEndRef} />
+      </div>
+      {toEndButton}
       </div>
 
       {pendingImages('mb-2')}
